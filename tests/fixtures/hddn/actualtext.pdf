@@ -1,0 +1,99 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<<
+/Producer (pypdf)
+>>
+endobj
+2 0 obj
+<<
+/Type /Pages
+/Count 1
+/Kids [ 5 0 R ]
+>>
+endobj
+3 0 obj
+<<
+/Type /Catalog
+/Pages 2 0 R
+/StructTreeRoot 7 0 R
+/MarkInfo <<
+/Marked true
+>>
+>>
+endobj
+4 0 obj
+<<
+/Type /Font
+/Subtype /Type1
+/BaseFont /Helvetica
+>>
+endobj
+5 0 obj
+<<
+/Type /Page
+/Resources <<
+/Font <<
+/F1 4 0 R
+>>
+>>
+/MediaBox [ 0.0 0.0 600 800 ]
+/Parent 2 0 R
+/Contents 6 0 R
+/StructParents 0
+>>
+endobj
+6 0 obj
+<<
+/Length 263
+>>
+stream
+BT /F1 12 Tf 72 740 Td (KEEP_PUBLIC_ACTUALTEXT) Tj ET
+BT /F1 12 Tf 72 650 Td (SECRET_ACTUALTEXT) Tj ET
+/Span << /MCID 0 /ActualText <feff005300450043005200450054005f00410043005400550041004c0054004500580054> >> BDC BT /F1 12 Tf 72 560 Td (PUBLIC_GLYPHS) Tj ET EMC
+
+endstream
+endobj
+7 0 obj
+<<
+/Type /StructTreeRoot
+/K [ 8 0 R ]
+/ParentTree 9 0 R
+>>
+endobj
+8 0 obj
+<<
+/Type /StructElem
+/S /Span
+/P 7 0 R
+/Pg 5 0 R
+/K 0
+/Alt (SECRET\137STRUCTURE\137ALT)
+>>
+endobj
+9 0 obj
+<<
+/Nums [ 0 [ 8 0 R ] ]
+>>
+endobj
+xref
+0 10
+0000000000 65535 f 
+0000000015 00000 n 
+0000000054 00000 n 
+0000000113 00000 n 
+0000000213 00000 n 
+0000000283 00000 n 
+0000000432 00000 n 
+0000000746 00000 n 
+0000000820 00000 n 
+0000000926 00000 n 
+trailer
+<<
+/Size 10
+/Root 3 0 R
+/Info 1 0 R
+>>
+startxref
+969
+%%EOF

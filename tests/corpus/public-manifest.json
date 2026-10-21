@@ -1,0 +1,268 @@
+{
+ "schemaVersion": 1,
+ "note": "Fetch-only: no PDF bytes of these documents may be committed to Foliark. Fetch with HDDN's scripts/pdf-fixtures/fetch-corpus.py (pinned revision, verifies sha256) into a directory outside the repo. License column is upstream's claim as recorded by HDDN-4, not legal advice; mixed-multipage and the two signed samples have unresolved/unconfirmed terms.",
+ "files": [
+  {
+   "id": "native-minimal",
+   "url": "https://raw.githubusercontent.com/py-pdf/sample-files/02b8203bf416db3dbdb03438bc8278dfcb0555f3/001-trivial/minimal-document.pdf",
+   "sha256": "f723638db6e763cf4ccadad38a3d38a02d9ecab95dab1f0bbf00e801991b5f92",
+   "bytes": 16978,
+   "license": "CC-BY-SA-4.0",
+   "redistribution": "allowed-with-attribution-sharealike",
+   "permissionEvidence": "https://github.com/py-pdf/sample-files/blob/02b8203bf416db3dbdb03438bc8278dfcb0555f3/README.md#licenses",
+   "sourceRepository": "py-pdf/sample-files",
+   "sourceRevision": "02b8203bf416db3dbdb03438bc8278dfcb0555f3",
+   "classes": [
+    "native"
+   ],
+   "languages": [
+    "la"
+   ],
+   "family": "pypdf-minimal",
+   "origin": "hddn@2fe0f9a:tests/pdf/corpus/manifest.json",
+   "fetchOnly": true,
+   "committed": false
+  },
+  {
+   "id": "native-multicolumn",
+   "url": "https://raw.githubusercontent.com/py-pdf/sample-files/02b8203bf416db3dbdb03438bc8278dfcb0555f3/026-latex-multicolumn/multicolumn.pdf",
+   "sha256": "bdb495e95b3e1afae95013099dc59b0cea047f1fa70f677ee9cb33f10faa1c6c",
+   "bytes": 78657,
+   "license": "CC-BY-SA-4.0",
+   "redistribution": "allowed-with-attribution-sharealike",
+   "permissionEvidence": "https://github.com/py-pdf/sample-files/blob/02b8203bf416db3dbdb03438bc8278dfcb0555f3/README.md#licenses",
+   "sourceRepository": "py-pdf/sample-files",
+   "sourceRevision": "02b8203bf416db3dbdb03438bc8278dfcb0555f3",
+   "classes": [
+    "native",
+    "multicolumn"
+   ],
+   "languages": [
+    "en",
+    "la"
+   ],
+   "family": "pypdf-multicolumn",
+   "origin": "hddn@2fe0f9a:tests/pdf/corpus/manifest.json",
+   "fetchOnly": true,
+   "committed": false
+  },
+  {
+   "id": "native-arabic",
+   "url": "https://raw.githubusercontent.com/py-pdf/sample-files/02b8203bf416db3dbdb03438bc8278dfcb0555f3/015-arabic/habibi.pdf",
+   "sha256": "1017c4559eb7d0ccf7d151a3f051c8c1da27a7c1dc8050b2b687e3d3228e1b6f",
+   "bytes": 14957,
+   "license": "CC-BY-SA-4.0",
+   "redistribution": "allowed-with-attribution-sharealike",
+   "permissionEvidence": "https://github.com/py-pdf/sample-files/blob/02b8203bf416db3dbdb03438bc8278dfcb0555f3/README.md#licenses",
+   "sourceRepository": "py-pdf/sample-files",
+   "sourceRevision": "02b8203bf416db3dbdb03438bc8278dfcb0555f3",
+   "classes": [
+    "native",
+    "rtl"
+   ],
+   "languages": [
+    "ar"
+   ],
+   "family": "pypdf-arabic",
+   "origin": "hddn@2fe0f9a:tests/pdf/corpus/manifest.json",
+   "fetchOnly": true,
+   "committed": false
+  },
+  {
+   "id": "form-latex",
+   "url": "https://raw.githubusercontent.com/py-pdf/sample-files/02b8203bf416db3dbdb03438bc8278dfcb0555f3/010-pdflatex-forms/pdflatex-forms.pdf",
+   "sha256": "fc6265298caafffeee9dd2d7f3ae2e53ab9f61ec0561369429d442f731d339da",
+   "bytes": 27712,
+   "license": "CC-BY-SA-4.0",
+   "redistribution": "allowed-with-attribution-sharealike",
+   "permissionEvidence": "https://github.com/py-pdf/sample-files/blob/02b8203bf416db3dbdb03438bc8278dfcb0555f3/README.md#licenses",
+   "sourceRepository": "py-pdf/sample-files",
+   "sourceRevision": "02b8203bf416db3dbdb03438bc8278dfcb0555f3",
+   "classes": [
+    "native",
+    "form"
+   ],
+   "languages": [
+    "en"
+   ],
+   "family": "pypdf-latex-form",
+   "origin": "hddn@2fe0f9a:tests/pdf/corpus/manifest.json",
+   "fetchOnly": true,
+   "committed": false
+  },
+  {
+   "id": "form-libreoffice",
+   "url": "https://raw.githubusercontent.com/py-pdf/sample-files/02b8203bf416db3dbdb03438bc8278dfcb0555f3/012-libreoffice-form/libreoffice-form.pdf",
+   "sha256": "9105eeef8c8cafdb141b7edd768a5e08adffe320d1d4f89e1a7112a2b37d1c57",
+   "bytes": 34186,
+   "license": "CC-BY-SA-4.0",
+   "redistribution": "allowed-with-attribution-sharealike",
+   "permissionEvidence": "https://github.com/py-pdf/sample-files/blob/02b8203bf416db3dbdb03438bc8278dfcb0555f3/README.md#licenses",
+   "sourceRepository": "py-pdf/sample-files",
+   "sourceRevision": "02b8203bf416db3dbdb03438bc8278dfcb0555f3",
+   "classes": [
+    "native",
+    "form"
+   ],
+   "languages": [
+    "en"
+   ],
+   "family": "pypdf-libreoffice-form",
+   "origin": "hddn@2fe0f9a:tests/pdf/corpus/manifest.json",
+   "fetchOnly": true,
+   "committed": false
+  },
+  {
+   "id": "native-image-google",
+   "url": "https://raw.githubusercontent.com/py-pdf/sample-files/02b8203bf416db3dbdb03438bc8278dfcb0555f3/011-google-doc-document/google-doc-document.pdf",
+   "sha256": "69f6b7f493b1bc55d518942976cbeadc4ec0a36f6d8a6dc24feffc516d35b2c9",
+   "bytes": 80100,
+   "license": "CC-BY-SA-4.0",
+   "redistribution": "allowed-with-attribution-sharealike",
+   "permissionEvidence": "https://github.com/py-pdf/sample-files/blob/02b8203bf416db3dbdb03438bc8278dfcb0555f3/README.md#licenses",
+   "sourceRepository": "py-pdf/sample-files",
+   "sourceRevision": "02b8203bf416db3dbdb03438bc8278dfcb0555f3",
+   "classes": [
+    "native",
+    "embedded-image"
+   ],
+   "languages": [
+    "en"
+   ],
+   "family": "pypdf-google-doc",
+   "origin": "hddn@2fe0f9a:tests/pdf/corpus/manifest.json",
+   "fetchOnly": true,
+   "committed": false
+  },
+  {
+   "id": "cropped-rotated",
+   "url": "https://raw.githubusercontent.com/py-pdf/sample-files/02b8203bf416db3dbdb03438bc8278dfcb0555f3/027-cropped-rotated-scaled/cropped-rotated-scaled.pdf",
+   "sha256": "cc195eac510b81123de4f55ac9f8185f2120975a7b75a106460b98615737aacd",
+   "bytes": 272039,
+   "license": "CC-BY-SA-4.0",
+   "redistribution": "allowed-with-attribution-sharealike",
+   "permissionEvidence": "https://github.com/py-pdf/sample-files/blob/02b8203bf416db3dbdb03438bc8278dfcb0555f3/README.md#licenses",
+   "sourceRepository": "py-pdf/sample-files",
+   "sourceRevision": "02b8203bf416db3dbdb03438bc8278dfcb0555f3",
+   "classes": [
+    "native",
+    "rotation",
+    "crop"
+   ],
+   "languages": [
+    "en"
+   ],
+   "family": "pypdf-cropped-rotated",
+   "origin": "hddn@2fe0f9a:tests/pdf/corpus/manifest.json",
+   "fetchOnly": true,
+   "committed": false
+  },
+  {
+   "id": "scan-huckleberry",
+   "url": "https://raw.githubusercontent.com/ocrmypdf/OCRmyPDF/cf0df3da06aef04fe9a5bf91c6feff36370bb3eb/tests/resources/c03-29.pdf",
+   "sha256": "c2ff83af7d028c95209cc7eebdf80fd5bb4cd292973ed6601e4bab7d1929f201",
+   "bytes": 167938,
+   "license": "public-domain",
+   "redistribution": "allowed-upstream-public-domain-declaration",
+   "permissionEvidence": "https://github.com/ocrmypdf/OCRmyPDF/blob/cf0df3da06aef04fe9a5bf91c6feff36370bb3eb/REUSE.toml",
+   "sourceRepository": "ocrmypdf/OCRmyPDF",
+   "sourceRevision": "cf0df3da06aef04fe9a5bf91c6feff36370bb3eb",
+   "classes": [
+    "scanned"
+   ],
+   "languages": [
+    "en"
+   ],
+   "family": "ocrmypdf-multipage-and-huckleberry",
+   "origin": "hddn@2fe0f9a:tests/pdf/corpus/manifest.json",
+   "fetchOnly": true,
+   "committed": false
+  },
+  {
+   "id": "mixed-multipage",
+   "url": "https://raw.githubusercontent.com/ocrmypdf/OCRmyPDF/cf0df3da06aef04fe9a5bf91c6feff36370bb3eb/tests/resources/multipage.pdf",
+   "sha256": "07987c44650938fa8dcf08c0937691712fdd800669b4607c2c7e3fee21cb1f80",
+   "bytes": 1120291,
+   "license": "unresolved: public-domain versus CC-BY-SA-3.0 component",
+   "redistribution": "fetch-only-conflicting-upstream-permissions",
+   "permissionEvidence": "https://github.com/ocrmypdf/OCRmyPDF/blob/cf0df3da06aef04fe9a5bf91c6feff36370bb3eb/REUSE.toml",
+   "sourceRepository": "ocrmypdf/OCRmyPDF",
+   "sourceRevision": "cf0df3da06aef04fe9a5bf91c6feff36370bb3eb",
+   "classes": [
+    "mixed"
+   ],
+   "languages": [
+    "en"
+   ],
+   "family": "ocrmypdf-multipage-and-huckleberry",
+   "origin": "hddn@2fe0f9a:tests/pdf/corpus/manifest.json",
+   "fetchOnly": true,
+   "committed": false
+  },
+  {
+   "id": "signed-pades",
+   "url": "https://raw.githubusercontent.com/lsnepomuceno/signet-pdf/789a7eef2cef2895ebdf321c3b8164101037b5da/samples/pades-b-b.pdf",
+   "sha256": "cddf2c266dacc0ef004608be9f41e908d636221db8bc5de1cca620fdbb9ec4a2",
+   "bytes": 68217,
+   "license": "unconfirmed",
+   "redistribution": "fetch-only-unclear-document-license",
+   "permissionEvidence": "https://github.com/lsnepomuceno/signet-pdf/blob/789a7eef2cef2895ebdf321c3b8164101037b5da/samples/README.md",
+   "sourceRepository": "lsnepomuceno/signet-pdf",
+   "sourceRevision": "789a7eef2cef2895ebdf321c3b8164101037b5da",
+   "classes": [
+    "native",
+    "signed"
+   ],
+   "languages": [
+    "en"
+   ],
+   "family": "signet-signed-samples",
+   "origin": "hddn@2fe0f9a:tests/pdf/corpus/manifest.json",
+   "fetchOnly": true,
+   "committed": false
+  },
+  {
+   "id": "signed-six",
+   "url": "https://raw.githubusercontent.com/lsnepomuceno/signet-pdf/789a7eef2cef2895ebdf321c3b8164101037b5da/samples/six-signatures.pdf",
+   "sha256": "9f6ce69a244d0a806a9f2ce7d6b1cb12e2e0071c8d46fedd07d6a21a9f0bbf9c",
+   "bytes": 212467,
+   "license": "unconfirmed",
+   "redistribution": "fetch-only-unclear-document-license",
+   "permissionEvidence": "https://github.com/lsnepomuceno/signet-pdf/blob/789a7eef2cef2895ebdf321c3b8164101037b5da/samples/README.md",
+   "sourceRepository": "lsnepomuceno/signet-pdf",
+   "sourceRevision": "789a7eef2cef2895ebdf321c3b8164101037b5da",
+   "classes": [
+    "native",
+    "signed"
+   ],
+   "languages": [
+    "en"
+   ],
+   "family": "signet-signed-samples",
+   "origin": "hddn@2fe0f9a:tests/pdf/corpus/manifest.json",
+   "fetchOnly": true,
+   "committed": false
+  },
+  {
+   "id": "scan-french",
+   "url": "https://raw.githubusercontent.com/ocrmypdf/OCRmyPDF/cf0df3da06aef04fe9a5bf91c6feff36370bb3eb/tests/resources/francais.pdf",
+   "sha256": "600c27f8dd2ef085a94d3500f6ccdb3b37f4b89aa8ffdf9a00a06a1367887e8b",
+   "bytes": 483256,
+   "license": "CC-BY-SA-4.0",
+   "redistribution": "allowed-with-attribution-sharealike",
+   "permissionEvidence": "https://github.com/ocrmypdf/OCRmyPDF/blob/cf0df3da06aef04fe9a5bf91c6feff36370bb3eb/REUSE.toml",
+   "sourceRepository": "ocrmypdf/OCRmyPDF",
+   "sourceRevision": "cf0df3da06aef04fe9a5bf91c6feff36370bb3eb",
+   "classes": [
+    "scanned"
+   ],
+   "languages": [
+    "fr"
+   ],
+   "family": "ocrmypdf-french",
+   "origin": "hddn@2fe0f9a:tests/pdf/corpus/manifest.json",
+   "fetchOnly": true,
+   "committed": false
+  }
+ ]
+}

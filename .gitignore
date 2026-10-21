@@ -7,3 +7,6 @@ pkg/
 .DS_Store
 packages/sdk/wasm/
 test-results/
+.venv/
+__pycache__/
+*.pyc

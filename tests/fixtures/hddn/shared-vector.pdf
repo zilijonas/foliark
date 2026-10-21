@@ -1,0 +1,135 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<<
+/Producer (pypdf)
+>>
+endobj
+2 0 obj
+<<
+/Type /Pages
+/Count 2
+/Kids [ 5 0 R 7 0 R ]
+>>
+endobj
+3 0 obj
+<<
+/Type /Catalog
+/Pages 2 0 R
+>>
+endobj
+4 0 obj
+<<
+/Type /Font
+/Subtype /Type1
+/BaseFont /Helvetica
+>>
+endobj
+5 0 obj
+<<
+/Type /Page
+/Resources <<
+/Font <<
+/F1 4 0 R
+>>
+/XObject <<
+/Shared 9 0 R
+>>
+>>
+/MediaBox [ 0.0 0.0 600 800 ]
+/Parent 2 0 R
+/Contents 6 0 R
+>>
+endobj
+6 0 obj
+<<
+/Length 149
+>>
+stream
+BT /F1 12 Tf 72 740 Td (KEEP_PUBLIC_SHARED_VECTOR_P1) Tj ET
+BT /F1 12 Tf 72 650 Td (SECRET_SHARED_VECTOR) Tj ET
+q
+1.2 0 0 1.2 72 500 cm /Shared Do Q
+
+endstream
+endobj
+7 0 obj
+<<
+/Type /Page
+/Resources <<
+/Font <<
+/F1 4 0 R
+>>
+/XObject <<
+/Shared 9 0 R
+>>
+>>
+/MediaBox [ 0.0 0.0 600 800 ]
+/Parent 2 0 R
+/Contents 8 0 R
+>>
+endobj
+8 0 obj
+<<
+/Length 118
+>>
+stream
+BT /F1 12 Tf 72 740 Td (KEEP_PUBLIC_SHARED_VECTOR_P2) Tj ET
+q
+72 500 240 60 re W n
+1.2 0 0 1.2 72 500 cm /Shared Do Q
+
+endstream
+endobj
+9 0 obj
+<<
+/Type /XObject
+/Subtype /Form
+/BBox [ 0.0 0.0 200 100 ]
+/Resources <<
+>>
+/Length 335
+>>
+stream
+0 G 2 w
+10 90 m 26 90 l S
+26 90 m 26 75 l S
+26 75 m 26 60 l S
+45 90 m 61 90 l S
+61 90 m 61 75 l S
+61 75 m 61 60 l S
+45 60 m 61 60 l S
+45 75 m 61 75 l S
+96 90 m 96 75 l S
+96 75 m 96 60 l S
+115 90 m 131 90 l S
+131 90 m 131 75 l S
+131 75 m 131 60 l S
+115 60 m 131 60 l S
+115 90 m 115 75 l S
+115 75 m 131 75 l S
+0 0 1 rg 10 10 180 25 re f
+
+endstream
+endobj
+xref
+0 10
+0000000000 65535 f 
+0000000015 00000 n 
+0000000054 00000 n 
+0000000119 00000 n 
+0000000168 00000 n 
+0000000238 00000 n 
+0000000399 00000 n 
+0000000599 00000 n 
+0000000760 00000 n 
+0000000929 00000 n 
+trailer
+<<
+/Size 10
+/Root 3 0 R
+/Info 1 0 R
+>>
+startxref
+1388
+%%EOF

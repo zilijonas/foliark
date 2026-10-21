@@ -1,0 +1,82 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<<
+/Producer (pypdf)
+/Title (SECRET\137INFO\137TITLE)
+/Author (SECRET\137INFO\137AUTHOR)
+>>
+endobj
+2 0 obj
+<<
+/Type /Pages
+/Count 1
+/Kids [ 5 0 R ]
+>>
+endobj
+3 0 obj
+<<
+/Type /Catalog
+/Pages 2 0 R
+/Metadata 7 0 R
+>>
+endobj
+4 0 obj
+<<
+/Type /Font
+/Subtype /Type1
+/BaseFont /Helvetica
+>>
+endobj
+5 0 obj
+<<
+/Type /Page
+/Resources <<
+/Font <<
+/F1 4 0 R
+>>
+>>
+/MediaBox [ 0.0 0.0 600 800 ]
+/Parent 2 0 R
+/Contents 6 0 R
+>>
+endobj
+6 0 obj
+<<
+/Length 107
+>>
+stream
+BT /F1 12 Tf 72 740 Td (KEEP_PUBLIC_METADATA_XMP) Tj ET
+BT /F1 12 Tf 72 650 Td (SECRET_METADATA_XMP) Tj ET
+
+endstream
+endobj
+7 0 obj
+<<
+/Type /Metadata
+/Subtype /XML
+/Length 296
+>>
+stream
+<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title><rdf:Alt><rdf:li xml:lang="x-default">SECRET_XMP_TITLE</rdf:li></rdf:Alt></dc:title></rdf:Description></rdf:RDF></x:xmpmeta>
+endstream
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000015 00000 n 
+0000000122 00000 n 
+0000000181 00000 n 
+0000000246 00000 n 
+0000000316 00000 n 
+0000000448 00000 n 
+0000000606 00000 n 
+trailer
+<<
+/Size 8
+/Root 3 0 R
+/Info 1 0 R
+>>
+startxref
+983
+%%EOF
