@@ -5,3 +5,6 @@ pkg/
 *.wasm
 !tests/fixtures/**/*.wasm
 .DS_Store
+.venv/
+__pycache__/
+*.pyc

@@ -1,0 +1,102 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<<
+/Producer (pypdf)
+>>
+endobj
+2 0 obj
+<<
+/Type /Pages
+/Count 1
+/Kids [ 5 0 R ]
+>>
+endobj
+3 0 obj
+<<
+/Type /Catalog
+/Pages 2 0 R
+/OpenAction 7 0 R
+/Names <<
+/JavaScript <<
+/Names [ (hddn\055fixture\055javascript) 8 0 R ]
+>>
+>>
+>>
+endobj
+4 0 obj
+<<
+/Type /Font
+/Subtype /Type1
+/BaseFont /Helvetica
+>>
+endobj
+5 0 obj
+<<
+/Type /Page
+/Resources <<
+/Font <<
+/F1 4 0 R
+>>
+>>
+/MediaBox [ 0.0 0.0 600 800 ]
+/Parent 2 0 R
+/Contents 6 0 R
+/Annots [ 9 0 R ]
+>>
+endobj
+6 0 obj
+<<
+/Length 103
+>>
+stream
+BT /F1 12 Tf 72 740 Td (KEEP_PUBLIC_ACTIONS_JS) Tj ET
+BT /F1 12 Tf 72 650 Td (SECRET_ACTIONS_JS) Tj ET
+
+endstream
+endobj
+7 0 obj
+<<
+/S /JavaScript
+/JS (void\050\042SECRET\137JAVASCRIPT\042\051)
+>>
+endobj
+8 0 obj
+<<
+/Type /Action
+/S /JavaScript
+/JS (void\050\042SECRET\137NAMED\137JS\042\051)
+>>
+endobj
+9 0 obj
+<<
+/Type /Annot
+/Subtype /Link
+/Rect [ 420 560 500 580 ]
+/A <<
+/S /URI
+/URI (https\072\057\057example\056invalid\057SECRET\137URI\137ACTION)
+>>
+>>
+endobj
+xref
+0 10
+0000000000 65535 f 
+0000000015 00000 n 
+0000000054 00000 n 
+0000000113 00000 n 
+0000000260 00000 n 
+0000000330 00000 n 
+0000000480 00000 n 
+0000000634 00000 n 
+0000000717 00000 n 
+0000000815 00000 n 
+trailer
+<<
+/Size 10
+/Root 3 0 R
+/Info 1 0 R
+>>
+startxref
+977
+%%EOF

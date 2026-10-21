@@ -1,0 +1,1932 @@
+{
+ "schemaVersion": 1,
+ "purpose": "Rights-aware fixture corpus: synthetic only. Third-party PDFs are never committed (tests/corpus/public-manifest.json).",
+ "hddnPin": "2fe0f9a",
+ "pins": {
+  "PyMuPDF": "1.26.5 (encryption + page counts, dev-only)",
+  "python": "3.9"
+ },
+ "counts": {
+  "total": 35,
+  "hddn": 20,
+  "generated": 15,
+  "byFeature": {
+   "actualtext": 1,
+   "additional-actions": 1,
+   "aes-128": 1,
+   "aes-256": 1,
+   "annotation": 2,
+   "appearance-stream": 2,
+   "corrupt-flate": 1,
+   "cyclic-form": 1,
+   "decode-ratio": 1,
+   "deep-form": 1,
+   "dimension-bomb": 1,
+   "embedded-file": 2,
+   "embedded-font": 1,
+   "encrypted": 5,
+   "flate-bomb": 1,
+   "form": 2,
+   "form-xobject": 3,
+   "hidden-ocg-text": 1,
+   "image": 4,
+   "incremental-update": 2,
+   "invisible-text": 2,
+   "javascript": 2,
+   "ligature": 1,
+   "link": 1,
+   "malformed": 2,
+   "malformed-xref": 1,
+   "many-pages": 1,
+   "metadata": 2,
+   "multi-page": 3,
+   "non-bmp": 1,
+   "ocg": 2,
+   "ocr-layer": 1,
+   "openaction": 1,
+   "outline": 1,
+   "prior-revision": 1,
+   "rc4-128": 1,
+   "rc4-40": 1,
+   "rotation-crop": 1,
+   "rotation-matrix": 1,
+   "shared-content-stream": 1,
+   "shared-form": 1,
+   "shared-image": 1,
+   "shared-vector": 1,
+   "structure-alt": 1,
+   "thumbnail": 1,
+   "truncated": 1,
+   "uri-action": 1,
+   "widget": 1,
+   "xmp": 2,
+   "xref-repair": 1
+  }
+ },
+ "notImported": [
+  {
+   "id": "many-pages-1001",
+   "reason": "302,476 B exceeds the 200 KB commit cap; replaced by generated/many-pages-1001 (156 KB, shared content stream)",
+   "origin": "hddn@2fe0f9a:tests/pdf/fixtures/many-pages-1001.pdf",
+   "sha256": "a37db65d67fcc67c66a9cd115283402add01bf72f22c6cfba60f42435571db65",
+   "bytes": 302476
+  }
+ ],
+ "files": [
+  {
+   "id": "metadata-xmp",
+   "path": "hddn/metadata-xmp.pdf",
+   "sha256": "03e27e03b6096e429f76b25eb3a6e21aa4f318becd3fcb031dffcb220c1acbe3",
+   "bytes": 1218,
+   "pages": 1,
+   "features": [
+    "metadata",
+    "xmp"
+   ],
+   "origin": "hddn@2fe0f9a:tests/pdf/fixtures/metadata-xmp.pdf",
+   "license": "synthetic, generated (HDDN, owner-authored)",
+   "expected": {
+    "mustKeepText": [
+     "KEEP_PUBLIC_METADATA_XMP"
+    ],
+    "mustRemove": [
+     "SECRET_METADATA_XMP",
+     "SECRET_INFO_TITLE",
+     "SECRET_INFO_AUTHOR",
+     "SECRET_XMP_TITLE"
+    ],
+    "targets": [
+     {
+      "pageIndex": 0,
+      "pdfRectBottomLeft": [
+       68,
+       642,
+       360,
+       670
+      ],
+      "cropBoxBottomLeft": [
+       0,
+       0,
+       600,
+       800
+      ],
+      "rotation": 0,
+      "displaySize": [
+       600,
+       800
+      ],
+      "box": {
+       "x": 0.11333333333333333,
+       "y": 0.1625,
+       "width": 0.4866666666666667,
+       "height": 0.035
+      }
+     }
+    ],
+    "checks": {
+     "metadata": {
+      "/Title": "SECRET_INFO_TITLE",
+      "/Author": "SECRET_INFO_AUTHOR"
+     },
+     "xmp": "SECRET_XMP_TITLE"
+    },
+    "inputPolicy": "load-completely"
+   }
+  },
+  {
+   "id": "annotation-comment",
+   "path": "hddn/annotation-comment.pdf",
+   "sha256": "d2619514f210f057059261e0144793a1a87538761baad14b52e7b4cdd37a3d45",
+   "bytes": 909,
+   "pages": 1,
+   "features": [
+    "annotation"
+   ],
+   "origin": "hddn@2fe0f9a:tests/pdf/fixtures/annotation-comment.pdf",
+   "license": "synthetic, generated (HDDN, owner-authored)",
+   "expected": {
+    "mustKeepText": [
+     "KEEP_PUBLIC_ANNOTATION_COMMENT"
+    ],
+    "mustRemove": [
+     "SECRET_ANNOTATION_COMMENT",
+     "SECRET_COMMENT"
+    ],
+    "targets": [
+     {
+      "pageIndex": 0,
+      "pdfRectBottomLeft": [
+       68,
+       642,
+       360,
+       670
+      ],
+      "cropBoxBottomLeft": [
+       0,
+       0,
+       600,
+       800
+      ],
+      "rotation": 0,
+      "displaySize": [
+       600,
+       800
+      ],
+      "box": {
+       "x": 0.11333333333333333,
+       "y": 0.1625,
+       "width": 0.4866666666666667,
+       "height": 0.035
+      }
+     }
+    ],
+    "checks": {
+     "annotation": "SECRET_COMMENT"
+    },
+    "inputPolicy": "load-completely"
+   }
+  },
+  {
+   "id": "attachment",
+   "path": "hddn/attachment.pdf",
+   "sha256": "8e251be09ec103a9929622dec18e89fa0c171117cd20d182d01089ac25d89e19",
+   "bytes": 1137,
+   "pages": 1,
+   "features": [
+    "embedded-file"
+   ],
+   "origin": "hddn@2fe0f9a:tests/pdf/fixtures/attachment.pdf",
+   "license": "synthetic, generated (HDDN, owner-authored)",
+   "expected": {
+    "mustKeepText": [
+     "KEEP_PUBLIC_ATTACHMENT"
+    ],
+    "mustRemove": [
+     "SECRET_ATTACHMENT",
+     "SECRET_ATTACHMENT_NAME",
+     "SECRET_ATTACHMENT_BODY"
+    ],
+    "targets": [
+     {
+      "pageIndex": 0,
+      "pdfRectBottomLeft": [
+       68,
+       642,
+       360,
+       670
+      ],
+      "cropBoxBottomLeft": [
+       0,
+       0,
+       600,
+       800
+      ],
+      "rotation": 0,
+      "displaySize": [
+       600,
+       800
+      ],
+      "box": {
+       "x": 0.11333333333333333,
+       "y": 0.1625,
+       "width": 0.4866666666666667,
+       "height": 0.035
+      }
+     }
+    ],
+    "checks": {
+     "attachment": [
+      "SECRET_ATTACHMENT_NAME.txt",
+      "SECRET_ATTACHMENT_BODY"
+     ]
+    },
+    "inputPolicy": "load-completely"
+   }
+  },
+  {
+   "id": "actions-js",
+   "path": "hddn/actions-js.pdf",
+   "sha256": "8ece2e7c362572b86a44e81b09752f1ba7a3797dd13962b539839503d8043531",
+   "bytes": 1254,
+   "pages": 1,
+   "features": [
+    "javascript",
+    "uri-action"
+   ],
+   "origin": "hddn@2fe0f9a:tests/pdf/fixtures/actions-js.pdf",
+   "license": "synthetic, generated (HDDN, owner-authored)",
+   "expected": {
+    "mustKeepText": [
+     "KEEP_PUBLIC_ACTIONS_JS"
+    ],
+    "mustRemove": [
+     "SECRET_ACTIONS_JS",
+     "SECRET_JAVASCRIPT",
+     "SECRET_NAMED_JS",
+     "SECRET_URI_ACTION"
+    ],
+    "targets": [
+     {
+      "pageIndex": 0,
+      "pdfRectBottomLeft": [
+       68,
+       642,
+       360,
+       670
+      ],
+      "cropBoxBottomLeft": [
+       0,
+       0,
+       600,
+       800
+      ],
+      "rotation": 0,
+      "displaySize": [
+       600,
+       800
+      ],
+      "box": {
+       "x": 0.11333333333333333,
+       "y": 0.1625,
+       "width": 0.4866666666666667,
+       "height": 0.035
+      }
+     }
+    ],
+    "checks": {
+     "javascript": "SECRET_JAVASCRIPT",
+     "namedJavascript": "SECRET_NAMED_JS",
+     "uri": "SECRET_URI_ACTION"
+    },
+    "inputPolicy": "load-completely"
+   }
+  },
+  {
+   "id": "acroform",
+   "path": "hddn/acroform.pdf",
+   "sha256": "4e80f8217d802cf9854d8045ff0fdefcaabdca2925c9ddcf5f65d81e2e241815",
+   "bytes": 1338,
+   "pages": 1,
+   "features": [
+    "form"
+   ],
+   "origin": "hddn@2fe0f9a:tests/pdf/fixtures/acroform.pdf",
+   "license": "synthetic, generated (HDDN, owner-authored)",
+   "expected": {
+    "mustKeepText": [
+     "KEEP_PUBLIC_ACROFORM"
+    ],
+    "mustRemove": [
+     "SECRET_ACROFORM",
+     "SECRET_FORM_NAME",
+     "SECRET_FORM_VALUE",
+     "SECRET_FORM_DEFAULT"
+    ],
+    "targets": [
+     {
+      "pageIndex": 0,
+      "pdfRectBottomLeft": [
+       68,
+       642,
+       360,
+       670
+      ],
+      "cropBoxBottomLeft": [
+       0,
+       0,
+       600,
+       800
+      ],
+      "rotation": 0,
+      "displaySize": [
+       600,
+       800
+      ],
+      "box": {
+       "x": 0.11333333333333333,
+       "y": 0.1625,
+       "width": 0.4866666666666667,
+       "height": 0.035
+      }
+     },
+     {
+      "pageIndex": 0,
+      "pdfRectBottomLeft": [
+       70,
+       558,
+       310,
+       592
+      ],
+      "cropBoxBottomLeft": [
+       0,
+       0,
+       600,
+       800
+      ],
+      "rotation": 0,
+      "displaySize": [
+       600,
+       800
+      ],
+      "box": {
+       "x": 0.11666666666666667,
+       "y": 0.26,
+       "width": 0.4,
+       "height": 0.0425
+      }
+     }
+    ],
+    "checks": {
+     "form": {
+      "name": "SECRET_FORM_NAME",
+      "value": "SECRET_FORM_VALUE",
+      "default": "SECRET_FORM_DEFAULT"
+     }
+    },
+    "inputPolicy": "load-completely"
+   }
+  },
+  {
+   "id": "optional-content-layer",
+   "path": "hddn/optional-content-layer.pdf",
+   "sha256": "e200e108f44d290965f627360b2dc82151be2cc8b9995020839c428f59dd59a1",
+   "bytes": 1002,
+   "pages": 1,
+   "features": [
+    "ocg"
+   ],
+   "origin": "hddn@2fe0f9a:tests/pdf/fixtures/optional-content-layer.pdf",
+   "license": "synthetic, generated (HDDN, owner-authored)",
+   "expected": {
+    "mustKeepText": [
+     "KEEP_PUBLIC_OPTIONAL_CONTENT_LAYER"
+    ],
+    "mustRemove": [
+     "SECRET_OPTIONAL_CONTENT_LAYER",
+     "SECRET_LAYER_NAME",
+     "SECRET_LAYER_BODY"
+    ],
+    "targets": [
+     {
+      "pageIndex": 0,
+      "pdfRectBottomLeft": [
+       68,
+       642,
+       360,
+       670
+      ],
+      "cropBoxBottomLeft": [
+       0,
+       0,
+       600,
+       800
+      ],
+      "rotation": 0,
+      "displaySize": [
+       600,
+       800
+      ],
+      "box": {
+       "x": 0.11333333333333333,
+       "y": 0.1625,
+       "width": 0.4866666666666667,
+       "height": 0.035
+      }
+     }
+    ],
+    "checks": {
+     "layer": [
+      "SECRET_LAYER_NAME",
+      "SECRET_LAYER_BODY"
+     ]
+    },
+    "inputPolicy": "load-completely"
+   }
+  },
+  {
+   "id": "hidden-ocr-text",
+   "path": "hddn/hidden-ocr-text.pdf",
+   "sha256": "3b7c9e27e5fd7a56a156457dccbd14c889ed4e97329b2edd71a3eb65c2503255",
+   "bytes": 800,
+   "pages": 1,
+   "features": [
+    "invisible-text"
+   ],
+   "origin": "hddn@2fe0f9a:tests/pdf/fixtures/hidden-ocr-text.pdf",
+   "license": "synthetic, generated (HDDN, owner-authored)",
+   "expected": {
+    "mustKeepText": [
+     "KEEP_PUBLIC_HIDDEN_OCR_TEXT"
+    ],
+    "mustRemove": [
+     "SECRET_HIDDEN_OCR_TEXT",
+     "SECRET_INVISIBLE_OCR"
+    ],
+    "targets": [
+     {
+      "pageIndex": 0,
+      "pdfRectBottomLeft": [
+       68,
+       642,
+       360,
+       670
+      ],
+      "cropBoxBottomLeft": [
+       0,
+       0,
+       600,
+       800
+      ],
+      "rotation": 0,
+      "displaySize": [
+       600,
+       800
+      ],
+      "box": {
+       "x": 0.11333333333333333,
+       "y": 0.1625,
+       "width": 0.4866666666666667,
+       "height": 0.035
+      }
+     }
+    ],
+    "checks": {
+     "invisibleText": "SECRET_INVISIBLE_OCR"
+    },
+    "inputPolicy": "load-completely"
+   }
+  },
+  {
+   "id": "thumbnail",
+   "path": "hddn/thumbnail.pdf",
+   "sha256": "3f342c70d2a8ea59019664d7c283d9760bf8713998b701cb3531607a5cd18ffd",
+   "bytes": 60916,
+   "pages": 1,
+   "features": [
+    "thumbnail",
+    "image"
+   ],
+   "origin": "hddn@2fe0f9a:tests/pdf/fixtures/thumbnail.pdf",
+   "license": "synthetic, generated (HDDN, owner-authored)",
+   "expected": {
+    "mustKeepText": [
+     "KEEP_PUBLIC_THUMBNAIL"
+    ],
+    "mustRemove": [
+     "SECRET_THUMBNAIL"
+    ],
+    "targets": [
+     {
+      "pageIndex": 0,
+      "pdfRectBottomLeft": [
+       68,
+       642,
+       360,
+       670
+      ],
+      "cropBoxBottomLeft": [
+       0,
+       0,
+       600,
+       800
+      ],
+      "rotation": 0,
+      "displaySize": [
+       600,
+       800
+      ],
+      "box": {
+       "x": 0.11333333333333333,
+       "y": 0.1625,
+       "width": 0.4866666666666667,
+       "height": 0.035
+      }
+     }
+    ],
+    "checks": {
+     "thumbnail": true
+    },
+    "imageSecrets": [
+     {
+      "location": "/Thumb",
+      "value": "THUMB_SECRET",
+      "pixelRect": [
+       0,
+       0,
+       200,
+       50
+      ]
+     }
+    ],
+    "inputPolicy": "load-completely"
+   }
+  },
+  {
+   "id": "outline-bookmark",
+   "path": "hddn/outline-bookmark.pdf",
+   "sha256": "e6182519db1d86924112b12fb1b463fb170efa92185411d8d526d65c499469a8",
+   "bytes": 1015,
+   "pages": 1,
+   "features": [
+    "outline"
+   ],
+   "origin": "hddn@2fe0f9a:tests/pdf/fixtures/outline-bookmark.pdf",
+   "license": "synthetic, generated (HDDN, owner-authored)",
+   "expected": {
+    "mustKeepText": [
+     "KEEP_PUBLIC_OUTLINE_BOOKMARK"
+    ],
+    "mustRemove": [
+     "SECRET_OUTLINE_BOOKMARK",
+     "SECRET_OUTLINE_TITLE"
+    ],
+    "targets": [
+     {
+      "pageIndex": 0,
+      "pdfRectBottomLeft": [
+       68,
+       642,
+       360,
+       670
+      ],
+      "cropBoxBottomLeft": [
+       0,
+       0,
+       600,
+       800
+      ],
+      "rotation": 0,
+      "displaySize": [
+       600,
+       800
+      ],
+      "box": {
+       "x": 0.11333333333333333,
+       "y": 0.1625,
+       "width": 0.4866666666666667,
+       "height": 0.035
+      }
+     }
+    ],
+    "checks": {
+     "outline": "SECRET_OUTLINE_TITLE"
+    },
+    "inputPolicy": "load-completely"
+   }
+  },
+  {
+   "id": "actualtext",
+   "path": "hddn/actualtext.pdf",
+   "sha256": "7394dd868b3617413c745cb1f8906d54410770621e47291269423d53e8202489",
+   "bytes": 1246,
+   "pages": 1,
+   "features": [
+    "actualtext",
+    "structure-alt"
+   ],
+   "origin": "hddn@2fe0f9a:tests/pdf/fixtures/actualtext.pdf",
+   "license": "synthetic, generated (HDDN, owner-authored)",
+   "expected": {
+    "mustKeepText": [
+     "KEEP_PUBLIC_ACTUALTEXT"
+    ],
+    "mustRemove": [
+     "SECRET_ACTUALTEXT",
+     "SECRET_ACTUALTEXT",
+     "SECRET_STRUCTURE_ALT"
+    ],
+    "targets": [
+     {
+      "pageIndex": 0,
+      "pdfRectBottomLeft": [
+       68,
+       642,
+       360,
+       670
+      ],
+      "cropBoxBottomLeft": [
+       0,
+       0,
+       600,
+       800
+      ],
+      "rotation": 0,
+      "displaySize": [
+       600,
+       800
+      ],
+      "box": {
+       "x": 0.11333333333333333,
+       "y": 0.1625,
+       "width": 0.4866666666666667,
+       "height": 0.035
+      }
+     }
+    ],
+    "renderedTextRegions": [
+     {
+      "text": "PUBLIC_GLYPHS",
+      "pageIndex": 0,
+      "rect72dpi": [
+       68,
+       224,
+       204,
+       248
+      ]
+     }
+    ],
+    "mustKeepRenderedText": [
+     "PUBLIC_GLYPHS"
+    ],
+    "checks": {
+     "actualText": "SECRET_ACTUALTEXT",
+     "structureAlt": "SECRET_STRUCTURE_ALT"
+    },
+    "inputPolicy": "load-completely"
+   }
+  },
+  {
+   "id": "incremental-revision",
+   "path": "hddn/incremental-revision.pdf",
+   "sha256": "c889e72739c00dd88917c7bf0d75c5ed5cb14b1f13dbb726361319677f790908",
+   "bytes": 1231,
+   "pages": 1,
+   "features": [
+    "incremental-update"
+   ],
+   "origin": "hddn@2fe0f9a:tests/pdf/fixtures/incremental-revision.pdf",
+   "license": "synthetic, generated (HDDN, owner-authored)",
+   "expected": {
+    "mustKeepText": [
+     "KEEP_PUBLIC_INCREMENTAL_REVISION",
+     "PUBLIC_REVISED"
+    ],
+    "mustRemove": [
+     "SECRET_INCREMENTAL_REVISION"
+    ],
+    "targets": [],
+    "checks": {
+     "previousRevision": "SECRET_INCREMENTAL_REVISION"
+    },
+    "inputPolicy": "load-completely"
+   }
+  },
+  {
+   "id": "shared-image",
+   "path": "hddn/shared-image.pdf",
+   "sha256": "4d627708bc9d9774aa130970effdd46e0311f329df2a1bd7ac21134ba3f7350c",
+   "bytes": 61355,
+   "pages": 2,
+   "features": [
+    "shared-image",
+    "image",
+    "multi-page"
+   ],
+   "origin": "hddn@2fe0f9a:tests/pdf/fixtures/shared-image.pdf",
+   "license": "synthetic, generated (HDDN, owner-authored)",
+   "expected": {
+    "mustKeepText": [
+     "KEEP_PUBLIC_SHARED_IMAGE_P1",
+     "KEEP_PUBLIC_SHARED_IMAGE_P2"
+    ],
+    "mustRemove": [
+     "SECRET_SHARED_IMAGE"
+    ],
+    "targets": [
+     {
+      "pageIndex": 0,
+      "pdfRectBottomLeft": [
+       68,
+       642,
+       360,
+       670
+      ],
+      "cropBoxBottomLeft": [
+       0,
+       0,
+       600,
+       800
+      ],
+      "rotation": 0,
+      "displaySize": [
+       600,
+       800
+      ],
+      "box": {
+       "x": 0.11333333333333333,
+       "y": 0.1625,
+       "width": 0.4866666666666667,
+       "height": 0.035
+      }
+     },
+     {
+      "pageIndex": 0,
+      "pdfRectBottomLeft": [
+       70,
+       558,
+       314,
+       622
+      ],
+      "cropBoxBottomLeft": [
+       0,
+       0,
+       600,
+       800
+      ],
+      "rotation": 0,
+      "displaySize": [
+       600,
+       800
+      ],
+      "box": {
+       "x": 0.11666666666666667,
+       "y": 0.2225,
+       "width": 0.4066666666666667,
+       "height": 0.08
+      }
+     }
+    ],
+    "checks": {
+     "sharedObject": "image"
+    },
+    "graphicSecret": {
+     "value": "IMG_SECRET",
+     "objectRectBottomLeft": [
+      0,
+      50,
+      200,
+      100
+     ],
+     "pixelRectTopLeft": [
+      0,
+      0,
+      200,
+      50
+     ],
+     "publicOccurrencePage": 1,
+     "publicValue": "IMG_PUBLIC",
+     "publicOnlyClipPdf": [
+      72,
+      500,
+      312,
+      560
+     ]
+    },
+    "inputPolicy": "load-completely"
+   }
+  },
+  {
+   "id": "shared-vector",
+   "path": "hddn/shared-vector.pdf",
+   "sha256": "ac662396cbc3fb6642fa673725c238b0992f43e9ce438fd25f490a81b5d8854a",
+   "bytes": 1666,
+   "pages": 2,
+   "features": [
+    "shared-vector",
+    "multi-page"
+   ],
+   "origin": "hddn@2fe0f9a:tests/pdf/fixtures/shared-vector.pdf",
+   "license": "synthetic, generated (HDDN, owner-authored)",
+   "expected": {
+    "mustKeepText": [
+     "KEEP_PUBLIC_SHARED_VECTOR_P1",
+     "KEEP_PUBLIC_SHARED_VECTOR_P2"
+    ],
+    "mustRemove": [
+     "SECRET_SHARED_VECTOR"
+    ],
+    "targets": [
+     {
+      "pageIndex": 0,
+      "pdfRectBottomLeft": [
+       68,
+       642,
+       360,
+       670
+      ],
+      "cropBoxBottomLeft": [
+       0,
+       0,
+       600,
+       800
+      ],
+      "rotation": 0,
+      "displaySize": [
+       600,
+       800
+      ],
+      "box": {
+       "x": 0.11333333333333333,
+       "y": 0.1625,
+       "width": 0.4866666666666667,
+       "height": 0.035
+      }
+     },
+     {
+      "pageIndex": 0,
+      "pdfRectBottomLeft": [
+       70,
+       558,
+       314,
+       622
+      ],
+      "cropBoxBottomLeft": [
+       0,
+       0,
+       600,
+       800
+      ],
+      "rotation": 0,
+      "displaySize": [
+       600,
+       800
+      ],
+      "box": {
+       "x": 0.11666666666666667,
+       "y": 0.2225,
+       "width": 0.4066666666666667,
+       "height": 0.08
+      }
+     }
+    ],
+    "checks": {
+     "sharedObject": "vector"
+    },
+    "graphicSecret": {
+     "value": "7319",
+     "objectRectBottomLeft": [
+      0,
+      50,
+      200,
+      100
+     ],
+     "pixelRectTopLeft": null,
+     "publicOccurrencePage": 1,
+     "publicValue": "blue bar",
+     "publicOnlyClipPdf": [
+      72,
+      500,
+      312,
+      560
+     ]
+    },
+    "inputPolicy": "load-completely"
+   }
+  },
+  {
+   "id": "rotation-crop",
+   "path": "hddn/rotation-crop.pdf",
+   "sha256": "37e25c655f903fe6a305683e571f84b9dbb0d6a6c9d2251ab78535f740c1219f",
+   "bytes": 1915,
+   "pages": 4,
+   "features": [
+    "rotation-crop",
+    "multi-page"
+   ],
+   "origin": "hddn@2fe0f9a:tests/pdf/fixtures/rotation-crop.pdf",
+   "license": "synthetic, generated (HDDN, owner-authored)",
+   "expected": {
+    "mustKeepText": [
+     "KEEP_PUBLIC_ROTATION_CROP"
+    ],
+    "mustRemove": [
+     "SECRET_ROTATION_CROP"
+    ],
+    "targets": [
+     {
+      "pageIndex": 0,
+      "pdfRectBottomLeft": [
+       68,
+       642,
+       360,
+       670
+      ],
+      "cropBoxBottomLeft": [
+       20,
+       30,
+       580,
+       770
+      ],
+      "rotation": 0,
+      "displaySize": [
+       560,
+       740
+      ],
+      "box": {
+       "x": 0.08571428571428572,
+       "y": 0.13513513513513514,
+       "width": 0.5214285714285715,
+       "height": 0.03783783783783784
+      }
+     },
+     {
+      "pageIndex": 1,
+      "pdfRectBottomLeft": [
+       68,
+       642,
+       360,
+       670
+      ],
+      "cropBoxBottomLeft": [
+       20,
+       30,
+       580,
+       770
+      ],
+      "rotation": 90,
+      "displaySize": [
+       740,
+       560
+      ],
+      "box": {
+       "x": 0.827027027027027,
+       "y": 0.08571428571428572,
+       "width": 0.03783783783783784,
+       "height": 0.5214285714285715
+      }
+     },
+     {
+      "pageIndex": 2,
+      "pdfRectBottomLeft": [
+       68,
+       642,
+       360,
+       670
+      ],
+      "cropBoxBottomLeft": [
+       20,
+       30,
+       580,
+       770
+      ],
+      "rotation": 180,
+      "displaySize": [
+       560,
+       740
+      ],
+      "box": {
+       "x": 0.39285714285714285,
+       "y": 0.827027027027027,
+       "width": 0.5214285714285715,
+       "height": 0.03783783783783784
+      }
+     },
+     {
+      "pageIndex": 3,
+      "pdfRectBottomLeft": [
+       68,
+       642,
+       360,
+       670
+      ],
+      "cropBoxBottomLeft": [
+       20,
+       30,
+       580,
+       770
+      ],
+      "rotation": 270,
+      "displaySize": [
+       740,
+       560
+      ],
+      "box": {
+       "x": 0.13513513513513514,
+       "y": 0.39285714285714285,
+       "width": 0.03783783783783784,
+       "height": 0.5214285714285715
+      }
+     }
+    ],
+    "checks": {
+     "rotations": [
+      0,
+      90,
+      180,
+      270
+     ],
+     "crop": [
+      20,
+      30,
+      580,
+      770
+     ]
+    },
+    "inputPolicy": "load-completely"
+   }
+  },
+  {
+   "id": "unicode-glyph-widths",
+   "path": "hddn/unicode-glyph-widths.pdf",
+   "sha256": "c6ab1d3a8887371eeb24e76cdb99a03d8010963c5ba4504c204cd83e62cf39ee",
+   "bytes": 41049,
+   "pages": 1,
+   "features": [
+    "non-bmp",
+    "ligature",
+    "embedded-font"
+   ],
+   "origin": "hddn@2fe0f9a:tests/pdf/fixtures/unicode-glyph-widths.pdf",
+   "license": "synthetic, generated (HDDN, owner-authored); embeds DejaVu Sans glyphs (DejaVu license, free redistribution)",
+   "expected": {
+    "mustKeepText": [
+     "KEEP_PUBLIC_UNICODE_GLYPH_WIDTHS"
+    ],
+    "mustRemove": [
+     "SECRET_UNICODE"
+    ],
+    "targets": [
+     {
+      "pageIndex": 0,
+      "pdfRectBottomLeft": [
+       215.619140625,
+       644,
+       398.908203125,
+       671
+      ],
+      "cropBoxBottomLeft": [
+       0,
+       0,
+       600,
+       800
+      ],
+      "rotation": 0,
+      "displaySize": [
+       600,
+       800
+      ],
+      "box": {
+       "x": 0.359365234375,
+       "y": 0.16125,
+       "width": 0.30548177083333333,
+       "height": 0.03375
+      }
+     }
+    ],
+    "checks": {
+     "unicode": {
+      "prefix": "A\ud83d\ude00 WiWi \ufb01 \u0152 ",
+      "secret": "SECRET_UNICODE",
+      "offsetScope": "body text run",
+      "codePointOffset": 12,
+      "utf16Offset": 13,
+      "font": "FixtureUnicode",
+      "proportional": true
+     }
+    },
+    "inputPolicy": "load-completely"
+   }
+  },
+  {
+   "id": "encrypted",
+   "path": "hddn/encrypted.pdf",
+   "sha256": "c04d1d9dbfcecfa73ebd8883aa6ea5fd0bbfc4402273b8fd1e24cd46b8713369",
+   "bytes": 1096,
+   "pages": 1,
+   "features": [
+    "encrypted"
+   ],
+   "origin": "hddn@2fe0f9a:tests/pdf/fixtures/encrypted.pdf",
+   "license": "synthetic, generated (HDDN, owner-authored)",
+   "expected": {
+    "mustKeepText": [
+     "KEEP_PUBLIC_ENCRYPTED"
+    ],
+    "mustRemove": [
+     "SECRET_ENCRYPTED"
+    ],
+    "targets": [
+     {
+      "pageIndex": 0,
+      "pdfRectBottomLeft": [
+       68,
+       642,
+       360,
+       670
+      ],
+      "cropBoxBottomLeft": [
+       0,
+       0,
+       600,
+       800
+      ],
+      "rotation": 0,
+      "displaySize": [
+       600,
+       800
+      ],
+      "box": {
+       "x": 0.11333333333333333,
+       "y": 0.1625,
+       "width": 0.4866666666666667,
+       "height": 0.035
+      }
+     }
+    ],
+    "checks": {
+     "encrypted": true
+    },
+    "inputPolicy": "require-supplied-password"
+   },
+   "password": "hddn-fixture-user",
+   "ownerPassword": "hddn-fixture-owner"
+  },
+  {
+   "id": "malformed-truncated",
+   "path": "hddn/malformed-truncated.pdf",
+   "sha256": "f8213d2aeb4edce9d4d40ec7feebef7ccfc94659f034348942e81e04d0cb7304",
+   "bytes": 536,
+   "pages": null,
+   "features": [
+    "truncated",
+    "malformed"
+   ],
+   "origin": "hddn@2fe0f9a:tests/pdf/fixtures/malformed-truncated.pdf",
+   "license": "synthetic, generated (HDDN, owner-authored)",
+   "expected": {
+    "mustKeepText": [],
+    "mustRemove": [],
+    "targets": [],
+    "checks": {
+     "truncated": true
+    },
+    "inputPolicy": "reject",
+    "doNotRender": true
+   }
+  },
+  {
+   "id": "malformed-xref",
+   "path": "hddn/malformed-xref.pdf",
+   "sha256": "8f8191b5b2d7dbb0ed4237bef031c6125f4d298921137caf300afe9336b62bdf",
+   "bytes": 739,
+   "pages": 1,
+   "features": [
+    "malformed-xref",
+    "xref-repair"
+   ],
+   "origin": "hddn@2fe0f9a:tests/pdf/fixtures/malformed-xref.pdf",
+   "license": "synthetic, generated (HDDN, owner-authored)",
+   "expected": {
+    "mustKeepText": [
+     "KEEP_PUBLIC_MALFORMED_XREF"
+    ],
+    "mustRemove": [
+     "SECRET_MALFORMED_XREF"
+    ],
+    "targets": [
+     {
+      "pageIndex": 0,
+      "pdfRectBottomLeft": [
+       68,
+       642,
+       360,
+       670
+      ],
+      "cropBoxBottomLeft": [
+       0,
+       0,
+       600,
+       800
+      ],
+      "rotation": 0,
+      "displaySize": [
+       600,
+       800
+      ],
+      "box": {
+       "x": 0.11333333333333333,
+       "y": 0.1625,
+       "width": 0.4866666666666667,
+       "height": 0.035
+      }
+     }
+    ],
+    "checks": {
+     "badXref": true
+    },
+    "inputPolicy": "reject-or-complete-repair"
+   }
+  },
+  {
+   "id": "oversized-image",
+   "path": "hddn/oversized-image.pdf",
+   "sha256": "75c54c8e4ed6ad440fa1eaa7e57ccc26404f8dd099d5e83eeb22dcbb38b0ad8a",
+   "bytes": 978,
+   "pages": 1,
+   "features": [
+    "dimension-bomb",
+    "image"
+   ],
+   "origin": "hddn@2fe0f9a:tests/pdf/fixtures/oversized-image.pdf",
+   "license": "synthetic, generated (HDDN, owner-authored)",
+   "expected": {
+    "mustKeepText": [
+     "KEEP_PUBLIC_OVERSIZED_IMAGE"
+    ],
+    "mustRemove": [
+     "SECRET_OVERSIZED_IMAGE"
+    ],
+    "targets": [
+     {
+      "pageIndex": 0,
+      "pdfRectBottomLeft": [
+       68,
+       642,
+       360,
+       670
+      ],
+      "cropBoxBottomLeft": [
+       0,
+       0,
+       600,
+       800
+      ],
+      "rotation": 0,
+      "displaySize": [
+       600,
+       800
+      ],
+      "box": {
+       "x": 0.11333333333333333,
+       "y": 0.1625,
+       "width": 0.4866666666666667,
+       "height": 0.035
+      }
+     }
+    ],
+    "checks": {
+     "oversizedImage": [
+      100000,
+      100000,
+      3
+     ]
+    },
+    "inputPolicy": "reject-before-unbounded-image-allocation",
+    "doNotRender": true
+   }
+  },
+  {
+   "id": "compressed-stream",
+   "path": "hddn/compressed-stream.pdf",
+   "sha256": "ba6dd7b24a1e826af25819de750632dc46087e55e1b8ac30b43c71f8ebc73d5d",
+   "bytes": 9023,
+   "pages": 1,
+   "features": [
+    "flate-bomb",
+    "decode-ratio"
+   ],
+   "origin": "hddn@2fe0f9a:tests/pdf/fixtures/compressed-stream.pdf",
+   "license": "synthetic, generated (HDDN, owner-authored)",
+   "expected": {
+    "mustKeepText": [
+     "KEEP_PUBLIC_COMPRESSED_STREAM"
+    ],
+    "mustRemove": [
+     "SECRET_COMPRESSED_STREAM"
+    ],
+    "targets": [
+     {
+      "pageIndex": 0,
+      "pdfRectBottomLeft": [
+       68,
+       642,
+       360,
+       670
+      ],
+      "cropBoxBottomLeft": [
+       0,
+       0,
+       600,
+       800
+      ],
+      "rotation": 0,
+      "displaySize": [
+       600,
+       800
+      ],
+      "box": {
+       "x": 0.11333333333333333,
+       "y": 0.1625,
+       "width": 0.4866666666666667,
+       "height": 0.035
+      }
+     }
+    ],
+    "checks": {
+     "compressedStream": {
+      "expandedBytes": 8388608,
+      "verificationLimit": 65536
+     }
+    },
+    "inputPolicy": "bounded-decode-or-explicit-resource-rejection",
+    "doNotRender": true,
+    "doNotExtract": true
+   }
+  },
+  {
+   "id": "corrupt-flate",
+   "path": "generated/corrupt-flate.pdf",
+   "sha256": "2b22528e19c50ce418db3738f43137a33181249e6cd91df85d8ce86af9e24416",
+   "bytes": 649,
+   "pages": 1,
+   "features": [
+    "corrupt-flate",
+    "malformed"
+   ],
+   "origin": "tests/fixtures/generators/generate.py",
+   "license": "synthetic, generated (original)",
+   "deterministic": true,
+   "expected": {
+    "behavior": "content stream fails to inflate: decode error must be surfaced (error or explicit warning), never a silent pass",
+    "mustRemove": [
+     "SECRET_CORRUPT_FLATE"
+    ],
+    "mustKeepText": []
+   }
+  },
+  {
+   "id": "forms-cyclic",
+   "path": "generated/forms-cyclic.pdf",
+   "sha256": "ddc81e58dad7feeaa00c00f6be4522ffc578c24301b877dcd3494626d872d9cd",
+   "bytes": 1135,
+   "pages": 1,
+   "features": [
+    "form-xobject",
+    "cyclic-form"
+   ],
+   "origin": "tests/fixtures/generators/generate.py",
+   "license": "synthetic, generated (original)",
+   "deterministic": true,
+   "expected": {
+    "behavior": "cycle A->B->A must hit the nesting limit/cycle guard, not recurse",
+    "mustRemove": [
+     "SECRET_CYCLIC_A",
+     "SECRET_CYCLIC_B"
+    ],
+    "mustKeepText": [
+     "KEEP_PUBLIC_CYCLIC"
+    ],
+    "regions": [
+     {
+      "kind": "public",
+      "page": 0,
+      "rectTopLeft": [
+       20,
+       28.8,
+       158.6,
+       43.5
+      ],
+      "text": "KEEP_PUBLIC_CYCLIC"
+     }
+    ]
+   }
+  },
+  {
+   "id": "forms-deep-40",
+   "path": "generated/forms-deep-40.pdf",
+   "sha256": "a3e675f84b58e7dcce1d464dcad36476432670480314323ed288657a2fa179c8",
+   "bytes": 9097,
+   "pages": 1,
+   "features": [
+    "form-xobject",
+    "deep-form"
+   ],
+   "origin": "tests/fixtures/generators/generate.py",
+   "license": "synthetic, generated (original)",
+   "deterministic": true,
+   "expected": {
+    "behavior": "40 nested Forms exceed maxNesting 32: LIMIT_EXCEEDED, no output",
+    "mustRemove": [
+     "SECRET_DEEP_FORM_40"
+    ],
+    "mustKeepText": [
+     "KEEP_PUBLIC_DEEP"
+    ],
+    "regions": [
+     {
+      "kind": "sensitive",
+      "page": 0,
+      "rectTopLeft": [
+       20,
+       188.8,
+       166.3,
+       203.5
+      ],
+      "text": "SECRET_DEEP_FORM_40"
+     },
+     {
+      "kind": "public",
+      "page": 0,
+      "rectTopLeft": [
+       20,
+       28.8,
+       143.2,
+       43.5
+      ],
+      "text": "KEEP_PUBLIC_DEEP"
+     }
+    ]
+   }
+  },
+  {
+   "id": "form-reuse-matrices",
+   "path": "generated/form-reuse-matrices.pdf",
+   "sha256": "426c4ba5e820d3607c36af968d095ed5a7f66a3dbc9d4a68d78bc1ec34a7805c",
+   "bytes": 941,
+   "pages": 1,
+   "features": [
+    "form-xobject",
+    "shared-form",
+    "rotation-matrix"
+   ],
+   "origin": "tests/fixtures/generators/generate.py",
+   "license": "synthetic, generated (original)",
+   "deterministic": true,
+   "expected": {
+    "behavior": "one Form drawn 3x (identity, 0.5 scale, 90deg) plus own /Matrix; redacting one occurrence must not alter the others",
+    "mustRemove": [
+     "SECRET_FORM_REUSE"
+    ],
+    "mustKeepText": [
+     "KEEP_PUBLIC_FORM_REUSE"
+    ],
+    "regions": [
+     {
+      "kind": "sensitive",
+      "page": 0,
+      "rectTopLeft": [
+       26,
+       79.6,
+       194.3,
+       98.5
+      ],
+      "text": "SECRET_FORM_REUSE"
+     },
+     {
+      "kind": "sensitive",
+      "page": 0,
+      "rectTopLeft": [
+       23,
+       139.8,
+       107.2,
+       149.2
+      ],
+      "text": "SECRET_FORM_REUSE"
+     },
+     {
+      "kind": "public",
+      "page": 0,
+      "rectTopLeft": [
+       20,
+       28.8,
+       189.4,
+       43.5
+      ],
+      "text": "KEEP_PUBLIC_FORM_REUSE"
+     }
+    ],
+    "regionsNote": "first two occurrences only; third (rotated) not mapped"
+   }
+  },
+  {
+   "id": "many-pages-1001",
+   "path": "generated/many-pages-1001.pdf",
+   "sha256": "2cd12540fb8a5c0639d650c840f0b029acc9f895cab4b1a58b49be8f2fc0eaa3",
+   "bytes": 156457,
+   "pages": 1001,
+   "features": [
+    "many-pages",
+    "shared-content-stream"
+   ],
+   "origin": "tests/fixtures/generators/generate.py",
+   "license": "synthetic, generated (original)",
+   "deterministic": true,
+   "expected": {
+    "behavior": "1001 pages: above SDK default maxPages 1000 (LIMIT_EXCEEDED unless raised); one shared content stream, no per-page markers",
+    "mustRemove": [],
+    "mustKeepText": [
+     "PAGE_COMMON_TEXT"
+    ]
+   }
+  },
+  {
+   "id": "ocg-hidden-text",
+   "path": "generated/ocg-hidden-text.pdf",
+   "sha256": "b0056a28a9edcdc1fddbad3dccab868841a8b883db911cabbe6f2103819daddc",
+   "bytes": 966,
+   "pages": 1,
+   "features": [
+    "ocg",
+    "hidden-ocg-text"
+   ],
+   "origin": "tests/fixtures/generators/generate.py",
+   "license": "synthetic, generated (original)",
+   "deterministic": true,
+   "expected": {
+    "behavior": "default config /D has layer 1 OFF; its text must not survive layer flattening",
+    "mustRemove": [
+     "SECRET_HIDDEN_OCG",
+     "SECRET_LAYER_OFF_NAME"
+    ],
+    "mustKeepText": [
+     "KEEP_PUBLIC_OCG",
+     "KEEP_PUBLIC_ON_LAYER"
+    ],
+    "regions": [
+     {
+      "kind": "sensitive",
+      "page": 0,
+      "rectTopLeft": [
+       20,
+       108.8,
+       150.9,
+       123.5
+      ],
+      "text": "SECRET_HIDDEN_OCG"
+     },
+     {
+      "kind": "public",
+      "page": 0,
+      "rectTopLeft": [
+       20,
+       68.8,
+       174.0,
+       83.5
+      ],
+      "text": "KEEP_PUBLIC_ON_LAYER"
+     }
+    ]
+   }
+  },
+  {
+   "id": "ocr-over-image",
+   "path": "generated/ocr-over-image.pdf",
+   "sha256": "851a2cd64d1b4e569c26284dedefaddbe1194b68bbc1b11df7ac0c3ae13cc6e5",
+   "bytes": 951,
+   "pages": 1,
+   "features": [
+    "invisible-text",
+    "image",
+    "ocr-layer"
+   ],
+   "origin": "tests/fixtures/generators/generate.py",
+   "license": "synthetic, generated (original)",
+   "deterministic": true,
+   "expected": {
+    "behavior": "image with secret pixels under invisible (Tr 3) OCR text; both must go under the region; gray bar must survive",
+    "mustRemove": [
+     "SECRET_OCR_TEXT"
+    ],
+    "mustKeepText": [
+     "KEEP_PUBLIC_OCR_PAGE"
+    ],
+    "regions": [
+     {
+      "kind": "sensitive-image",
+      "page": 0,
+      "rectTopLeft": [
+       45,
+       125,
+       145,
+       150
+      ],
+      "text": "black bar pixels cols 8-40 rows 8-16 of 64x32"
+     },
+     {
+      "kind": "public-image",
+      "page": 0,
+      "rectTopLeft": [
+       157.5,
+       125,
+       195,
+       150
+      ],
+      "text": "gray 0x80 bar must stay"
+     },
+     {
+      "kind": "sensitive",
+      "page": 0,
+      "rectTopLeft": [
+       45,
+       135.4,
+       144.0,
+       148.0
+      ],
+      "text": "SECRET_OCR_TEXT"
+     },
+     {
+      "kind": "public",
+      "page": 0,
+      "rectTopLeft": [
+       20,
+       28.8,
+       174.0,
+       43.5
+      ],
+      "text": "KEEP_PUBLIC_OCR_PAGE"
+     }
+    ]
+   }
+  },
+  {
+   "id": "leaks-metadata-attachment-js",
+   "path": "generated/leaks-metadata-attachment-js.pdf",
+   "sha256": "a19ab47d6c2a0ccd2abe6e97930340565db56fba8bea8239ba9b2f473f03689d",
+   "bytes": 1736,
+   "pages": 1,
+   "features": [
+    "metadata",
+    "xmp",
+    "embedded-file",
+    "javascript",
+    "openaction",
+    "additional-actions"
+   ],
+   "origin": "tests/fixtures/generators/generate.py",
+   "license": "synthetic, generated (original)",
+   "deterministic": true,
+   "expected": {
+    "behavior": "Info+XMP+attachment+named JS+OpenAction+catalog AA; sanitizer must drop all",
+    "mustRemove": [
+     "SECRET_INFO_TITLE",
+     "SECRET_INFO_AUTHOR",
+     "SECRET_PRODUCER",
+     "SECRET_XMP_TITLE",
+     "SECRET_ATTACHMENT_NAME.txt",
+     "SECRET_ATTACHMENT_BODY",
+     "SECRET_NAMED_JS",
+     "SECRET_OPENACTION_JS",
+     "SECRET_AA_JS"
+    ],
+    "mustKeepText": [
+     "KEEP_PUBLIC_KITCHEN"
+    ]
+   }
+  },
+  {
+   "id": "incremental-prior-text",
+   "path": "generated/incremental-prior-text.pdf",
+   "sha256": "54734f09d875a51607a0933e9532914a5d72d91703639f40aba5a6f63a4a7a5e",
+   "bytes": 797,
+   "pages": 1,
+   "features": [
+    "incremental-update",
+    "prior-revision"
+   ],
+   "origin": "tests/fixtures/generators/generate.py",
+   "license": "synthetic, generated (original)",
+   "deterministic": true,
+   "expected": {
+    "behavior": "rev1 text lives only in the first revision's replaced object; output must contain no /Prev and no old bytes",
+    "mustRemove": [
+     "SECRET_OLD_REVISION"
+    ],
+    "mustKeepText": [
+     "KEEP_NEW_REVISION"
+    ]
+   }
+  },
+  {
+   "id": "acroform-values",
+   "path": "generated/acroform-values.pdf",
+   "sha256": "ffb8b8e7499379f4341cd90d5dfb4f470e461c3a8dbe70abf31b78139e4f4182",
+   "bytes": 1163,
+   "pages": 1,
+   "features": [
+    "form",
+    "widget",
+    "appearance-stream"
+   ],
+   "origin": "tests/fixtures/generators/generate.py",
+   "license": "synthetic, generated (original)",
+   "deterministic": true,
+   "expected": {
+    "behavior": "Tx field with /V, /DV and /AP; flatten then drop AcroForm and values",
+    "mustRemove": [
+     "SECRET_FORM_NAME",
+     "SECRET_FORM_VALUE",
+     "SECRET_FORM_DEFAULT"
+    ],
+    "mustKeepText": [
+     "KEEP_PUBLIC_FORM"
+    ],
+    "regions": [
+     {
+      "kind": "sensitive",
+      "page": 0,
+      "rectTopLeft": [
+       20,
+       70,
+       220,
+       100
+      ],
+      "text": "widget rect"
+     },
+     {
+      "kind": "public",
+      "page": 0,
+      "rectTopLeft": [
+       20,
+       28.8,
+       143.2,
+       43.5
+      ],
+      "text": "KEEP_PUBLIC_FORM"
+     }
+    ]
+   }
+  },
+  {
+   "id": "annot-appearance",
+   "path": "generated/annot-appearance.pdf",
+   "sha256": "45333ccdfa66d1cd0cc87bbf0aab176b35e7a545c4958a2d3c072c7ba36e0976",
+   "bytes": 1257,
+   "pages": 1,
+   "features": [
+    "annotation",
+    "appearance-stream",
+    "link"
+   ],
+   "origin": "tests/fixtures/generators/generate.py",
+   "license": "synthetic, generated (original)",
+   "deterministic": true,
+   "expected": {
+    "behavior": "FreeText with /AP /N plus URI link; flatten drops /Contents /NM /T and the link",
+    "mustRemove": [
+     "SECRET_ANNOT_CONTENTS",
+     "SECRET_ANNOT_NAME",
+     "SECRET_ANNOT_AUTHOR",
+     "SECRET_ANNOT_TEXT",
+     "SECRET_LINK_URI"
+    ],
+    "mustKeepText": [
+     "KEEP_PUBLIC_ANNOT"
+    ],
+    "regions": [
+     {
+      "kind": "sensitive",
+      "page": 0,
+      "rectTopLeft": [
+       20,
+       80,
+       200,
+       120
+      ],
+      "text": "annot rect"
+     },
+     {
+      "kind": "public",
+      "page": 0,
+      "rectTopLeft": [
+       20,
+       28.8,
+       150.9,
+       43.5
+      ],
+      "text": "KEEP_PUBLIC_ANNOT"
+     }
+    ]
+   }
+  },
+  {
+   "id": "encrypted-rc4-40",
+   "path": "generated/encrypted-rc4-40.pdf",
+   "sha256": "89b74529499dd8fee356060a3aba1e03be7ac19ce88d1d330403d311464b2472",
+   "bytes": 909,
+   "pages": 1,
+   "features": [
+    "encrypted",
+    "rc4-40"
+   ],
+   "origin": "tests/fixtures/generators/generate.py",
+   "license": "synthetic, generated (original)",
+   "deterministic": false,
+   "expected": {
+    "behavior": "needs password; user/owner both work; output never re-encrypted",
+    "mustRemove": [
+     "SECRET_ENCRYPTED_BODY"
+    ],
+    "mustKeepText": [
+     "KEEP_PUBLIC_ENCRYPTED"
+    ]
+   },
+   "password": "user-pw",
+   "ownerPassword": "owner-pw"
+  },
+  {
+   "id": "encrypted-rc4-128",
+   "path": "generated/encrypted-rc4-128.pdf",
+   "sha256": "3da93f7ea5b05e0d2ad06ca75a5ffc23073ecf65724d317d96f372a42ff72c7e",
+   "bytes": 910,
+   "pages": 1,
+   "features": [
+    "encrypted",
+    "rc4-128"
+   ],
+   "origin": "tests/fixtures/generators/generate.py",
+   "license": "synthetic, generated (original)",
+   "deterministic": false,
+   "expected": {
+    "behavior": "needs password; user/owner both work; output never re-encrypted",
+    "mustRemove": [
+     "SECRET_ENCRYPTED_BODY"
+    ],
+    "mustKeepText": [
+     "KEEP_PUBLIC_ENCRYPTED"
+    ]
+   },
+   "password": "user-pw",
+   "ownerPassword": "owner-pw"
+  },
+  {
+   "id": "encrypted-aes-128",
+   "path": "generated/encrypted-aes-128.pdf",
+   "sha256": "353f8ec9d1e1e34662bebf1fad3c67c56acc06d887f3fe2583ece65744cc1c87",
+   "bytes": 1009,
+   "pages": 1,
+   "features": [
+    "encrypted",
+    "aes-128"
+   ],
+   "origin": "tests/fixtures/generators/generate.py",
+   "license": "synthetic, generated (original)",
+   "deterministic": false,
+   "expected": {
+    "behavior": "needs password; user/owner both work; output never re-encrypted",
+    "mustRemove": [
+     "SECRET_ENCRYPTED_BODY"
+    ],
+    "mustKeepText": [
+     "KEEP_PUBLIC_ENCRYPTED"
+    ]
+   },
+   "password": "user-pw",
+   "ownerPassword": "owner-pw"
+  },
+  {
+   "id": "encrypted-aes-256",
+   "path": "generated/encrypted-aes-256.pdf",
+   "sha256": "8d90fb7374c3fc7f93ff987b8851010841d4a06b6412bed8ab03d3f30d8229c8",
+   "bytes": 1251,
+   "pages": 1,
+   "features": [
+    "encrypted",
+    "aes-256"
+   ],
+   "origin": "tests/fixtures/generators/generate.py",
+   "license": "synthetic, generated (original)",
+   "deterministic": false,
+   "expected": {
+    "behavior": "needs password; user/owner both work; output never re-encrypted",
+    "mustRemove": [
+     "SECRET_ENCRYPTED_BODY"
+    ],
+    "mustKeepText": [
+     "KEEP_PUBLIC_ENCRYPTED"
+    ]
+   },
+   "password": "user-pw",
+   "ownerPassword": "owner-pw"
+  }
+ ]
+}
