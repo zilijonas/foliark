@@ -13,6 +13,7 @@ HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent / "fixtures" / "generators"))
 import generate as gen  # noqa: E402
+import fidelity  # noqa: E402
 import objects  # noqa: E402
 from pdfsyn import simple, stream, text  # noqa: E402
 
@@ -259,6 +260,66 @@ VEC = {"vector_regions": [{"page": 0, "rect": VEC_RECT, "fill": [0, 0, 0]}]}
 SHARED2 = {"image_regions": [{"page": 0, "rect": IMG_RECT}, {"page": 1, "rect": IMG_RECT}]}
 
 
+# ---- NEW-21: fidelity pairs (input, output). Region = the secret line; everything else must be unchanged ----
+def fpage(keep_x=20, image=True, secret=True, keep_as_image=False):
+    d = fitz.open()
+    pg = d.new_page(width=300, height=400)
+    if keep_as_image:  # same look, no text layer
+        src, sp = fitz.open(), None
+        sp = src.new_page(width=300, height=400)
+        sp.insert_text((keep_x, 360), "KEEP_PUBLIC_TEXT", fontsize=14)
+        clip = fitz.Rect(10, 340, 160, 370)
+        pg.insert_image(clip, pixmap=sp.get_pixmap(dpi=72, clip=clip))
+    else:
+        pg.insert_text((keep_x, 360), "KEEP_PUBLIC_TEXT", fontsize=14)
+    pg.insert_text((20, 330), "second public line stays", fontsize=12)
+    if secret:
+        pg.insert_text((20, 300), SECRET, fontsize=14)
+    if image:
+        px = bytes((x * 4 + y * 2 + c * 50) % 256 for y in range(64) for x in range(64) for c in range(3))
+        pg.insert_image(fitz.Rect(20, 50, 148, 178), pixmap=fitz.Pixmap(fitz.csRGB, 64, 64, px, False))
+        pg.draw_rect(fitz.Rect(200, 60, 260, 120), color=(0, 0, 1), fill=(0.8, 0.8, 1))
+    return d, pg
+
+
+def fin():
+    d, pg = fpage()
+    return d.tobytes(), list(pg.search_for(SECRET)[0])
+
+
+def fout_redacted(**kw):
+    d, pg = fpage(**kw)
+    redact(d, pg, pg.search_for(SECRET)[0])
+    return out(d)
+
+
+def fout_raster(declared_text=False):
+    src = fitz.open(stream=fout_redacted(), filetype="pdf")
+    d = fitz.open()
+    pg = d.new_page(width=300, height=400)
+    pg.insert_image(pg.rect, pixmap=src[0].get_pixmap(dpi=144))
+    return out(d)
+
+
+def fout_blank_secret_image_only():
+    d, pg = fpage(secret=False)
+    return out(d)
+
+
+FIN, REGION = fin()
+FSPEC = {"changed": [{"page": 0, "rect": REGION}], "preserve": ["KEEP_PUBLIC_TEXT", "secondpublicline"]}
+RASTER = {**FSPEC, "raster": True, "preserve": [], "threshold": 64, "max_frac": 0.01}
+FCASES = [
+    ("fail: unaffected image dropped", lambda: fout_redacted(image=False), FSPEC, {"PIXELS"}, set()),
+    ("fail: unaffected text shifted 5 pt", lambda: fout_redacted(keep_x=25), FSPEC, {"PIXELS", "WORDS_FITZ", "WORDS_PYPDF"}, set()),
+    ("fail: unaffected text lost (outlined as image)", lambda: fout_redacted(keep_as_image=True), FSPEC, {"WORDS_FITZ", "WORDS_PYPDF", "PRESERVE_FITZ", "PRESERVE_PYPDF"}, {"PIXELS"}),  # pixel-identical: only the text checks can see it
+    ("fail: raster output not declared as raster", fout_raster, FSPEC, {"WORDS_FITZ", "WORDS_PYPDF", "PRESERVE_FITZ", "PRESERVE_PYPDF"}, set()),
+    ("fail: declared raster still has a text layer", fout_redacted, RASTER, {"RASTER_TEXT"}, set()),
+    ("pass: PyMuPDF apply_redactions", fout_redacted, FSPEC, None, set()),
+    ("pass: declared raster, no text layer", fout_raster, RASTER, None, set()),
+]
+
+
 S = {"forbidden": [SECRET]}
 IMG = {"image_regions": [{"page": 0, "rect": IMG_RECT}]}
 # name, builder, spec, codes that MUST appear (leaky) / None (safe), codes that must NOT appear[, substring a finding must contain]
@@ -321,7 +382,27 @@ def main():
         if not ok:
             print("     findings:", *codes_full[:6], sep="\n       ")
     print("leaky caught %d/%d, safe passed %d/%d" % (caught, leaky, passed, safe))
-    return 1 if bad else 0
+    fbad, ffail, fcaught, fpass, fok = 0, 0, 0, 0, 0
+    (tmp / "in.pdf").write_bytes(FIN)
+    for i, (name, build, spec, must, mustnot) in enumerate(FCASES):
+        p = tmp / ("f%02d.pdf" % i)
+        p.write_bytes(build())
+        findings, notes = fidelity.check_isolated(tmp / "in.pdf", p, spec)
+        codes = {f.split(":")[0] for f in findings}
+        if must is None:
+            fpass += 1
+            ok = not findings
+            fok += ok
+        else:
+            ffail += 1
+            ok = must <= codes and not (mustnot & codes)
+            fcaught += ok
+        fbad += not ok
+        print("%s %-46s %s" % ("ok  " if ok else "FAIL", name, sorted(codes) if codes else "clean"))
+        if not ok:
+            print("     findings:", *(findings[:6] + notes), sep="\n       ")
+    print("fidelity fail cases caught %d/%d, pass cases passed %d/%d" % (fcaught, ffail, fok, fpass))
+    return 1 if bad or fbad else 0
 
 
 if __name__ == "__main__":

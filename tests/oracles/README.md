@@ -1,4 +1,4 @@
-# Independent PDF oracles (NEW-7)
+# Independent PDF oracles (NEW-7, NEW-20, NEW-21)
 
 The Foliark engine never grades itself. These checks read an OUTPUT PDF with three unrelated parsers
 (pypdf, pikepdf/qpdf, PyMuPDF/MuPDF) and know nothing about `foliark-*` crates. Dev-only: none of this ships.
@@ -43,3 +43,26 @@ Each leaky output must produce its expected codes; a case that should be caught 
 - Vector check: geometry only. Clips, blend/opacity, shadings (`sh`) and tiling patterns are not evaluated; a path hidden by a clip or 0 opacity still counts. Non-axis-aligned fills are polygons (curves sampled at 12 steps).
 - Raster export outputs: use the image-region check on the page image; text checks pass vacuously by construction.
 - Encrypted outputs fail by design (the engine never re-encrypts); AES inputs need `cryptography` for pypdf, otherwise TEXT_PYPDF fails loudly.
+
+## Fidelity: output vs input outside the changed regions (NEW-21, `fidelity.py`)
+```sh
+tests/oracles/.venv/bin/python tests/oracles/fidelity.py in.pdf out.pdf --changed 0:x0,y0,x1,y1 [--preserve TEXT] [--raster] [--spec spec.json]
+```
+`fidelity.check_isolated(in, out, spec)` returns `(findings, notes)`; notes carry per-page metrics (max diff, pixels over threshold) and the raster declaration. Changed rects are display space (spec section 2).
+| Check | Proves | Code |
+|---|---|---|
+| Pixel diff | both PDFs rendered by PyMuPDF at `dpi`; declared regions (+`margin`) masked; pixels differing by more than `threshold` (max channel) stay under `max_frac` of the unmasked area. Catches dropped images/content, shifted text | PIXELS |
+| Words, PyMuPDF | every input word outside changed regions has an output word with equal text and bbox within `text_tol`, and every output word outside them has an input word (both directions, greedy 1:1) | WORDS_FITZ |
+| Text chunks, pypdf | every pypdf text-show chunk of an input line that does not touch a region has an output chunk with equal text and start point within `text_tol` | WORDS_PYPDF |
+| Preserve | each `preserve` string is extractable (whitespace-insensitive) by PyMuPDF and by pypdf | PRESERVE_FITZ, PRESERVE_PYPDF |
+| Raster | with `"raster": true`: no words, no pypdf text, no fonts on any page (else RASTER_TEXT); text mapping and preserve are skipped and the loss is printed as a note. Raster must be declared: an undeclared raster output fails WORDS_*/PRESERVE_* | RASTER_TEXT |
+| Structure | page count, page size and render size equal | PAGES, SIZE |
+
+Defaults (override in the spec): `dpi` 72, `margin` 2 pt, `threshold` 32 (of 255), `max_frac` 0.0002 (0.02% of unmasked pixels), `text_tol` 1.0 pt.
+Raster outputs re-sample every page, so declare looser pixel limits with them (controls use `threshold` 64, `max_frac` 0.01; measured 0.16%).
+Controls (in `controls.py`, 5 fail + 2 pass): unaffected image dropped, unaffected text shifted 5 pt, unaffected text lost while pixel-identical (outlined as an image; PIXELS must stay silent),
+undeclared raster, declared raster that kept its text layer; pass: PyMuPDF `apply_redactions`, declared raster without text. Measured baselines: identical re-save 0 px, correct redaction 0 px, 5 pt shift 0.8%, dropped image 17%.
+
+Limits: the margin must cover anti-aliasing around changed regions; a region declared too large hides regressions inside it. Pixel diff compares one renderer (MuPDF) on both sides, so it
+sees changes, not rendering errors common to both. pypdf chunk matching is operator-granular: an engine that re-splits an unaffected line into different text-show operators fails WORDS_PYPDF
+even when the page is right (the PyMuPDF word check is the authoritative layout check); its start points ignore Tc/Tw/Tz and text rise. Reflowed text must be inside a declared region. Annotations render per PyMuPDF defaults.
