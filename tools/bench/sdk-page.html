@@ -1,0 +1,19 @@
+<!doctype html><meta charset="utf-8"><title>sdk bench</title>
+<script type="module">
+  import { createFoliark } from "/packages/sdk/dist/index.js";
+  window.initSdk = async () => {
+    const t0 = performance.now();
+    window.F = await createFoliark({ wasmUrl: "/packages/sdk/wasm/foliark_wasm_bg.wasm", workerUrl: "/packages/sdk/dist/worker.js" });
+    return performance.now() - t0;
+  };
+  window.sdkOpen = async (b64) => {
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    const t0 = performance.now();
+    window.D = await F.open(bytes);
+    return { ms: performance.now() - t0, pages: D.pageCount };
+  };
+  window.sdkRender = async (p, scale) => { const t0 = performance.now(); const r = await D.renderPage(p, { scale }); return { ms: performance.now() - t0, w: r.width, h: r.height }; };
+  window.sdkClose = async () => { const t0 = performance.now(); await D.close(); return performance.now() - t0; };
+  window.sdkDispose = () => F.dispose();
+  window.ready = true;
+</script>

@@ -1,0 +1,566 @@
+{
+ "schema": 1,
+ "createdAt": "2026-10-21T23:47:56.132Z",
+ "mode": "full",
+ "machine": {
+  "cpu": "Apple M4",
+  "cores": 10,
+  "ramGB": 24,
+  "macOS": "26.6.2",
+  "arch": "arm64"
+ },
+ "browser": "webkit 26.5",
+ "engines": {
+  "hddn": "hddn@2fe0f9a",
+  "sdk": "foliark@dc86bcc"
+ },
+ "sdkNote": "prebuilt packages/sdk/{dist,wasm}; wasm sha256 2f67cabef78e182f (4878707 B); working tree had uncommitted changes by another agent",
+ "inputs": [
+  {
+   "id": "native-small",
+   "sha256": "03e27e03b6096e429f76b25eb3a6e21aa4f318becd3fcb031dffcb220c1acbe3",
+   "pages": 1,
+   "bytes": 1218,
+   "origin": "tests/fixtures/hddn/metadata-xmp.pdf"
+  },
+  {
+   "id": "native-30p",
+   "sha256": "bf4b9caeb78cae52cd2aad00ac333fe4ef89237a30c0a3f900cadd7abc5440d5",
+   "pages": 30,
+   "bytes": 311713,
+   "origin": "tools/bench/make-native30.py (PyMuPDF, dev-only)"
+  },
+  {
+   "id": "image-heavy",
+   "sha256": "4d627708bc9d9774aa130970effdd46e0311f329df2a1bd7ac21134ba3f7350c",
+   "pages": 2,
+   "bytes": 61355,
+   "origin": "tests/fixtures/hddn/shared-image.pdf"
+  },
+  {
+   "id": "rotation-crop",
+   "sha256": "37e25c655f903fe6a305683e571f84b9dbb0d6a6c9d2251ab78535f740c1219f",
+   "pages": 4,
+   "bytes": 1915,
+   "origin": "tests/fixtures/hddn/rotation-crop.pdf"
+  }
+ ],
+ "measurements": [
+  {
+   "engine": "hddn",
+   "op": "INIT",
+   "input": "-",
+   "run": "cold",
+   "ms": 1544.9,
+   "p95": 1569.3,
+   "n": 3,
+   "bytes": 30406821
+  },
+  {
+   "engine": "hddn",
+   "op": "LOAD_PDF",
+   "input": "native-small",
+   "run": "cold",
+   "ms": 18.3,
+   "p95": 18.7,
+   "n": 3
+  },
+  {
+   "engine": "hddn",
+   "op": "INIT",
+   "input": "-",
+   "run": "warm",
+   "ms": 1535.3,
+   "p95": 1544.1,
+   "n": 5,
+   "bytes": 86565270
+  },
+  {
+   "engine": "hddn",
+   "op": "LOAD_PDF",
+   "input": "native-small",
+   "run": "warm",
+   "ms": 5.3,
+   "p95": 19.7,
+   "n": 5,
+   "pages": 1
+  },
+  {
+   "engine": "hddn",
+   "op": "COMMIT_IMPORT",
+   "input": "native-small",
+   "run": "warm",
+   "ms": 0.6,
+   "p95": 0.8,
+   "n": 5
+  },
+  {
+   "engine": "hddn",
+   "op": "GET_PAGE_PREVIEW@1.35",
+   "input": "native-small",
+   "run": "warm",
+   "ms": 7.5,
+   "p95": 13.6,
+   "n": 5,
+   "pages": 1,
+   "perPageMedianMs": [
+    7.5
+   ]
+  },
+  {
+   "engine": "hddn",
+   "op": "APPLY_REDACTIONS native (1 manual box)",
+   "input": "native-small",
+   "run": "warm",
+   "ms": 10.8,
+   "p95": 12.8,
+   "n": 3,
+   "outBytes": 841
+  },
+  {
+   "engine": "hddn",
+   "op": "SET_TEXT_EDITS (1 span)",
+   "input": "native-small",
+   "run": "warm",
+   "ms": 9.7,
+   "p95": 14.5,
+   "n": 3
+  },
+  {
+   "engine": "hddn",
+   "op": "LOAD_PDF",
+   "input": "native-30p",
+   "run": "warm",
+   "ms": 1125.4,
+   "p95": 1153.5,
+   "n": 5,
+   "pages": 30
+  },
+  {
+   "engine": "hddn",
+   "op": "COMMIT_IMPORT",
+   "input": "native-30p",
+   "run": "warm",
+   "ms": 0.8,
+   "p95": 1,
+   "n": 5
+  },
+  {
+   "engine": "hddn",
+   "op": "rss-after-LOAD_PDF",
+   "input": "native-30p",
+   "run": "warm",
+   "rssBytes": 122355712
+  },
+  {
+   "engine": "hddn",
+   "op": "GET_PAGE_PREVIEW@1.35",
+   "input": "native-30p",
+   "run": "warm",
+   "ms": 16,
+   "p95": 16.7,
+   "n": 150,
+   "pages": 30,
+   "perPageMedianMs": [
+    16.1,
+    16,
+    16.1,
+    16.2,
+    16.3,
+    16.2,
+    16.4,
+    16.1,
+    16,
+    16.1,
+    16,
+    16,
+    16.1,
+    16,
+    16,
+    16,
+    16,
+    15.9,
+    16,
+    16.1,
+    16,
+    16,
+    16,
+    15.8,
+    15.9,
+    16,
+    16.1,
+    15.9,
+    16.1,
+    16.1
+   ]
+  },
+  {
+   "engine": "hddn",
+   "op": "APPLY_REDACTIONS native (1 manual box)",
+   "input": "native-30p",
+   "run": "warm",
+   "ms": 456.7,
+   "p95": 463.5,
+   "n": 3,
+   "outBytes": 213126
+  },
+  {
+   "engine": "hddn",
+   "op": "SET_TEXT_EDITS (1 span)",
+   "input": "native-30p",
+   "run": "warm",
+   "ms": 1136.4,
+   "p95": 1140.5,
+   "n": 3
+  },
+  {
+   "engine": "hddn",
+   "op": "LOAD_PDF",
+   "input": "image-heavy",
+   "run": "warm",
+   "ms": 9.5,
+   "p95": 9.6,
+   "n": 5,
+   "pages": 2
+  },
+  {
+   "engine": "hddn",
+   "op": "COMMIT_IMPORT",
+   "input": "image-heavy",
+   "run": "warm",
+   "ms": 0.3,
+   "p95": 0.7,
+   "n": 5
+  },
+  {
+   "engine": "hddn",
+   "op": "GET_PAGE_PREVIEW@1.35",
+   "input": "image-heavy",
+   "run": "warm",
+   "ms": 7.2,
+   "p95": 8,
+   "n": 10,
+   "pages": 2,
+   "perPageMedianMs": [
+    7.3,
+    7.2
+   ]
+  },
+  {
+   "engine": "hddn",
+   "op": "APPLY_REDACTIONS native (1 manual box)",
+   "input": "image-heavy",
+   "run": "warm",
+   "ms": 6.7,
+   "p95": 7.2,
+   "n": 3,
+   "outBytes": 3512
+  },
+  {
+   "engine": "hddn",
+   "op": "LOAD_PDF",
+   "input": "rotation-crop",
+   "run": "warm",
+   "ms": 3.2,
+   "p95": 3.4,
+   "n": 5,
+   "pages": 4
+  },
+  {
+   "engine": "hddn",
+   "op": "COMMIT_IMPORT",
+   "input": "rotation-crop",
+   "run": "warm",
+   "ms": 0.2,
+   "p95": 0.2,
+   "n": 5
+  },
+  {
+   "engine": "hddn",
+   "op": "GET_PAGE_PREVIEW@1.35",
+   "input": "rotation-crop",
+   "run": "warm",
+   "ms": 6.1,
+   "p95": 6.3,
+   "n": 20,
+   "pages": 4,
+   "perPageMedianMs": [
+    6,
+    6.2,
+    6,
+    6.3
+   ]
+  },
+  {
+   "engine": "hddn",
+   "op": "APPLY_REDACTIONS native (1 manual box)",
+   "input": "rotation-crop",
+   "run": "warm",
+   "ms": 7.9,
+   "p95": 9.2,
+   "n": 3,
+   "outBytes": 1557
+  },
+  {
+   "engine": "hddn",
+   "op": "rss-after-INIT+first-LOAD_PDF",
+   "input": "native-small",
+   "run": "cold",
+   "rssBytes": 118636544
+  },
+  {
+   "engine": "sdk",
+   "op": "init (worker + wasm instantiate)",
+   "input": "-",
+   "run": "cold",
+   "ms": 17.7,
+   "p95": 17.9,
+   "n": 3,
+   "bytes": 4878707
+  },
+  {
+   "engine": "sdk",
+   "op": "init (worker + wasm instantiate)",
+   "input": "-",
+   "run": "warm",
+   "ms": 12,
+   "p95": 15.5,
+   "n": 5
+  },
+  {
+   "engine": "sdk",
+   "op": "open",
+   "input": "native-small",
+   "run": "warm",
+   "ms": 0.4,
+   "p95": 1.3,
+   "n": 5,
+   "pages": 1
+  },
+  {
+   "engine": "sdk",
+   "op": "renderPage@1.35",
+   "input": "native-small",
+   "run": "warm",
+   "ms": 4.7,
+   "p95": 13,
+   "n": 5,
+   "pages": 1,
+   "perPageMedianMs": [
+    4.7
+   ]
+  },
+  {
+   "engine": "sdk",
+   "op": "close",
+   "input": "native-small",
+   "run": "warm",
+   "ms": 0.1,
+   "p95": 0.1,
+   "n": 5
+  },
+  {
+   "engine": "sdk",
+   "op": "open",
+   "input": "native-30p",
+   "run": "warm",
+   "ms": 0.6,
+   "p95": 0.8,
+   "n": 5,
+   "pages": 30
+  },
+  {
+   "engine": "sdk",
+   "op": "renderPage@1.35",
+   "input": "native-30p",
+   "run": "warm",
+   "ms": 115.9,
+   "p95": 118.1,
+   "n": 150,
+   "pages": 30,
+   "perPageMedianMs": [
+    117.5,
+    117.1,
+    116.5,
+    116.8,
+    116.6,
+    116.1,
+    115.4,
+    116.3,
+    116.9,
+    114.9,
+    115.9,
+    116,
+    115.4,
+    115.8,
+    114.8,
+    114.9,
+    114.9,
+    116.2,
+    114.6,
+    115.9,
+    115.5,
+    115.3,
+    115.8,
+    116,
+    115.9,
+    115.9,
+    115.1,
+    116.2,
+    116.2,
+    115
+   ]
+  },
+  {
+   "engine": "sdk",
+   "op": "rss-after-open+render",
+   "input": "native-30p",
+   "run": "warm",
+   "rssBytes": 125534208
+  },
+  {
+   "engine": "sdk",
+   "op": "close",
+   "input": "native-30p",
+   "run": "warm",
+   "ms": 0.1,
+   "p95": 0.2,
+   "n": 5
+  },
+  {
+   "engine": "sdk",
+   "op": "open",
+   "input": "image-heavy",
+   "run": "warm",
+   "ms": 0.2,
+   "p95": 0.2,
+   "n": 5,
+   "pages": 2
+  },
+  {
+   "engine": "sdk",
+   "op": "renderPage@1.35",
+   "input": "image-heavy",
+   "run": "warm",
+   "ms": 11.8,
+   "p95": 20.4,
+   "n": 10,
+   "pages": 2,
+   "perPageMedianMs": [
+    14.2,
+    8.8
+   ]
+  },
+  {
+   "engine": "sdk",
+   "op": "close",
+   "input": "image-heavy",
+   "run": "warm",
+   "ms": 0.1,
+   "p95": 0.1,
+   "n": 5
+  },
+  {
+   "engine": "sdk",
+   "op": "open",
+   "input": "rotation-crop",
+   "run": "warm",
+   "ms": 0.1,
+   "p95": 0.2,
+   "n": 5,
+   "pages": 4
+  },
+  {
+   "engine": "sdk",
+   "op": "renderPage@1.35",
+   "input": "rotation-crop",
+   "run": "warm",
+   "ms": 3.1,
+   "p95": 3.2,
+   "n": 20,
+   "pages": 4,
+   "perPageMedianMs": [
+    3.1,
+    3.1,
+    3.1,
+    3
+   ]
+  },
+  {
+   "engine": "sdk",
+   "op": "close",
+   "input": "rotation-crop",
+   "run": "warm",
+   "ms": 0.1,
+   "p95": 0.1,
+   "n": 5
+  }
+ ],
+ "assets": {
+  "hddn": {
+   "runtime": 29596638,
+   "fonts": 0,
+   "ocr": 0,
+   "app": 810183,
+   "files": {
+    "/_astro/redactor.worker-EObQjSMz.js": 809054,
+    "/pyodide/pyodide.mjs": 17579,
+    "/pyodide/pyodide-lock.json": 120010,
+    "/pyodide/pyodide.asm.js": 1074322,
+    "/pyodide/python_stdlib.zip": 2423989,
+    "/pyodide/pyodide.asm.wasm": 8647684,
+    "/pyodide/pymupdf-1.26.3-cp313-none-pyodide_2025_0_wasm32.whl": 17313054
+   },
+   "warmRefetchBytes": 86565270
+  },
+  "sdk": {
+   "wasmBytes": 4878707
+  }
+ },
+ "unavailable": [
+  {
+   "engine": "hddn",
+   "op": "JS heap (worker)",
+   "reason": "performance.measureUserAgentSpecificMemory throws SecurityError 'not available' in headless Chromium even with COOP/COEP (crossOriginIsolated page) and is absent in WebKit; process-tree RSS recorded instead (whole browser, not JS heap)"
+  },
+  {
+   "engine": "hddn",
+   "op": "optional fonts / OCR (Tesseract) bytes",
+   "reason": "not fetched by these ops (fonts load lazily for edits with fallback; OCR only for scanned pages); see assets.fonts/ocr counters"
+  },
+  {
+   "engine": "sdk",
+   "op": "text extraction",
+   "reason": "unavailable: not implemented yet (SDK smoke API is open/pageGeometry/renderPage/close only)"
+  },
+  {
+   "engine": "sdk",
+   "op": "search",
+   "reason": "unavailable: not implemented yet (SDK smoke API is open/pageGeometry/renderPage/close only)"
+  },
+  {
+   "engine": "sdk",
+   "op": "text edit (SET_TEXT_EDITS equivalent)",
+   "reason": "unavailable: not implemented yet (SDK smoke API is open/pageGeometry/renderPage/close only)"
+  },
+  {
+   "engine": "sdk",
+   "op": "redaction apply",
+   "reason": "unavailable: not implemented yet (SDK smoke API is open/pageGeometry/renderPage/close only)"
+  },
+  {
+   "engine": "sdk",
+   "op": "export / save",
+   "reason": "unavailable: not implemented yet (SDK smoke API is open/pageGeometry/renderPage/close only)"
+  },
+  {
+   "engine": "sdk",
+   "op": "JS heap",
+   "reason": "performance.measureUserAgentSpecificMemory not available in headless Chromium or WebKit; process-tree RSS recorded instead"
+  }
+ ],
+ "notes": [
+  "ms = median of n, p95 over the same samples; localhost, identity encoding (wire bytes = file bytes); headless",
+  "GET_PAGE_PREVIEW and renderPage are main-thread round trips incl. postMessage and PNG/RGBA transfer; HDDN LOAD_PDF includes extraction and page previews"
+ ]
+}

@@ -1,0 +1,26 @@
+<!doctype html><meta charset="utf-8"><title>hddn bench</title>
+<script>
+// Drives the real HDDN worker with its own protocol. req() resolves on the terminal response and returns wall ms.
+window.startWorker = (url) => {
+  const w = new Worker(url, { type: "module" });
+  const waiting = new Map(); let id = 0;
+  w.onmessage = ({ data }) => {
+    const p = waiting.get(data.requestId); if (!p) return;
+    p.msgs.push(data.type);
+    if (data.type === "PROGRESS" || data.type === "WARNING") return;
+    waiting.delete(data.requestId); p.done(data);
+  };
+  w.onerror = (e) => { for (const p of waiting.values()) p.fail(new Error("worker error " + e.message)); };
+  window.W = {
+    terminate: () => w.terminate(),
+    req(type, payload, transfer = []) {
+      return new Promise((done, fail) => {
+        const requestId = ++id; waiting.set(requestId, { done, fail, msgs: [] });
+        const t0 = performance.now();
+        waiting.get(requestId).done = (d) => done({ ms: performance.now() - t0, type: d.type, payload: d.payload });
+        w.postMessage({ requestId, type, payload }, transfer);
+      });
+    },
+  };
+};
+</script>
