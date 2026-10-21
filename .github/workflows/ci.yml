@@ -1,0 +1,23 @@
+# Written for the day a remote exists; local-only for now (never run).
+name: ci
+on: [push, pull_request]
+jobs:
+  check:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 26 }
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --check
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo test --workspace --locked
+      - run: cargo install wasm-bindgen-cli --version 0.2.129 --locked
+      - run: scripts/build-wasm.sh
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build:sdk
+      - run: pnpm exec playwright install chromium webkit
+      - run: pnpm smoke chromium
+      - run: pnpm smoke webkit

@@ -1,0 +1,14 @@
+{
+  "name": "foliark-workspace",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.9.0",
+  "scripts": {
+    "build:wasm": "scripts/build-wasm.sh",
+    "build:sdk": "pnpm --filter @foliark/sdk build",
+    "smoke": "node tests/smoke/run.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.62.1"
+  }
+}

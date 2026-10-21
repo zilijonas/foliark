@@ -1,0 +1,16 @@
+[package]
+name = "foliark-wasm"
+description = "wasm-bindgen facade over foliark-engine."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+foliark-engine = { path = "../foliark-engine" }
+serde-wasm-bindgen.workspace = true
+wasm-bindgen.workspace = true

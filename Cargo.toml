@@ -1,0 +1,33 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+exclude = ["vendor/*"]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.99"
+license = "UNLICENSED"
+publish = false
+
+# Exact pins from docs/research/cohort-spike.md "RECOMMENDED PINS". Cargo.lock is committed.
+[workspace.dependencies]
+hayro = { version = "=0.8.0", default-features = false, features = ["embed-fonts"] }
+hayro-syntax = "=0.8.0"
+hayro-interpret = { version = "=0.8.0", default-features = false, features = ["embed-fonts"] }
+pdf-writer = "=0.15.0"
+serde = { version = "1", features = ["derive"] }
+serde-wasm-bindgen = "=0.6.5"
+ts-rs = "=12.0.1"
+wasm-bindgen = "=0.2.129"
+
+[patch.crates-io]
+hayro-syntax = { path = "vendor/hayro-syntax" }
+hayro-interpret = { path = "vendor/hayro-interpret" }
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
