@@ -1,5 +1,5 @@
 //! Reader and renderer. Thin wrappers over hayro; the other §14 modules land with their tasks.
-use foliark_model::PageGeometry;
+use foliark_model::{Matrix, PageGeometry};
 use hayro::hayro_interpret::InterpreterSettings;
 use hayro::hayro_syntax::page::Rotation;
 use hayro::vello_cpu::color::palette::css::WHITE;
@@ -89,11 +89,21 @@ impl Document {
             Rotation::Flipped => 180,
             Rotation::FlippedHorizontal => 270,
         };
+        let user_to_display = Matrix(page.initial_transform(true).as_coeffs());
+        let (media, crop) = (page.media_box(), page.intersected_crop_box());
         Ok(PageGeometry {
             index: index as u32,
             width: width.into(),
             height: height.into(),
             rotation,
+            // /UserUnit is not read yet (NEW-16); points == user units until then.
+            user_unit: 1.0,
+            media_box: [media.x0, media.y0, media.x1, media.y1],
+            crop_box: [crop.x0, crop.y0, crop.x1, crop.y1],
+            user_to_display,
+            display_to_user: user_to_display
+                .inverse()
+                .expect("page transform is a rotation plus translation"),
         })
     }
 

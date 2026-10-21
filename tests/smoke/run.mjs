@@ -31,7 +31,10 @@ try {
   const r = await page.evaluate(() => window.__smoke);
   assert.equal(r.error, undefined, r.error);
   assert.equal(r.pageCount, 1);
-  assert.deepEqual(r.geometry, { index: 0, width: 200, height: 100, rotation: 0 });
+  assert.deepEqual(r.geometry, {
+    index: 0, width: 200, height: 100, rotation: 0, userUnit: 1, mediaBox: [0, 0, 200, 100], cropBox: [0, 0, 200, 100],
+    userToDisplay: [1, 0, 0, -1, 0, 100], displayToUser: [1, 0, 0, -1, 0, 100],
+  });
   assert.deepEqual([r.width, r.height, r.length], [200, 100, 200 * 100 * 4]);
   assert.deepEqual(r.red, [255, 0, 0, 255], "red rect pixel");
   assert.deepEqual(r.corner, [255, 255, 255, 255], "white background pixel");

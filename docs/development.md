@@ -27,6 +27,8 @@ Run from the repo root, each wrapped as above.
 | Wasm build + JS glue | `scripts/build-wasm.sh` (output `packages/sdk/wasm/`, gitignored; prints raw and gzip size) |
 | Wasm compile check only | `cargo build --locked --target wasm32-unknown-unknown -p foliark-wasm` |
 | SDK build | `pnpm install && pnpm --filter @foliark/sdk build` (needs the wasm glue first for its types) |
+| SDK tests | `pnpm --filter @foliark/sdk test` (vitest; protocol only: `-- protocol.spec.ts`) |
+| Rust/TS parity | `scripts/check-ts-parity.sh` (regenerates ts-rs into a temp dir, diffs `packages/sdk/src/generated`; non-zero on drift) |
 | Browser smoke | `pnpm smoke chromium` and `pnpm smoke webkit` (needs wasm and SDK built) |
 | Regenerate smoke fixture | `cargo run -q -p foliark-engine --example smoke_pdf > tests/smoke/one-page.pdf` |
 | Oracles | placeholder: `tests/oracles` is owned by the independent-checker tasks (NEW-7, NEW-20, NEW-21); no command yet |
