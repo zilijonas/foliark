@@ -2,10 +2,10 @@
 """Independent privacy oracle for OUTPUT PDFs (NEW-7). Never imports foliark; uses pypdf + pikepdf + PyMuPDF only.
 
   .venv/bin/python objects.py out.pdf --forbid SECRET_A --forbid SECRET_B [--allow metadata] [--password pw]
-  .venv/bin/python objects.py out.pdf --spec spec.json        # {"forbidden":[], "allow":[], "image_regions":[{"page":0,"rect":[x0,y0,x1,y1],"color":[0,0,0]}], "cap":N}
+  .venv/bin/python objects.py out.pdf --spec spec.json        # {"forbidden":[], "allow":[], "image_regions":[{"page":0,"rect":[x0,y0,x1,y1],"color":[0,0,0]}], "vector_regions":[{"page":0,"rect":[...],"fill":[0,0,0],"allow":[[...]],"tol":0.25}], "cap":N}
 
 Exit 0 iff no finding. Importable: check_isolated(path, spec) -> [finding strings "CODE: detail"].
-Finding codes: OPEN TEXT_PYPDF TEXT_FITZ BYTES_RAW STREAM STRING REVISION ORPHAN FEATURE DECODE UNSUPPORTED CAP IMAGE_REGION TIMEOUT CRASH.
+Finding codes: OPEN TEXT_PYPDF TEXT_FITZ BYTES_RAW STREAM STRING REVISION ORPHAN FEATURE DECODE UNSUPPORTED CAP IMAGE_REGION VECTOR_REGION TIMEOUT CRASH.
 Every decode problem, unsupported filter or unsupported geometry is a finding, never a silent pass.
 """
 import json
@@ -196,51 +196,199 @@ def check(path, spec):
     # (e) image pixels inside display-space rects
     for r in spec.get("image_regions", []):
         F += image_region(doc, r)
+    # (f) vector paths inside display-space rects
+    for r in spec.get("vector_regions", []):
+        F += vector_region(doc, r)
     return F
 
 
+def grow(rc, e):
+    return fitz.Rect(rc.x0 - e, rc.y0 - e, rc.x1 + e, rc.y1 + e)
+
+
+def unrot(pg, rect):
+    """Display-space rect (spec §2) -> PyMuPDF's unrotated page space, where get_image_info/get_drawings report geometry."""
+    return (fitz.Rect(rect) * ~pg.rotation_matrix).normalize()
+
+
+def pix_spans(m, reg, w, h):
+    """Yield (row, i0, i1) pixel spans of a w x h image placed by matrix m (unit square, row 0 at v=0) that fall under reg.
+    Axis-aligned placements (any 90 degree turn or flip): every pixel square intersecting reg. Other angles: pixel centres inside reg."""
+    inv, eps = ~m, 1e-6
+    pts = [fitz.Point(x, y) * inv for x, y in ((reg.x0, reg.y0), (reg.x1, reg.y0), (reg.x0, reg.y1), (reg.x1, reg.y1))]
+    u0, u1, v0, v1 = min(p.x for p in pts), max(p.x for p in pts), min(p.y for p in pts), max(p.y for p in pts)
+    i0, i1, j0, j1 = max(0, math.floor(u0 * w + eps)), min(w, math.ceil(u1 * w - eps)), max(0, math.floor(v0 * h + eps)), min(h, math.ceil(v1 * h - eps))
+    axis = (abs(m.b) < 1e-3 and abs(m.c) < 1e-3) or (abs(m.a) < 1e-3 and abs(m.d) < 1e-3)
+    if axis:
+        for j in range(j0, j1):
+            yield j, i0, i1
+        return
+    for j in range(j0, j1):
+        xs = [i for i in range(i0, i1) if reg.contains(fitz.Point((i + .5) / w, (j + .5) / h) * m)]
+        if xs:
+            yield j, xs[0], xs[-1] + 1
+
+
+def region_colors(pix, m, reg, cap=8_000_000):
+    """Distinct pixel tuples of pix under reg (placement m). Returns (set, pixel_count)."""
+    pix = pix if pix.colorspace is not None and pix.colorspace.n in (1, 3) and not pix.alpha else fitz.Pixmap(fitz.csRGB, pix)
+    n, stride, s, seen, count = pix.n, pix.stride, pix.samples, set(), 0
+    for j, i0, i1 in pix_spans(m, reg, pix.width, pix.height):
+        count += i1 - i0
+        if count > cap:
+            raise ValueError("CAP: image region > %d pixels" % cap)
+        row = s[j * stride + i0 * n:j * stride + i1 * n]
+        if row and row == row[:n] * (len(row) // n):
+            seen.add(tuple(row[:n]))
+        else:
+            seen.update(tuple(row[k:k + n]) for k in range(0, len(row), n))
+    return seen, count
+
+
+def image_users(doc, xref, cache={}):
+    """Pages (0-based) whose occurrences use xref; computed lazily, only to explain a failure."""
+    key = id(doc)
+    if key not in cache:
+        cache.clear()
+        cache[key] = [{im["xref"] for im in pg.get_image_info(xrefs=True)} for pg in doc]
+    return [i for i, xs in enumerate(cache[key]) if xref in xs]
+
+
 def image_region(doc, r):
+    """Every image occurrence (page content, Form XObjects, any CTM, any page /Rotate) intersecting the display-space region:
+    colour samples AND SMask/Mask samples under it must be one colour (optionally exactly r["color"]). One finding per occurrence."""
     pg = doc[r["page"]]
-    if pg.rotation:
-        return ["UNSUPPORTED: image check on rotated page %d" % r["page"]]
-    reg, F, hit = fitz.Rect(r["rect"]), [], 0
-    for im in pg.get_image_info(xrefs=True):
-        bb = fitz.Rect(im["bbox"])
-        if not bb.intersects(reg):
+    reg, F, hit = unrot(pg, r["rect"]), [], 0
+    for k, im in enumerate(pg.get_image_info(xrefs=True)):
+        if not fitz.Rect(im["bbox"]).intersects(reg):
             continue
         hit += 1
-        m = fitz.Matrix(im["transform"])
-        if abs(m.b) > 1e-3 or abs(m.c) > 1e-3 or m.a <= 0 or m.d <= 0:
-            F.append("UNSUPPORTED: rotated/flipped image transform %s" % (tuple(m),))
-            continue
-        x = im["xref"]
+        m, x = fitz.Matrix(im["transform"]), im["xref"]
+        who = "page %d occurrence %d" % (r["page"], k)
         if x <= 0:
-            F.append("UNSUPPORTED: inline image intersects region")
+            F.append("UNSUPPORTED: %s is an inline image intersecting the region" % who)
             continue
         try:
-            if any(k in doc.xref_get_keys(x) for k in ("SMask", "Mask")):
-                F.append("UNSUPPORTED: image %d has SMask/Mask (mask samples not checked)" % x)
-            pix = fitz.Pixmap(doc, x)
-            if pix.colorspace is None or pix.colorspace.n != 3 or pix.alpha:
-                pix = fitz.Pixmap(fitz.csRGB, pix)
+            keys = doc.xref_get_keys(x)
+            if "SMaskInData" in keys and doc.xref_get_key(x, "SMaskInData")[1] != "0":
+                F.append("UNSUPPORTED: %s image %d has SMaskInData (mask lives in the codestream)" % (who, x))
+            planes = [("colour", x, tuple(r["color"]) if r.get("color") else None)]
+            for key in ("SMask", "Mask"):
+                t, v = doc.xref_get_key(x, key) if key in keys else ("null", "")
+                if t == "xref":
+                    planes.append((key, int(v.split()[0]), None))
+            bad = []
+            for name, px, want in planes:
+                seen, cnt = region_colors(fitz.Pixmap(doc, px), m, reg)
+                if not cnt:
+                    bad.append("%s: no sample under region (placement not mapped)" % name)
+                elif len(seen) != 1 or (want and seen != {want}):
+                    bad.append("%s: %d distinct%s" % (name, len(seen), "" if len(seen) != 1 else " (%s != %s)" % (seen, want)))
+            if bad:
+                sh = [p for p in image_users(doc, x) if p != r["page"]]
+                F.append("IMAGE_REGION: %s image %d%s region %s: %s" % (
+                    who, x, " (shared, also used on pages %s: a surviving occurrence still holds these samples)" % sh if sh else "", r["rect"], "; ".join(bad)))
+        except ValueError as e:
+            F.append("%s (%s image %d)" % (e, who, x))
         except Exception as e:
-            F.append("DECODE: image %d: %s" % (x, e))
-            continue
-        w, h = pix.width, pix.height
-        x0, x1 = math.floor((max(reg.x0, bb.x0) - bb.x0) / bb.width * w), math.ceil((min(reg.x1, bb.x1) - bb.x0) / bb.width * w)
-        y0, y1 = math.floor((max(reg.y0, bb.y0) - bb.y0) / bb.height * h), math.ceil((min(reg.y1, bb.y1) - bb.y0) / bb.height * h)
-        px = {tuple(pix.pixel(i, j)) for j in range(y0, min(y1, h)) for i in range(x0, min(x1, w))}
-        want = tuple(r["color"]) if r.get("color") else None
-        if len(px) != 1 or (want and px != {want}):
-            F.append("IMAGE_REGION: image %d region %s has %d distinct colors%s" % (x, r["rect"], len(px), "" if len(px) != 1 else " (%s != %s)" % (px, want)))
+            F.append("DECODE: %s image %d: %s" % (who, x, e))
     if not hit:
         F.append("IMAGE_REGION: no image intersects %s (expected one)" % r["rect"])
     return F
 
 
-def check_isolated(path, spec, timeout=120):
+def seg_hits(p, q, rc):
+    """Segment p-q intersects rectangle rc (Liang-Barsky)."""
+    t0, t1, dx, dy = 0.0, 1.0, q[0] - p[0], q[1] - p[1]
+    for d, lo, hi, o in ((dx, rc.x0 - p[0], rc.x1 - p[0], 0), (dy, rc.y0 - p[1], rc.y1 - p[1], 1)):
+        if abs(d) < 1e-12:
+            if lo > 0 or hi < 0:
+                return False
+            continue
+        a, b = sorted((lo / d, hi / d))
+        t0, t1 = max(t0, a), min(t1, b)
+        if t0 > t1:
+            return False
+    return True
+
+
+def polys(items):
+    """Flatten PyMuPDF drawing items to polylines (curves sampled at 12 steps)."""
+    out, cur = [], []
+    for it in items:
+        if it[0] in ("re", "qu"):
+            q = it[1].quad if it[0] == "re" else it[1]
+            out.append([(q.ul.x, q.ul.y), (q.ur.x, q.ur.y), (q.lr.x, q.lr.y), (q.ll.x, q.ll.y), (q.ul.x, q.ul.y)])
+            continue
+        pts = [(it[1].x, it[1].y)]
+        if it[0] == "l":
+            pts.append((it[2].x, it[2].y))
+        else:
+            p0, p1, p2, p3 = it[1:5]
+            pts += [((1 - t) ** 3 * p0.x + 3 * (1 - t) ** 2 * t * p1.x + 3 * (1 - t) * t * t * p2.x + t ** 3 * p3.x,
+                     (1 - t) ** 3 * p0.y + 3 * (1 - t) ** 2 * t * p1.y + 3 * (1 - t) * t * t * p2.y + t ** 3 * p3.y) for t in [k / 12 for k in range(1, 13)]]
+        if cur and math.dist(cur[-1], pts[0]) < 1e-6:
+            cur += pts[1:]
+        else:
+            if cur:
+                out.append(cur)
+            cur = pts
+    if cur:
+        out.append(cur)
+    return out
+
+
+def inside(poly, pt):
+    c, (x, y) = False, pt
+    for (x0, y0), (x1, y1) in zip(poly, poly[1:] + poly[:1]):
+        if (y0 > y) != (y1 > y) and x < (x1 - x0) * (y - y0) / (y1 - y0) + x0:
+            c = not c
+    return c
+
+
+def path_hits(d, reg, tol):
+    """Does painted geometry of drawing d reach into reg (shrunk by tol)? Fills: polygon vs rect. Strokes: segments vs rect grown by half width."""
+    core = grow(reg, -tol)
+    if core.is_empty:
+        core = reg
+    pl = polys(d["items"])
+    if d.get("fill") is not None and "f" in d["type"]:
+        for poly in pl:
+            if any(core.contains(fitz.Point(p)) for p in poly) or any(seg_hits(a, b, core) for a, b in zip(poly, poly[1:] + poly[:1])) \
+                    or any(inside(poly, c) for c in ((core.x0, core.y0), (core.x1, core.y0), (core.x0, core.y1), (core.x1, core.y1))):
+                return True
+    if d.get("color") is not None and "s" in d["type"]:
+        g = grow(core, d["width"] / 2)
+        if any(seg_hits(a, b, g) for poly in pl for a, b in zip(poly, poly[1:])):
+            return True
+    return False
+
+
+def vector_region(doc, r):
+    """Vector paths (page content and Form XObjects) whose painted geometry remains inside the display-space region.
+    Allowed: the declared redaction fill (r["fill"], 0-255 RGB) when it is the LAST painted hit and covers the region, and any path
+    whose bounds lie inside a declared r["allow"] rect (collateral). Everything else is a finding. Clips are not evaluated."""
+    pg = doc[r["page"]]
+    reg, tol = unrot(pg, r["rect"]), r.get("tol", 0.25)
+    allow = [unrot(pg, a) for a in r.get("allow", [])]
+    hits = [d for d in pg.get_drawings() if path_hits(d, reg, tol)]
+    last = max(hits, key=lambda d: d["seqno"], default=None)
+    fill = tuple(r["fill"]) if r.get("fill") else None
+    F = []
+    for d in hits:
+        if any(grow(a, .5).contains(d["rect"]) for a in allow):
+            continue
+        col = d.get("fill") and tuple(round(c * 255) for c in d["fill"])
+        if d is last and fill and col == fill and d["rect"].contains(grow(reg, -.5)):
+            continue
+        F.append("VECTOR_REGION: page %d path #%d %s bounds %s fill %s stroke %s remains inside region %s" % (
+            r["page"], d["seqno"], d["type"], tuple(round(v, 2) for v in d["rect"]), d.get("fill"), d.get("color"), r["rect"]))
+    return F
+
+
+def check_isolated(path, spec, timeout=120, script=__file__):
     try:
-        p = subprocess.run([sys.executable, __file__, "--worker"], input=json.dumps({"path": str(path), "spec": spec}), capture_output=True, text=True, timeout=timeout)
+        p = subprocess.run([sys.executable, script, "--worker"], input=json.dumps({"path": str(path), "spec": spec}), capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:
         return ["TIMEOUT: oracle exceeded %ds" % timeout]
     if p.returncode != 0:
