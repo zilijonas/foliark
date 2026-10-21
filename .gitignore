@@ -1,0 +1,7 @@
+target/
+node_modules/
+dist/
+pkg/
+*.wasm
+!tests/fixtures/**/*.wasm
+.DS_Store
