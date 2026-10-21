@@ -8,7 +8,7 @@ use crate::object::Rect;
 use crate::object::Stream;
 use crate::object::array::ArrayIter;
 use crate::object::dict::keys::*;
-use crate::object::{MaybeRef, Object};
+use crate::object::{MaybeRef, Object, ObjectIdentifier};
 use crate::reader::ReaderContext;
 use crate::sync::{FxHashSet, OnceLock};
 use crate::transform::Transform;
@@ -16,7 +16,16 @@ use crate::util::FloatExt;
 use crate::xref::XRef;
 use alloc::vec;
 use alloc::vec::Vec;
-use core::ops::Deref;
+use core::ops::{Deref, Range};
+
+/// One content stream of a page and its byte range in [`Page::page_stream`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ContentPart {
+    /// The object identifier of the content stream.
+    pub id: ObjectIdentifier,
+    /// The range its decoded bytes occupy in the merged page stream.
+    pub range: Range<usize>,
+}
 
 /// Attributes that can be inherited.
 #[derive(Debug, Clone)]
@@ -191,7 +200,7 @@ pub struct Page<'a> {
     media_box: Rect,
     crop_box: Rect,
     rotation: Rotation,
-    page_streams: OnceLock<Option<Vec<u8>>>,
+    page_streams: OnceLock<Option<(Vec<u8>, Vec<ContentPart>)>>,
     resources: Resources<'a>,
     ctx: ReaderContext<'a>,
 }
@@ -254,27 +263,45 @@ impl<'a> Page<'a> {
 
     /// Return the decoded content stream of the page.
     pub fn page_stream(&self) -> Option<&[u8]> {
+        self.merged_stream().map(|(data, _)| data.as_slice())
+    }
+
+    /// Return the content streams that [`Self::page_stream`] concatenates, with the byte
+    /// range each one occupies in it. Streams that fail to decode are absent, as in the merge.
+    pub fn content_parts(&self) -> &[ContentPart] {
+        self.merged_stream().map_or(&[], |(_, parts)| parts)
+    }
+
+    fn merged_stream(&self) -> Option<&(Vec<u8>, Vec<ContentPart>)> {
         let convert_single = |s: Stream<'_>| {
             let data = s.decoded().ok()?;
-            Some(data.to_vec())
+            Some((s.obj_id(), data.to_vec()))
         };
 
         self.page_streams
             .get_or_init(|| {
                 if let Some(stream) = self.inner.get::<Stream<'_>>(CONTENTS) {
-                    convert_single(stream)
+                    let (id, data) = convert_single(stream)?;
+                    let range = 0..data.len();
+                    Some((data, vec![ContentPart { id, range }]))
                 } else if let Some(array) = self.inner.get::<Array<'_>>(CONTENTS) {
                     let streams = array.iter::<Stream<'_>>().flat_map(convert_single);
 
                     let mut collected = vec![];
+                    let mut parts = vec![];
 
-                    for stream in streams {
+                    for (id, stream) in streams {
+                        let start = collected.len();
                         collected.extend(stream);
+                        parts.push(ContentPart {
+                            id,
+                            range: start..collected.len(),
+                        });
                         // Streams must have at least one whitespace in-between.
                         collected.push(b' ');
                     }
 
-                    Some(collected)
+                    Some((collected, parts))
                 } else {
                     warn!("contents entry of page was neither stream nor array of streams");
 
@@ -282,7 +309,6 @@ impl<'a> Page<'a> {
                 }
             })
             .as_ref()
-            .map(|d| d.as_slice())
     }
 
     /// Get the resources of the page.

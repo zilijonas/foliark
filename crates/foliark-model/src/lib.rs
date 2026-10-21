@@ -1,5 +1,8 @@
 //! Wire DTOs shared by the engine, the wasm facade and the generated TypeScript types.
 //! Only what the render path needs so far; the rest of spec §1 lands with its owning task.
+mod source;
+pub use source::*;
+
 use serde::Serialize;
 use ts_rs::TS;
 

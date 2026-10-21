@@ -2,18 +2,20 @@
 use foliark_model::PageGeometry;
 use hayro::hayro_interpret::InterpreterSettings;
 use hayro::hayro_syntax::page::Rotation;
-use hayro::hayro_syntax::{LoadPdfError, Pdf};
 use hayro::vello_cpu::color::palette::css::WHITE;
 use hayro::vello_cpu::peniko::ImageAlphaType;
 use hayro::{PixmapSettings, RenderCache, RenderSettings, render};
 use std::fmt;
+
+pub mod reader;
+use reader::ReaderError;
 
 /// Spec §1.3: each rendered side is at most 16384 px.
 const MAX_SIDE: f64 = 16384.0;
 
 #[derive(Debug, PartialEq)]
 pub enum EngineError {
-    Load(LoadPdfError),
+    Read(ReaderError),
     PageOutOfRange { page: usize, count: usize },
     BadScale(f64),
     RenderTooLarge { width: f64, height: f64 },
@@ -22,7 +24,7 @@ pub enum EngineError {
 impl fmt::Display for EngineError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Load(e) => write!(f, "cannot open PDF: {e:?}"),
+            Self::Read(e) => write!(f, "cannot read PDF: {e}"),
             Self::PageOutOfRange { page, count } => {
                 write!(f, "page {page} out of range (count {count})")
             }
@@ -36,6 +38,12 @@ impl fmt::Display for EngineError {
 
 impl std::error::Error for EngineError {}
 
+impl From<ReaderError> for EngineError {
+    fn from(e: ReaderError) -> Self {
+        Self::Read(e)
+    }
+}
+
 /// RGBA8 straight-alpha sRGB pixels, row-major (ImageData-compatible).
 pub struct Rendered {
     pub width: u32,
@@ -43,17 +51,33 @@ pub struct Rendered {
     pub data: Vec<u8>,
 }
 
-pub struct Document(Pdf);
+pub struct Document(reader::Document);
 
 impl Document {
     pub fn open(bytes: Vec<u8>, password: Option<&str>) -> Result<Self, EngineError> {
-        Pdf::new_with_password(bytes, password.unwrap_or(""))
-            .map(Self)
-            .map_err(EngineError::Load)
+        Self::open_with(bytes, password, false)
+    }
+
+    /// `allow_repaired`: accept a file whose xref table had to be rebuilt (spec §12 REPAIRED_PDF).
+    pub fn open_with(
+        bytes: Vec<u8>,
+        password: Option<&str>,
+        allow_repaired: bool,
+    ) -> Result<Self, EngineError> {
+        Ok(Self(reader::Document::open(
+            bytes,
+            password,
+            allow_repaired,
+        )?))
+    }
+
+    /// The strict reader behind this document.
+    pub fn reader(&self) -> &reader::Document {
+        &self.0
     }
 
     pub fn page_count(&self) -> usize {
-        self.0.pages().len()
+        self.0.page_count()
     }
 
     pub fn page_geometry(&self, index: usize) -> Result<PageGeometry, EngineError> {
@@ -87,6 +111,8 @@ impl Document {
         if width > MAX_SIDE || height > MAX_SIDE {
             return Err(EngineError::RenderTooLarge { width, height });
         }
+        // The renderer draws a page whose content fails to decode as blank; refuse instead.
+        self.0.page_contents(index)?;
         let pixmap = render(
             page,
             &RenderCache::new(),
@@ -107,7 +133,7 @@ impl Document {
     }
 
     fn page(&self, index: usize) -> Result<&hayro::hayro_syntax::page::Page<'_>, EngineError> {
-        let pages = self.0.pages();
+        let pages = self.0.pdf().pages();
         pages.get(index).ok_or(EngineError::PageOutOfRange {
             page: index,
             count: pages.len(),
@@ -162,7 +188,7 @@ mod tests {
         ));
         assert!(matches!(
             Document::open(b"not a pdf".to_vec(), None),
-            Err(EngineError::Load(_))
+            Err(EngineError::Read(_))
         ));
     }
 }

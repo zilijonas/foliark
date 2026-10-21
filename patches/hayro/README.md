@@ -19,11 +19,13 @@ Unmodified upstream 0.8.0, copied from the crates.io source with only `.cargo-ok
 
 ## Patches
 
-| ID | Crate | Change | Files | Status |
-|---|---|---|---|---|
-| P1 | syntax | operator byte spans, per-content-stream identity | - | planned |
-| P2 | interpret | `Device::begin_operator`, `begin_form/end_form` identity stack | - | planned |
-| P3 | interpret | glyph raw char code, font ObjRef getters | - | planned |
-| P4 | interpret | `InterpreterSettings::ocg_override` | - | planned |
-| P5 | syntax, interpret | strict decode (Err instead of empty) | - | planned |
-| P6 | syntax | `Pdf::was_repaired()` | - | planned |
+LOC = added/changed lines (approximate, rustfmt'd). Spec: `docs/spec/v1.md` 13.1.
+
+| ID | Files | LOC | Why | Upstreamable | Status |
+|---|---|---|---|---|---|
+| P1 | syntax `content/mod.rs`, `page.rs` | ~85 | `UntypedIter/TypedIter::next_with_span` + `offset` give each operator's byte range; `Page::content_parts()` gives the per-content-stream object and range inside the merged `page_stream` (redaction rewrites operators in one specific stream) | yes | done (NEW-10) |
+| P2 | interpret | - | `Device::begin_operator/begin_form/end_form` identity stack | yes | planned |
+| P3 | interpret | - | glyph raw char code, font ObjRef getters | yes | planned |
+| P4 | interpret | - | `InterpreterSettings::ocg_override` | yes | planned |
+| P5 | syntax `filter/lzw_flate.rs`, `filter/mod.rs`, `object/stream.rs`; interpret half in NEW-12 | ~115 (syntax) | `Stream::decoded_strict()`: decrypt failure, corrupt/garbage/truncated Flate, bad back-reference are `Err` instead of empty or partial data. `decoded()` and every upstream caller keep the lenient behaviour | yes | syntax done (NEW-10) |
+| P6 | syntax `pdf.rs`, `xref.rs` | ~14 | `Pdf::was_repaired()` / `XRef::was_repaired()` expose the existing repair flag (repair is lazy, so ask again after reading) | yes | done (NEW-10) |

@@ -467,6 +467,15 @@ impl XRef {
         }
     }
 
+    /// Whether the xref table was unusable and rebuilt by scanning the file. Repair is lazy:
+    /// it can also happen later, when an object turns out to be unreadable.
+    pub fn was_repaired(&self) -> bool {
+        match &self.0 {
+            Inner::Dummy => false,
+            Inner::Some(r) => r.map.get().repaired,
+        }
+    }
+
     pub(crate) fn repair(&self) {
         let Inner::Some(r) = &self.0 else {
             unreachable!();

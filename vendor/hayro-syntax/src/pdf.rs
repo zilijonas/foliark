@@ -101,6 +101,11 @@ impl Pdf {
         &self.xref
     }
 
+    /// Whether the xref table was repaired by a full-file scan (see [`XRef::was_repaired`]).
+    pub fn was_repaired(&self) -> bool {
+        self.xref.was_repaired()
+    }
+
     /// Return the metadata in the document information dictionary of the document.
     pub fn metadata(&self) -> &Metadata {
         self.xref.metadata()

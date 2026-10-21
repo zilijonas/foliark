@@ -113,6 +113,10 @@ impl<'a> Stream<'a> {
     ///
     /// Stream filters will not be applied.
     pub fn raw_data(&self) -> Cow<'a, [u8]> {
+        self.raw_data_impl(false).unwrap_or_default()
+    }
+
+    fn raw_data_impl(&self, strict: bool) -> Result<Cow<'a, [u8]>, DecodeFailure> {
         let ctx = self.dict.ctx();
 
         if ctx.xref().needs_decryption(ctx)
@@ -123,17 +127,21 @@ impl<'a> Stream<'a> {
                 .unwrap_or(true)
         {
             match self.dict.obj_id() {
-                Some(obj_id) => Cow::Owned(
-                    ctx.xref()
-                        .decrypt(obj_id, self.data, DecryptionTarget::Stream)
-                        // TODO: MAybe an error would be better?
-                        .unwrap_or_default(),
-                ),
+                Some(obj_id) => {
+                    let decrypted = ctx
+                        .xref()
+                        .decrypt(obj_id, self.data, DecryptionTarget::Stream);
+                    match (decrypted, strict) {
+                        (Some(d), _) => Ok(Cow::Owned(d)),
+                        (None, false) => Ok(Cow::Owned(Vec::new())),
+                        (None, true) => Err(DecodeFailure::Decryption),
+                    }
+                }
                 // Should not be reachable, as streams always have IDs.
-                None => Cow::Borrowed(self.data),
+                None => Ok(Cow::Borrowed(self.data)),
             }
         } else {
-            Cow::Borrowed(self.data)
+            Ok(Cow::Borrowed(self.data))
         }
     }
 
@@ -165,13 +173,28 @@ impl<'a> Stream<'a> {
             .map(|r| r.data)
     }
 
+    /// Like [`Self::decoded`], but a decryption failure, a corrupt filter or a truncated
+    /// Flate stream is an `Err` instead of empty or partial data.
+    pub fn decoded_strict(&self) -> Result<Cow<'a, [u8]>, DecodeFailure> {
+        self.decoded_image_impl(&ImageDecodeParams::default(), true)
+            .map(|r| r.data)
+    }
+
     /// Return the decoded data of the stream, and return image metadata
     /// if available.
     pub fn decoded_image(
         &self,
         image_params: &ImageDecodeParams,
     ) -> Result<FilterResult<'a>, DecodeFailure> {
-        let data = self.raw_data();
+        self.decoded_image_impl(image_params, false)
+    }
+
+    fn decoded_image_impl(
+        &self,
+        image_params: &ImageDecodeParams,
+        strict: bool,
+    ) -> Result<FilterResult<'a>, DecodeFailure> {
+        let data = self.raw_data_impl(strict)?;
         let filters_and_params = self.filters_and_params();
 
         let mut current: Option<FilterResult<'a>> = None;
@@ -185,6 +208,7 @@ impl<'a> Stream<'a> {
                 current.as_ref().map(|c| c.data.as_ref()).unwrap_or(&data),
                 params,
                 image_params,
+                strict,
             )?;
             current = Some(new);
         }

@@ -103,6 +103,8 @@ pub struct UntypedIter<'a> {
     reader: Reader<'a>,
     stack: Stack<'a>,
     operator: Option<Operator<'a>>,
+    /// Offset of the first operand (or the operator) of the last returned instruction.
+    start: usize,
 }
 
 impl<'a> UntypedIter<'a> {
@@ -112,6 +114,7 @@ impl<'a> UntypedIter<'a> {
             reader: Reader::new(data),
             stack: Stack::new(),
             operator: None,
+            start: 0,
         }
     }
 
@@ -121,18 +124,48 @@ impl<'a> UntypedIter<'a> {
             reader: Reader::new(&[]),
             stack: Stack::new(),
             operator: None,
+            start: 0,
         }
+    }
+
+    /// Return the byte offset into the data right after the last returned instruction.
+    pub fn offset(&self) -> usize {
+        self.reader.offset()
+    }
+
+    /// Return the next instruction and its byte range (first operand to operator, inline
+    /// image data included).
+    pub fn next_with_span(&mut self) -> Option<(Instruction<'_, 'a>, core::ops::Range<usize>)> {
+        self.advance()?;
+        let span = self.start..self.reader.offset();
+        Some((self.current(), span))
     }
 
     /// Return the next instruction.
     #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> Option<Instruction<'_, 'a>> {
+        self.advance()?;
+        Some(self.current())
+    }
+
+    fn current(&self) -> Instruction<'_, 'a> {
+        Instruction {
+            operands: &self.stack,
+            operator: self.operator.as_ref().unwrap(),
+        }
+    }
+
+    fn advance(&mut self) -> Option<()> {
         self.stack.clear();
         self.operator = None;
 
         self.reader.skip_white_spaces_and_comments();
 
         while !self.reader.at_end() {
+            if self.stack.len == 0 {
+                self.start = self.reader.offset();
+            }
+
             // I believe booleans/null never appear as an operator?
             if matches!(
                 self.reader.peek_byte()?,
@@ -301,10 +334,7 @@ impl<'a> UntypedIter<'a> {
                 }
 
                 self.operator = Some(operator);
-                return Some(Instruction {
-                    operands: &self.stack,
-                    operator: self.operator.as_ref().unwrap(),
-                });
+                return Some(());
             }
 
             self.reader.skip_white_spaces_and_comments();
@@ -333,13 +363,26 @@ impl<'a> TypedIter<'a> {
         Self { untyped }
     }
 
+    /// See [`UntypedIter::offset`].
+    pub fn offset(&self) -> usize {
+        self.untyped.offset()
+    }
+
     /// Return the next typed instruction.
     #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> Option<TypedInstruction<'_, 'a>> {
-        let op = self.untyped.next()?;
+        self.next_with_span().map(|(op, _)| op)
+    }
+
+    /// Return the next typed instruction and its byte range, see
+    /// [`UntypedIter::next_with_span`].
+    pub fn next_with_span(
+        &mut self,
+    ) -> Option<(TypedInstruction<'_, 'a>, core::ops::Range<usize>)> {
+        let (op, span) = self.untyped.next_with_span()?;
         // TODO: Explore whether dispatching can be made more efficient.
         match TypedInstruction::dispatch(&op) {
-            Some(op) => Some(op),
+            Some(op) => Some((op, span)),
             // In case this returns `None`, the content stream is invalid. In case a path-drawing
             // operator was used, let's abort completely, otherwise we might end up drawing random stuff.
             // However, for other operators it could be worth it to just skip it but keep attempting
@@ -358,7 +401,7 @@ impl<'a> TypedIter<'a> {
                 {
                     None
                 } else {
-                    Some(TypedInstruction::Fallback(op.operator))
+                    Some((TypedInstruction::Fallback(op.operator), span))
                 }
             }
         }
