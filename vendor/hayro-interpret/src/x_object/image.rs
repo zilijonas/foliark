@@ -141,6 +141,8 @@ impl<'a> ImageXObject<'a> {
             return;
         }
 
+        device.oc_state(context.ocg_state.is_on());
+
         let width = self.width as f64;
         let height = self.height as f64;
 

@@ -6,12 +6,12 @@ pub(crate) mod soft_mask;
 pub(crate) use form::FormXObject;
 pub(crate) use image::ImageXObject;
 
-use crate::WarningSinkFn;
 use crate::cache::Cache;
 use crate::color::ColorSpace;
 use crate::context::Context;
 use crate::device::Device;
 use crate::interpret::state::ActiveTransferFunction;
+use crate::{InterpreterSettings, WarningSinkFn};
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Name;
 use hayro_syntax::object::Stream;
@@ -27,6 +27,7 @@ pub(crate) enum XObject<'a> {
 impl<'a> XObject<'a> {
     pub(crate) fn new(
         stream: &Stream<'a>,
+        settings: &InterpreterSettings,
         resolve_cs: impl FnOnce(&Name<'_>) -> Option<ColorSpace>,
         warning_sink: &WarningSinkFn,
         cache: &Cache,
@@ -41,7 +42,7 @@ impl<'a> XObject<'a> {
                 cache,
                 transfer_function,
             )?)),
-            FORM => Some(Self::FormXObject(FormXObject::new(stream)?)),
+            FORM => Some(Self::FormXObject(FormXObject::new(stream, settings)?)),
             _ => None,
         }
     }

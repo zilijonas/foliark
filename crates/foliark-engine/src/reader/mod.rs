@@ -8,6 +8,9 @@ use hayro::hayro_syntax::page::Page;
 use hayro::hayro_syntax::{DecryptionError, LoadPdfError, Pdf};
 use std::fmt;
 
+mod provenance;
+pub use provenance::{Item, ItemKind, MAX_NESTING};
+
 /// Why a read failed. [`ReaderError::code`] is the spec §12 error code; `foliark-model` gets the
 /// shared `PdfError` with the `ErrorCode` enum in a later task.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,6 +43,14 @@ pub enum ReaderError {
         obj: ObjectId,
         offset: usize,
     },
+    /// A Form draws itself, directly or through other Forms.
+    FormCycle {
+        obj: ObjectId,
+    },
+    /// Forms nest deeper than [`MAX_NESTING`].
+    NestingLimit {
+        limit: u32,
+    },
 }
 
 impl ReaderError {
@@ -48,12 +59,14 @@ impl ReaderError {
             Self::MalformedPdf
             | Self::ContentUnreadable { .. }
             | Self::ContentSyntax { .. }
+            | Self::FormCycle { .. }
             | Self::PageOutOfRange { .. } => "MALFORMED_PDF",
             Self::RepairedPdf => "REPAIRED_PDF",
             Self::PasswordRequired => "PASSWORD_REQUIRED",
             Self::PasswordIncorrect => "PASSWORD_INCORRECT",
             Self::EncryptionUnsupported => "ENCRYPTION_UNSUPPORTED",
             Self::DecodeFailed { .. } | Self::UnsupportedFilter { .. } => "DECODE_FAILED",
+            Self::NestingLimit { .. } => "LIMIT_EXCEEDED",
         }
     }
 }

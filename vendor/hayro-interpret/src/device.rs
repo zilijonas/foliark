@@ -2,7 +2,9 @@ use crate::font::GlyphRun;
 use crate::x_object::soft_mask::SoftMask;
 use crate::{BlendMode, ClipPath, FillRule, Image};
 use crate::{DrawMode, DrawProps, ImageDrawProps};
-use kurbo::{BezPath, Rect, Shape};
+use hayro_syntax::object::ObjRef;
+use kurbo::{Affine, BezPath, Rect, Shape};
+use std::ops::Range;
 
 /// A trait for a device that can be used to process PDF drawing instructions.
 pub trait Device<'a> {
@@ -48,6 +50,23 @@ pub trait Device<'a> {
     fn begin_marked_content(&mut self, _tag: &[u8], _mcid: Option<i32>) {}
     /// Called at the end of a marked content sequence (EMC).
     fn end_marked_content(&mut self) {}
+    /// Called before every content stream operator is executed.
+    ///
+    /// `stream` is the object of the content stream (or Form/pattern/Type3 procedure) the
+    /// operator is in and `range` its byte range in the decoded data of that stream. Anything
+    /// the operator draws is reported after this call and before the next one.
+    fn begin_operator(&mut self, _stream: ObjRef, _range: Range<usize>) {}
+    /// Called before a Form XObject, annotation appearance, tiling pattern cell or Type3 glyph
+    /// procedure is interpreted. `matrix` is its own `/Matrix`. Return `false` to skip it
+    /// (`end_form` is then not called).
+    fn begin_form(&mut self, _form: ObjRef, _matrix: Affine) -> bool {
+        true
+    }
+    /// Called after the content announced by [`Device::begin_form`] was interpreted.
+    fn end_form(&mut self) {}
+    /// Called before an item is drawn: whether optional content currently shows it. Only
+    /// `false` when [`crate::InterpreterSettings::ocg_override`] made hidden content visible.
+    fn oc_state(&mut self, _visible: bool) {}
 }
 
 /// A device that discards all drawing operations.

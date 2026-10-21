@@ -1,6 +1,6 @@
 use crate::FillRule;
 use crate::color::ColorSpace;
-use crate::context::Context;
+use crate::context::{Context, Source};
 use crate::convert::{convert_line_cap, convert_line_join};
 use crate::device::Device;
 use crate::font::{Font, FontData, FontQuery, StandardFont};
@@ -100,6 +100,13 @@ pub struct InterpreterSettings {
     /// Note that this feature is currently not fully implemented yet, so some
     /// annotations might be missing.
     pub render_annotations: bool,
+    /// Interpret content in optional content groups that are OFF instead of skipping it.
+    /// [`Device::oc_state`] reports `false` for such items.
+    pub ocg_override: bool,
+    /// Skip a Form, pattern, Type3 procedure or appearance stream that fails to decode or is
+    /// truncated and report [`InterpreterWarning::StreamDecodeFailure`], instead of
+    /// interpreting whatever decoded.
+    pub strict_streams: bool,
 }
 
 impl Default for InterpreterSettings {
@@ -118,6 +125,8 @@ impl Default for InterpreterSettings {
             cmap_resolver: Arc::new(|_| None),
             warning_sink: Arc::new(|_| {}),
             render_annotations: true,
+            ocg_override: false,
+            strict_streams: false,
         }
     }
 }
@@ -135,6 +144,11 @@ pub enum InterpreterWarning {
     /// An annotation has an `AP` dictionary, but its normal appearance could not
     /// be selected or loaded, so the annotation was not drawn.
     UnresolvedAnnotationAppearance,
+    /// A content stream failed to decode (only with `strict_streams`); it was not interpreted.
+    StreamDecodeFailure(hayro_syntax::object::ObjRef),
+    /// A `Do` names an XObject that is in the resources but cannot be read: the object is
+    /// missing or damaged, or it is part of a reference cycle (a Form that draws itself).
+    UnresolvedXObject(hayro_syntax::object::ObjRef),
 }
 
 /// interpret the contents of the page and render them into the device.
@@ -144,7 +158,9 @@ pub fn interpret_page<'a>(
     device: &mut impl Device<'a>,
 ) {
     let resources = page.resources();
+    context.source = Source::page(page.content_parts());
     interpret(page.typed_operations(), resources, context, device);
+    context.source = Source::default();
 
     if context.settings.render_annotations
         && let Some(annot_arr) = page.raw().get::<Array<'_>>(ANNOTS)
@@ -157,7 +173,9 @@ pub fn interpret_page<'a>(
                 continue;
             }
 
-            if let Some(apx) = appearance_stream(&annot).and_then(|o| FormXObject::new(&o)) {
+            if let Some(apx) =
+                appearance_stream(&annot).and_then(|o| FormXObject::new(&o, &context.settings))
+            {
                 let Some(rect) = annot.get::<Rect>(RECT) else {
                     continue;
                 };
@@ -239,7 +257,10 @@ pub fn interpret<'a>(
 
     context.save_state();
 
-    while let Some(op) = ops.next() {
+    while let Some((op, span)) = ops.next_with_span() {
+        let (stream, range) = context.source.locate(span);
+        device.begin_operator(stream, range);
+
         match op {
             TypedInstruction::SaveState(_) => context.save_state(),
             TypedInstruction::StrokeColorDeviceRgb(s) => {
@@ -673,9 +694,18 @@ pub fn interpret<'a>(
                 let cache = context.interpreter_cache.object_cache.clone();
                 let warning_sink = context.settings.warning_sink.clone();
                 let transfer_function = context.get().graphics_state.transfer_function.clone();
-                if let Some(x_object) = resources.get_x_object(x.0).and_then(|s| {
+                let settings = context.settings.clone();
+                let stream = resources.get_x_object(x.0);
+                // Also what the parser drops: a missing or damaged object, or a reference cycle.
+                if stream.is_none()
+                    && let Some(r) = resources.x_objects.get_ref(x.0)
+                {
+                    warning_sink(InterpreterWarning::UnresolvedXObject(r));
+                }
+                if let Some(x_object) = stream.and_then(|s| {
                     XObject::new(
                         &s,
+                        &settings,
                         |name| context.get_color_space(resources, name),
                         &warning_sink,
                         &cache,

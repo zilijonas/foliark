@@ -5,6 +5,8 @@ use std::collections::HashSet;
 pub(crate) struct OcgState {
     inactive_ocgs: HashSet<ObjectIdentifier>,
     visibility_stack: Vec<bool>,
+    /// Interpret content that is hidden (see `InterpreterSettings::ocg_override`).
+    pub(crate) show_all: bool,
 }
 
 impl OcgState {
@@ -12,6 +14,7 @@ impl OcgState {
         Self {
             inactive_ocgs: HashSet::default(),
             visibility_stack: vec![],
+            show_all: false,
         }
     }
 
@@ -62,12 +65,13 @@ impl OcgState {
         Self {
             inactive_ocgs: inactive,
             visibility_stack: Vec::new(),
+            show_all: false,
         }
     }
 
     pub(crate) fn begin_single_oc(&mut self, ocg_id: ObjectIdentifier) {
         let is_active = !self.inactive_ocgs.contains(&ocg_id);
-        let visible = self.is_visible() && is_active;
+        let visible = self.is_on() && is_active;
         self.visibility_stack.push(visible);
     }
 
@@ -100,7 +104,7 @@ impl OcgState {
             }
         };
 
-        let visible = self.is_visible() && is_active;
+        let visible = self.is_on() && is_active;
         self.visibility_stack.push(visible);
     }
 
@@ -112,7 +116,7 @@ impl OcgState {
     }
 
     pub(crate) fn begin_marked_content(&mut self) {
-        let visible = self.is_visible();
+        let visible = self.is_on();
         self.visibility_stack.push(visible);
     }
 
@@ -120,7 +124,13 @@ impl OcgState {
         self.visibility_stack.pop();
     }
 
+    /// Whether the content should be interpreted.
     pub(crate) fn is_visible(&self) -> bool {
+        self.show_all || self.is_on()
+    }
+
+    /// Whether optional content shows the current content.
+    pub(crate) fn is_on(&self) -> bool {
         self.visibility_stack.last().copied().unwrap_or(true)
     }
 }

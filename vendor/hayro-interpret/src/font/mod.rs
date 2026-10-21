@@ -16,7 +16,7 @@ use bitflags::bitflags;
 use hayro_syntax::object::Name;
 use hayro_syntax::object::dict::keys::SUBTYPE;
 use hayro_syntax::object::dict::keys::*;
-use hayro_syntax::object::{Dict, Stream};
+use hayro_syntax::object::{Dict, ObjRef, Stream};
 use hayro_syntax::page::Resources;
 use hayro_syntax::xref::XRef;
 use kurbo::{Affine, BezPath, Vec2};
@@ -105,6 +105,22 @@ impl Glyph<'_> {
             Glyph::Type3(g) => g.as_unicode(),
         }
     }
+
+    /// The raw character code that was shown.
+    pub fn char_code(&self) -> u32 {
+        match self {
+            Glyph::Outline(g) => g.char_code(),
+            Glyph::Type3(g) => g.char_code(),
+        }
+    }
+
+    /// The object of the font dictionary, if it is an indirect object.
+    pub fn font_ref(&self) -> Option<ObjRef> {
+        match self {
+            Glyph::Outline(g) => g.font_ref(),
+            Glyph::Type3(g) => g.font_ref(),
+        }
+    }
 }
 
 /// A glyph and its position within a [`GlyphRun`].
@@ -159,6 +175,7 @@ pub struct OutlineGlyph {
     pub(crate) id: GlyphId,
     pub(crate) font: OutlineFont,
     pub(crate) char_code: u32,
+    pub(crate) font_ref: Option<ObjRef>,
 }
 
 impl OutlineGlyph {
@@ -213,6 +230,16 @@ impl OutlineGlyph {
     pub fn font_cache_key(&self) -> u128 {
         self.font.cache_key()
     }
+
+    /// The raw character code that was shown (one byte, or the CMap code of a Type0 font).
+    pub fn char_code(&self) -> u32 {
+        self.char_code
+    }
+
+    /// The object of the font dictionary, `None` for a direct dictionary or a substituted font.
+    pub fn font_ref(&self) -> Option<ObjRef> {
+        self.font_ref
+    }
 }
 
 /// A type3 glyph.
@@ -227,6 +254,7 @@ pub struct Type3Glyph<'a> {
     pub(crate) settings: InterpreterSettings,
     pub(crate) nesting_depth: u32,
     pub(crate) char_code: u32,
+    pub(crate) font_ref: Option<ObjRef>,
 }
 
 /// A glyph defined by PDF drawing instructions.
@@ -249,6 +277,16 @@ impl<'a> Type3Glyph<'a> {
     pub fn as_unicode(&self) -> Option<BfString> {
         self.font.char_code_to_unicode(self.char_code)
     }
+
+    /// The raw character code that was shown.
+    pub fn char_code(&self) -> u32 {
+        self.char_code
+    }
+
+    /// The object of the font dictionary, `None` for a direct dictionary.
+    pub fn font_ref(&self) -> Option<ObjRef> {
+        self.font_ref
+    }
 }
 
 impl CacheKey for Type3Glyph<'_> {
@@ -258,7 +296,7 @@ impl CacheKey for Type3Glyph<'_> {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct Font<'a>(u128, FontType<'a>);
+pub(crate) struct Font<'a>(u128, FontType<'a>, Option<ObjRef>);
 
 impl<'a> Font<'a> {
     pub(crate) fn new(
@@ -290,7 +328,7 @@ impl<'a> Font<'a> {
 
         let cache_key = dict.cache_key();
 
-        Some(Self(cache_key, f_type))
+        Some(Self(cache_key, f_type, dict.obj_id().map(ObjRef::from)))
     }
 
     pub(crate) fn new_standard(
@@ -299,7 +337,7 @@ impl<'a> Font<'a> {
     ) -> Option<Self> {
         let font = Type1Font::new_standard(standard_font, font_resolver)?;
 
-        Some(Self(0, FontType::Type1(Rc::new(font))))
+        Some(Self(0, FontType::Type1(Rc::new(font)), None))
     }
 
     pub(crate) fn map_code(&self, code: u32) -> GlyphId {
@@ -337,6 +375,7 @@ impl<'a> Font<'a> {
                     id: glyph,
                     font,
                     char_code,
+                    font_ref: self.2,
                 })
             }
             FontType::TrueType(t) => {
@@ -345,6 +384,7 @@ impl<'a> Font<'a> {
                     id: glyph,
                     font,
                     char_code,
+                    font_ref: self.2,
                 })
             }
             FontType::Type0(t) => {
@@ -353,6 +393,7 @@ impl<'a> Font<'a> {
                     id: glyph,
                     font,
                     char_code,
+                    font_ref: self.2,
                 })
             }
             FontType::Type3(t) => {
@@ -367,6 +408,7 @@ impl<'a> Font<'a> {
                     settings: ctx.settings.clone(),
                     nesting_depth,
                     char_code,
+                    font_ref: self.2,
                 };
 
                 Glyph::Type3(Box::new(shape_glyph))

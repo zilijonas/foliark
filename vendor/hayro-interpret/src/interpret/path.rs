@@ -51,6 +51,7 @@ pub(crate) fn fill_path_impl<'a>(
     if !context.ocg_state.is_visible() {
         return;
     }
+    device.oc_state(context.ocg_state.is_on());
 
     let props = context.draw_props(false);
 
@@ -102,6 +103,7 @@ pub(crate) fn stroke_path_impl<'a>(
     if !context.ocg_state.is_visible() {
         return;
     }
+    device.oc_state(context.ocg_state.is_on());
 
     let stroke_props = context.stroke_props();
     let props = context.draw_props(true);

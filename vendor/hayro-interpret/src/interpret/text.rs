@@ -75,6 +75,8 @@ pub(crate) fn show_glyph_run<'a>(ctx: &mut Context<'a>, device: &mut impl Device
         return;
     }
 
+    device.oc_state(ctx.ocg_state.is_on());
+
     let render_mode = ctx.get().text_state.render_mode;
     let stroke_props = ctx.stroke_props();
     let fill_props = ctx.draw_props(false);

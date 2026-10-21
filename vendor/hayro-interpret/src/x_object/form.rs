@@ -1,11 +1,14 @@
 use super::xobject_oc;
+use crate::InterpreterSettings;
 use crate::context::Context;
+use crate::context::Source;
 use crate::device::Device;
+use crate::util::decode_content;
 use crate::{ClipPath, FillRule, interpret};
 use hayro_syntax::content::TypedIter;
-use hayro_syntax::object::Dict;
 use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::*;
+use hayro_syntax::object::{Dict, ObjRef};
 use hayro_syntax::page::Resources;
 use kurbo::{Affine, Rect, Shape};
 use std::borrow::Cow;
@@ -16,14 +19,15 @@ pub(crate) struct FormXObject<'a> {
     pub(crate) bbox: [f32; 4],
     is_transparency_group: bool,
     pub(crate) dict: Dict<'a>,
+    obj_id: ObjRef,
     resources: Option<Resources<'a>>,
 }
 
 impl<'a> FormXObject<'a> {
-    pub(crate) fn new(stream: &Stream<'a>) -> Option<Self> {
+    pub(crate) fn new(stream: &Stream<'a>, settings: &InterpreterSettings) -> Option<Self> {
         let dict = stream.dict();
 
-        let decoded = stream.decoded().ok()?;
+        let decoded = decode_content(stream, settings)?;
         let resources = dict.get(RESOURCES).map(Resources::new);
 
         let matrix = Affine::new(
@@ -39,6 +43,7 @@ impl<'a> FormXObject<'a> {
             is_transparency_group,
             bbox,
             dict: dict.clone(),
+            obj_id: stream.obj_id().into(),
             resources,
         })
     }
@@ -59,6 +64,15 @@ impl<'a> FormXObject<'a> {
 
         let has_oc = xobject_oc(&self.dict, context);
         if !context.ocg_state.is_visible() {
+            if has_oc {
+                context.ocg_state.end_marked_content();
+            }
+            context.end_nested_interpretation();
+            return;
+        }
+
+        device.oc_state(context.ocg_state.is_on());
+        if !device.begin_form(self.obj_id, self.matrix) {
             if has_oc {
                 context.ocg_state.end_marked_content();
             }
@@ -96,12 +110,14 @@ impl<'a> FormXObject<'a> {
             fill: FillRule::NonZero,
         });
 
+        let outer = std::mem::replace(&mut context.source, Source::stream(self.obj_id));
         interpret(
             iter,
             self.resources.as_ref().unwrap_or(resources),
             context,
             device,
         );
+        context.source = outer;
 
         device.pop_clip();
 
@@ -109,6 +125,7 @@ impl<'a> FormXObject<'a> {
             device.pop_transparency_group();
         }
 
+        device.end_form();
         context.pop_root_transform();
         context.restore_state(device);
 

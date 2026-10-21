@@ -1,11 +1,11 @@
 use crate::CMapResolverFn;
-use crate::context::Context;
+use crate::context::{Context, Source};
 use crate::device::Device;
 use crate::font::glyph_simulator::GlyphSimulator;
 use crate::font::true_type::{Width, read_encoding, read_widths};
 use crate::font::{Encoding, GlyphRun, Type3Glyph, UNITS_PER_EM, read_to_unicode};
 use crate::interpret::state::TextState;
-use crate::util::RectExt;
+use crate::util::{RectExt, decode_content};
 use crate::x_object::soft_mask::SoftMask;
 use crate::{BlendMode, interpret};
 use crate::{CacheKey, ClipPath, DrawMode, DrawProps, ImageDrawProps};
@@ -14,12 +14,13 @@ use hayro_cmap::{BfString, CMap};
 use hayro_syntax::content::TypedIter;
 use hayro_syntax::content::ops::TypedInstruction;
 use hayro_syntax::object::Dict;
-use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::{CHAR_PROCS, FONT_BBOX, FONT_MATRIX, RESOURCES};
+use hayro_syntax::object::{ObjRef, Stream};
 use hayro_syntax::page::Resources;
 use kurbo::{Affine, BezPath, Rect};
 use rustc_hash::FxHashMap;
 use skrifa::GlyphId;
+use std::ops::Range;
 
 #[derive(Debug)]
 pub(crate) struct Type3<'a> {
@@ -121,7 +122,7 @@ impl<'a> Type3<'a> {
 
         let name = self.glyph_simulator.glyph_to_string(glyph.glyph_id)?;
         let program = self.char_procs.get(&name)?;
-        let decoded = program.decoded().ok()?;
+        let decoded = decode_content(program, &glyph.settings)?;
         let iter = TypedIter::new(decoded.as_ref());
 
         let is_shape_glyph = {
@@ -154,6 +155,12 @@ impl<'a> Type3<'a> {
             glyph.nesting_depth,
         );
 
+        let obj_id = ObjRef::from(program.obj_id());
+        context.source = Source::stream(obj_id);
+        if !device.begin_form(obj_id, self.matrix) {
+            return Some(());
+        }
+
         let resources = program
             .dict()
             .get(RESOURCES)
@@ -168,6 +175,7 @@ impl<'a> Type3<'a> {
             interpret(iter, resources, &mut context, device);
         }
 
+        device.end_form();
         Some(())
     }
 }
@@ -194,6 +202,22 @@ impl<'a, 'b, T: Device<'a>> Type3ShapeGlyphDevice<'a, 'b, T> {
 
 // Only filling, stroking of paths and stencil masks are allowed.
 impl<'a, T: Device<'a>> Device<'a> for Type3ShapeGlyphDevice<'a, '_, T> {
+    fn begin_operator(&mut self, stream: ObjRef, range: Range<usize>) {
+        self.inner.begin_operator(stream, range);
+    }
+
+    fn begin_form(&mut self, form: ObjRef, matrix: Affine) -> bool {
+        self.inner.begin_form(form, matrix)
+    }
+
+    fn end_form(&mut self) {
+        self.inner.end_form();
+    }
+
+    fn oc_state(&mut self, visible: bool) {
+        self.inner.oc_state(visible);
+    }
+
     fn draw_path(&mut self, path: &BezPath, props: DrawProps<'a>, draw_mode: &DrawMode) {
         let props = DrawProps {
             paint: self.paint.clone(),

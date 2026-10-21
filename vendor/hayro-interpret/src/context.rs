@@ -9,12 +9,15 @@ use crate::{ClipPath, Device, DrawProps, FillRule, InterpreterSettings, Paint, S
 use hayro_syntax::content::ops::Transform;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Name;
+use hayro_syntax::object::ObjRef;
+use hayro_syntax::page::ContentPart;
 use hayro_syntax::page::Resources;
 use hayro_syntax::xref::XRef;
 use kurbo::{Affine, BezPath, PathEl, Point, Rect, Shape};
 use rustc_hash::FxHashMap;
 use smallvec::smallvec;
 use std::cell::RefCell;
+use std::ops::Range;
 use std::rc::Rc;
 
 /// Maximum nesting depth for interpreting `XObject`'s/patterns/streams.
@@ -61,6 +64,56 @@ pub struct Context<'a> {
     pub(crate) ocg_state: OcgState,
     nesting_depth: u32,
     pub(crate) glyph_scratch: Vec<PositionedGlyph<'a>>,
+    /// The content stream being interpreted, for `Device::begin_operator`.
+    pub(crate) source: Source,
+}
+
+/// Where the instructions that are currently interpreted come from.
+pub(crate) struct Source {
+    stream: ObjRef,
+    /// Set for a page: its merged content stream and where each stream sits in it.
+    parts: Vec<ContentPart>,
+}
+
+impl Default for Source {
+    fn default() -> Self {
+        Self::stream(ObjRef::new(0, 0))
+    }
+}
+
+impl Source {
+    pub(crate) fn stream(stream: ObjRef) -> Self {
+        Self {
+            stream,
+            parts: Vec::new(),
+        }
+    }
+
+    pub(crate) fn page(parts: &[ContentPart]) -> Self {
+        Self {
+            parts: parts.to_vec(),
+            ..Self::default()
+        }
+    }
+
+    /// Map a range in the interpreted data to the stream it is in. An instruction that
+    /// straddles two page content streams is clipped to the one it starts in.
+    pub(crate) fn locate(&self, span: Range<usize>) -> (ObjRef, Range<usize>) {
+        let Some(part) = self
+            .parts
+            .iter()
+            .find(|p| span.start < p.range.end)
+            .or(self.parts.last())
+        else {
+            return (self.stream, span);
+        };
+        let start = span.start.saturating_sub(part.range.start);
+        let end = span
+            .end
+            .min(part.range.end)
+            .saturating_sub(part.range.start);
+        (part.id.into(), start..end.max(start))
+    }
 }
 
 impl<'a> Context<'a> {
@@ -86,12 +139,13 @@ impl<'a> Context<'a> {
         state: State<'a>,
         nesting_depth: u32,
     ) -> Self {
-        let ocg_state = {
+        let mut ocg_state = {
             let root_ref = xref.root_id();
             xref.get::<Dict<'_>>(root_ref)
                 .map(|catalog| OcgState::from_catalog(&catalog))
                 .unwrap_or_default()
         };
+        ocg_state.show_all = settings.ocg_override;
 
         Self {
             states: vec![state],
@@ -107,6 +161,7 @@ impl<'a> Context<'a> {
             ocg_state,
             nesting_depth,
             glyph_scratch: Vec::new(),
+            source: Source::default(),
         }
     }
 

@@ -2,26 +2,27 @@
 
 use crate::cache::Cache;
 use crate::color::{Color, ColorSpace};
-use crate::context::{Context, InterpreterCache};
+use crate::context::{Context, InterpreterCache, Source};
 use crate::device::Device;
 use crate::font::GlyphRun;
 use crate::interpret::state::{ActiveTransferFunction, State};
 use crate::shading::Shading;
-use crate::util::{Float32Ext, RectExt, hash128};
+use crate::util::{Float32Ext, RectExt, decode_content, hash128};
 use crate::x_object::soft_mask::SoftMask;
 use crate::{BlendMode, CacheKey, ClipPath, DrawMode, DrawProps, Image, ImageDrawProps};
 use crate::{FillRule, InterpreterSettings, Paint, interpret};
 use hayro_syntax::content::TypedIter;
 use hayro_syntax::object::Dict;
-use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::{
     BBOX, EXT_G_STATE, MATRIX, PAINT_TYPE, RESOURCES, SHADING, X_STEP, Y_STEP,
 };
+use hayro_syntax::object::{ObjRef, Stream};
 use hayro_syntax::object::{Object, dict_or_stream};
 use hayro_syntax::page::Resources;
 use hayro_syntax::xref::XRef;
 use kurbo::{Affine, BezPath, Rect, Shape};
 use std::fmt::{Debug, Formatter};
+use std::ops::Range;
 use std::sync::Arc;
 
 /// A PDF pattern.
@@ -234,8 +235,14 @@ impl<'a> TilingPattern<'a> {
             self.nesting_depth,
         );
 
-        let decoded = self.stream.decoded().ok()?;
+        let decoded = decode_content(&self.stream, &self.settings)?;
         let iter = TypedIter::new(decoded.as_ref());
+        let obj_id = ObjRef::from(self.stream.obj_id());
+        context.source = Source::stream(obj_id);
+
+        if !device.begin_form(obj_id, self.matrix) {
+            return Some(());
+        }
 
         let clip_path = ClipPath {
             path: initial_transform * self.bbox.to_path(0.1),
@@ -257,6 +264,7 @@ impl<'a> TilingPattern<'a> {
         }
 
         device.pop_clip();
+        device.end_form();
 
         Some(())
     }
@@ -284,6 +292,22 @@ impl<'a, 'b, T: Device<'a>> StencilPatternDevice<'a, 'b, T> {
 
 // Only filling, stroking of paths and stencil masks are allowed.
 impl<'a, T: Device<'a>> Device<'a> for StencilPatternDevice<'a, '_, T> {
+    fn begin_operator(&mut self, stream: ObjRef, range: Range<usize>) {
+        self.inner.begin_operator(stream, range);
+    }
+
+    fn begin_form(&mut self, form: ObjRef, matrix: Affine) -> bool {
+        self.inner.begin_form(form, matrix)
+    }
+
+    fn end_form(&mut self) {
+        self.inner.end_form();
+    }
+
+    fn oc_state(&mut self, visible: bool) {
+        self.inner.oc_state(visible);
+    }
+
     fn draw_path(&mut self, path: &BezPath, props: DrawProps<'a>, draw_mode: &DrawMode) {
         let props = DrawProps {
             paint: self.paint.clone(),

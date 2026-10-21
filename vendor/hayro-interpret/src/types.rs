@@ -30,6 +30,11 @@ pub struct StencilImage<'a, 'b> {
 }
 
 impl<'a, 'b> StencilImage<'a, 'b> {
+    /// Return the image XObject stream, as [`RasterImage::stream`] does.
+    pub fn stream(&self) -> &Stream<'_> {
+        self.image_xobject.stream()
+    }
+
     /// Perform some operation with the stencil data of the image.
     ///
     /// The second argument allows you to give the image decoder a hint for

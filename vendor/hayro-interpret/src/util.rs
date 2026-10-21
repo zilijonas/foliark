@@ -1,7 +1,10 @@
 //! A number of utility methods.
 
+use crate::{InterpreterSettings, InterpreterWarning};
+use hayro_syntax::object::Stream;
 use kurbo::{BezPath, PathEl, Rect};
 use siphasher::sip128::{Hasher128, SipHasher13};
+use std::borrow::Cow;
 use std::hash::Hash;
 use std::ops::Sub;
 
@@ -197,4 +200,22 @@ pub fn x_y_advances(transform: &kurbo::Affine) -> (kurbo::Vec2, kurbo::Vec2) {
         kurbo::Vec2::new(x_advance.x, x_advance.y),
         kurbo::Vec2::new(y_advance.x, y_advance.y),
     )
+}
+
+/// Decode a Form, pattern, Type3 or appearance stream. With `settings.strict_streams` a
+/// failure or truncation is reported to the warning sink instead of interpreting partial data.
+pub(crate) fn decode_content<'a>(
+    stream: &Stream<'a>,
+    settings: &InterpreterSettings,
+) -> Option<Cow<'a, [u8]>> {
+    if !settings.strict_streams {
+        return stream.decoded().ok();
+    }
+    let decoded = stream.decoded_strict().ok();
+    if decoded.is_none() {
+        (settings.warning_sink)(InterpreterWarning::StreamDecodeFailure(
+            stream.obj_id().into(),
+        ));
+    }
+    decoded
 }
