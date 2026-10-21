@@ -42,3 +42,7 @@ Never run tasks assigned to ME, ChatGPT or Claude Design. Never skip a blocked t
 ### Before you stop
 
 Don't leave a task in `doing`. Hand it back as `todo` with a note, or set `blocked` with a reason.
+
+## Foliark development
+
+Build, test and smoke commands, memory-queue wrapping, receipt rules and the module-to-task map are in `docs/development.md`; the frozen contract is `docs/spec/v1.md`; hard rules for agents are in `CLAUDE.md`. Every cargo, wasm-bindgen and browser run goes through `~/ai/bin/memory-queue`. Attach receipts inline (`content`), never `sourcePath`, overriding step 5 above for this repo.
