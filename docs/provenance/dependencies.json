@@ -1,0 +1,844 @@
+{
+  "generated_by": "NEW-5 audit",
+  "cargo": {
+    "command": "cargo metadata --format-version 1 --locked --filter-platform wasm32-unknown-unknown",
+    "root": "foliark-wasm",
+    "kind_rule": "prod = reachable from foliark-wasm via normal edges; build = only via build edges; dev = only via dev edges",
+    "counts": {
+      "build": 2,
+      "dev": 3,
+      "prod": 94
+    }
+  },
+  "npm": {
+    "command": "lockfile + node_modules package.json scan (pnpm-lock.yaml; no pnpm licenses run in this worktree)",
+    "runtime_dependencies": 0,
+    "note": "packages/sdk has no runtime dependencies; all npm entries are dev-only"
+  },
+  "packages": [
+    {
+      "name": "autocfg",
+      "version": "1.5.1",
+      "license": "Apache-2.0 OR MIT",
+      "source": "crates.io",
+      "kind": "build",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "rustversion",
+      "version": "1.0.23",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "build",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "itoa",
+      "version": "1.0.18",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "dev",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "pdf-writer",
+      "version": "0.15.0",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "dev",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "ryu",
+      "version": "1.0.23",
+      "license": "Apache-2.0 OR BSL-1.0",
+      "source": "crates.io",
+      "kind": "dev",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "adler2",
+      "version": "2.0.1",
+      "license": "0BSD OR MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "arrayvec",
+      "version": "0.7.8",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "bitflags",
+      "version": "2.13.2",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "bumpalo",
+      "version": "3.20.3",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "bytemuck",
+      "version": "1.25.2",
+      "license": "Zlib OR Apache-2.0 OR MIT",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "bytemuck_derive",
+      "version": "1.12.1",
+      "license": "Zlib OR Apache-2.0 OR MIT",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "byteorder-lite",
+      "version": "0.1.0",
+      "license": "Unlicense OR MIT",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "cfg-if",
+      "version": "1.0.5",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "color",
+      "version": "0.3.3",
+      "license": "Apache-2.0 OR MIT",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "crc32fast",
+      "version": "1.5.3",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "euclid",
+      "version": "0.22.14",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "fastrand",
+      "version": "2.5.0",
+      "license": "Apache-2.0 OR MIT",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "fdeflate",
+      "version": "0.3.7",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "fearless_simd",
+      "version": "0.7.0",
+      "license": "Apache-2.0 OR MIT",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "fearless_simd",
+      "version": "1.1.0",
+      "license": "Apache-2.0 OR MIT",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "flate2",
+      "version": "1.1.10",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "foldhash",
+      "version": "0.2.0",
+      "license": "Zlib",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "foliark-engine",
+      "version": "0.0.0",
+      "license": "UNLICENSED",
+      "source": "workspace path crate (unpublished)",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "foliark-model",
+      "version": "0.0.0",
+      "license": "UNLICENSED",
+      "source": "workspace path crate (unpublished)",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "foliark-wasm",
+      "version": "0.0.0",
+      "license": "UNLICENSED",
+      "source": "workspace path crate (unpublished)",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "font-types",
+      "version": "0.12.7",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "futures-core",
+      "version": "0.3.34",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "futures-task",
+      "version": "0.3.34",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "futures-util",
+      "version": "0.3.34",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "glifo",
+      "version": "0.4.0",
+      "license": "Apache-2.0 OR MIT",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "guillotiere",
+      "version": "0.7.0",
+      "license": "MIT/Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "hashbrown",
+      "version": "0.17.1",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "hayro",
+      "version": "0.8.0",
+      "license": "Apache-2.0 OR MIT",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "hayro-ccitt",
+      "version": "0.4.0",
+      "license": "Apache-2.0 OR MIT",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "hayro-cmap",
+      "version": "0.1.0",
+      "license": "Apache-2.0 OR MIT",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "hayro-interpret",
+      "version": "0.8.0",
+      "license": "Apache-2.0 OR MIT",
+      "source": "vendor/hayro-interpret (path, patched fork of crates.io 0.8.0)",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "hayro-jbig2",
+      "version": "0.3.1",
+      "license": "Apache-2.0 OR MIT",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "hayro-jpeg2000",
+      "version": "0.4.1",
+      "license": "Apache-2.0 OR MIT",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "hayro-postscript",
+      "version": "0.1.0",
+      "license": "Apache-2.0 OR MIT",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "hayro-syntax",
+      "version": "0.8.0",
+      "license": "Apache-2.0 OR MIT",
+      "source": "vendor/hayro-syntax (path, patched fork of crates.io 0.8.0)",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "image",
+      "version": "0.25.10",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "js-sys",
+      "version": "0.3.106",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "kurbo",
+      "version": "0.13.1",
+      "license": "Apache-2.0 OR MIT",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "linebender_resource_handle",
+      "version": "0.1.1",
+      "license": "Apache-2.0 OR MIT",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "log",
+      "version": "0.4.34",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "memchr",
+      "version": "2.8.3",
+      "license": "Unlicense OR MIT",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "miniz_oxide",
+      "version": "0.8.9",
+      "license": "MIT OR Zlib OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "miniz_oxide",
+      "version": "0.9.1",
+      "license": "MIT OR Zlib OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "moxcms",
+      "version": "0.8.1",
+      "license": "BSD-3-Clause OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "num-traits",
+      "version": "0.2.19",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "once_cell",
+      "version": "1.21.4",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "peniko",
+      "version": "0.6.1",
+      "license": "Apache-2.0 OR MIT",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "phf",
+      "version": "0.13.1",
+      "license": "MIT",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "phf_generator",
+      "version": "0.13.1",
+      "license": "MIT",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "phf_macros",
+      "version": "0.13.1",
+      "license": "MIT",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "phf_shared",
+      "version": "0.13.1",
+      "license": "MIT",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "pic-scale",
+      "version": "0.7.12",
+      "license": "BSD-3-Clause OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "pin-project-lite",
+      "version": "0.2.17",
+      "license": "Apache-2.0 OR MIT",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "png",
+      "version": "0.18.1",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "polycool",
+      "version": "0.4.0",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "proc-macro2",
+      "version": "1.0.107",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "pxfm",
+      "version": "0.1.30",
+      "license": "BSD-3-Clause OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "quote",
+      "version": "1.0.47",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "read-fonts",
+      "version": "0.41.0",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "read-fonts",
+      "version": "0.43.3",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "rustc-hash",
+      "version": "2.1.3",
+      "license": "Apache-2.0 OR MIT",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "serde",
+      "version": "1.0.229",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "serde-wasm-bindgen",
+      "version": "0.6.5",
+      "license": "MIT",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "serde_core",
+      "version": "1.0.229",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "serde_derive",
+      "version": "1.0.229",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "simd-adler32",
+      "version": "0.3.10",
+      "license": "MIT",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "siphasher",
+      "version": "1.0.4",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "skrifa",
+      "version": "0.44.0",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "skrifa",
+      "version": "0.46.2",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "slab",
+      "version": "0.4.12",
+      "license": "MIT",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "smallvec",
+      "version": "1.16.3",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "stable_deref_trait",
+      "version": "1.2.1",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "syn",
+      "version": "2.0.119",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "syn",
+      "version": "3.0.9",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "synstructure",
+      "version": "0.14.0",
+      "license": "MIT",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "termcolor",
+      "version": "1.4.1",
+      "license": "Unlicense OR MIT",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "thiserror",
+      "version": "2.0.21",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "thiserror-impl",
+      "version": "2.0.21",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "ts-rs",
+      "version": "12.0.1",
+      "license": "MIT",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "ts-rs-macros",
+      "version": "12.0.1",
+      "license": "MIT",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "unicode-ident",
+      "version": "1.0.27",
+      "license": "(MIT OR Apache-2.0) AND Unicode-3.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "vello_common",
+      "version": "0.3.0",
+      "license": "Apache-2.0 OR MIT",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "vello_cpu",
+      "version": "0.3.0",
+      "license": "Apache-2.0 OR MIT",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "wasm-bindgen",
+      "version": "0.2.129",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "wasm-bindgen-macro",
+      "version": "0.2.129",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "wasm-bindgen-macro-support",
+      "version": "0.2.129",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "wasm-bindgen-shared",
+      "version": "0.2.129",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "yoke",
+      "version": "0.8.3",
+      "license": "Unicode-3.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "yoke-derive",
+      "version": "0.8.4",
+      "license": "Unicode-3.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "zerofrom",
+      "version": "0.1.8",
+      "license": "Unicode-3.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "zerofrom-derive",
+      "version": "0.1.8",
+      "license": "Unicode-3.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "zlib-rs",
+      "version": "0.6.8",
+      "license": "Zlib",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "zune-core",
+      "version": "0.5.3",
+      "license": "MIT OR Apache-2.0 OR Zlib",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "zune-jpeg",
+      "version": "0.5.15",
+      "license": "MIT OR Apache-2.0 OR Zlib",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "playwright",
+      "version": "1.62.1",
+      "license": "Apache-2.0",
+      "source": "npm registry (pnpm-lock.yaml); root devDependencies",
+      "kind": "dev",
+      "ecosystem": "npm"
+    },
+    {
+      "name": "playwright-core",
+      "version": "1.62.1",
+      "license": "Apache-2.0",
+      "source": "npm registry (pnpm-lock.yaml); transitive of playwright",
+      "kind": "dev",
+      "ecosystem": "npm"
+    },
+    {
+      "name": "typescript",
+      "version": "5.9.3",
+      "license": "Apache-2.0",
+      "source": "npm registry (pnpm-lock.yaml); packages/sdk devDependencies",
+      "kind": "dev",
+      "ecosystem": "npm"
+    },
+    {
+      "name": "fsevents",
+      "version": "2.3.2",
+      "license": "MIT",
+      "source": "npm registry (pnpm-lock.yaml); optional transitive of playwright, macOS only",
+      "kind": "dev",
+      "ecosystem": "npm"
+    }
+  ]
+}

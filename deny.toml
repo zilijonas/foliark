@@ -1,0 +1,51 @@
+# cargo-deny policy (NEW-5). Run: cargo deny check licenses bans sources
+# Scope: whole resolved graph for the wasm32 target, dev and build deps included.
+# Advisories are not checked here (no advisory DB fetch in this task).
+
+[graph]
+targets = ["wasm32-unknown-unknown"]
+all-features = true
+
+[licenses]
+# Only licenses that actually appear in the current graph (see docs/provenance/dependencies.json).
+# Anything else is denied by default. Copyleft (GPL/AGPL/LGPL) is never allowed.
+allow = [
+    "MIT",          # MIT-only crates and dual-licensed crates resolved to MIT
+    "Apache-2.0",   # dual-licensed crates resolved to Apache-2.0; playwright-core, playwright, typescript (dev)
+    "BSD-3-Clause", # moxcms, pic-scale, pxfm (OR Apache-2.0)
+    "Zlib",         # bytemuck, miniz_oxide, zlib-rs, zune-* (OR MIT/Apache-2.0), foldhash (Zlib only)
+    "Unlicense",    # byteorder-lite, memchr, termcolor (OR MIT)
+    "0BSD",         # adler2 (OR MIT/Apache-2.0)
+    "Unicode-3.0",  # yoke, zerofrom, unicode-ident (AND Unicode-3.0)
+]
+confidence-threshold = 0.93
+
+# Workspace crates (foliark-*, vendored hayro forks) are unpublished: publish = false.
+[licenses.private]
+ignore = true
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+highlight = "all"
+# C/C++ PDF engines and their bindings. Hard rule (CLAUDE.md): never in the shipped graph.
+deny = [
+    { crate = "mupdf", reason = "MuPDF is AGPL/commercial C engine" },
+    { crate = "mupdf-sys", reason = "MuPDF C binding" },
+    { crate = "pdfium", reason = "PDFium is a C++ engine" },
+    { crate = "pdfium-sys", reason = "PDFium C binding" },
+    { crate = "pdfium-render", reason = "PDFium binding" },
+    { crate = "poppler", reason = "Poppler is a C++ engine" },
+    { crate = "poppler-sys", reason = "Poppler C binding" },
+    { crate = "poppler-rs", reason = "Poppler binding" },
+    { crate = "qpdf", reason = "qpdf is a C++ engine" },
+    { crate = "qpdf-sys", reason = "qpdf C binding" },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+# crates.io only. Path crates (workspace members, vendor/hayro-*) are always allowed by cargo-deny.
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []
