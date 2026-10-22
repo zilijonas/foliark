@@ -1,0 +1,119 @@
+# Release candidate pipeline. Written, never executed (CI has never run, no remote exists).
+# Manual only: never runs on push or pull_request. Real publication needs NEW-78 (owner), the `npm-release` environment's
+# manual approval and an NPM_TOKEN secret held by that environment only. docs/release/process.md is the checklist.
+name: release
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, must equal packages/sdk/package.json and have a CHANGELOG.md entry"
+        required: true
+        type: string
+      dry_run:
+        description: "Dry run: build, verify, pack, SBOM, checksums, npm publish --dry-run. Nothing is published"
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - name: Version agrees with package.json and CHANGELOG.md
+        env: { VERSION: "${{ inputs.version }}" }
+        run: |
+          [ "$VERSION" = "$(node -p 'require("./packages/sdk/package.json").version')" ] || { echo "version input != package.json"; exit 1; }
+          grep -q "^## \[$VERSION\]" CHANGELOG.md || { echo "no CHANGELOG.md entry for $VERSION"; exit 1; }
+      - uses: pnpm/action-setup@v4          # version from "packageManager" (pnpm 11.9.0)
+      - uses: actions/setup-node@v4
+        with: { node-version: 26.8.1 }
+      - run: rustup show active-toolchain || rustup toolchain install   # rust-toolchain.toml pins 1.99.1 + wasm32 target
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo install wasm-bindgen-cli --version 0.2.129 --locked
+      - run: cargo install cargo-deny --locked
+      - run: pnpm install --frozen-lockfile
+      # Full verification: the list in docs/release/candidate.md. Any failure stops the release.
+      - run: cargo fmt --check
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo test --workspace --locked --no-fail-fast
+      - run: cargo deny check licenses bans sources
+      - run: scripts/build-wasm.sh
+      - run: pnpm build:sdk
+      - run: scripts/check-ts-parity.sh
+      - run: pnpm --filter @foliark/sdk test
+      - run: pnpm exec playwright install chromium webkit firefox
+      - run: pnpm smoke chromium
+      - run: pnpm smoke webkit
+      - run: tests/browser/run.sh
+      - run: node --test tools/bench/check-budgets.test.mjs
+      - run: node scripts/gen-notices.mjs --check
+      - run: SKIP_BUILD=1 tests/integration/acceptance/run.sh
+      # Pack, SBOM, checksums. Note: tests/package-consumers/run.sh and tools/fuzz-smoke/run.sh call the memory-queue
+      # (a local-machine tool) and are part of the local verification, not this hosted job.
+      - name: Pack
+        run: mkdir -p dist-pkg && tests/package-consumers/pack.sh dist-pkg
+      - name: SBOM, checksums and dry run checks
+        run: SKIP_RECORDED_HASH=1 tools/release/dry-run.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ inputs.version }}
+          path: |
+            dist-pkg/foliark-sdk-${{ inputs.version }}.tgz
+            dist-pkg/foliark-sdk-${{ inputs.version }}.cdx.json
+            dist-pkg/SHA256SUMS
+          if-no-files-found: error
+
+  # Dry run: no environment, no secrets. id-token is only for npm to build the provenance statement.
+  publish-dry-run:
+    if: ${{ inputs.dry_run }}
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/setup-node@v4
+        with: { node-version: 26.8.1 }
+      - uses: actions/download-artifact@v4
+        with: { name: "release-${{ inputs.version }}", path: dist }
+      - run: cd dist && shasum -a 256 -c SHA256SUMS
+      - name: npm publish --dry-run
+        working-directory: dist
+        run: npm publish "./foliark-sdk-${{ inputs.version }}.tgz" --provenance --access public --dry-run
+
+  # Real publication. Requires NEW-78 and manual approval of the `npm-release` environment (required reviewers).
+  publish:
+    if: ${{ !inputs.dry_run }}
+    needs: build
+    runs-on: ubuntu-latest
+    environment: npm-release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/setup-node@v4
+        with: { node-version: 26.8.1, registry-url: "https://registry.npmjs.org" }
+      - uses: actions/download-artifact@v4
+        with: { name: "release-${{ inputs.version }}", path: dist }
+      - run: cd dist && shasum -a 256 -c SHA256SUMS
+      - name: Refuse placeholders (owner gates NEW-73, NEW-78)
+        working-directory: dist
+        run: |
+          tar xzf "foliark-sdk-${{ inputs.version }}.tgz" package/package.json package/LICENSE
+          node -e 'const m=require("./package/package.json"); if(m.private||m.license==="UNLICENSED") {console.error("package.json is still private or UNLICENSED"); process.exit(1)}'
+          ! grep -qi 'PLACEHOLDER' package/LICENSE || { echo "LICENSE is still a placeholder"; exit 1; }
+      - name: npm publish
+        working-directory: dist
+        env: { NODE_AUTH_TOKEN: "${{ secrets.NPM_TOKEN }}" }
+        run: npm publish "./foliark-sdk-${{ inputs.version }}.tgz" --provenance --access public

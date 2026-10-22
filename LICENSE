@@ -1,0 +1,12 @@
+UNLICENSED - all rights reserved pending owner decision (NEW-73).
+
+PLACEHOLDER. The Foliark licence has not been chosen. Until it is replaced this repository and the
+@foliark/sdk package are private, unreleased and not licensed for use, copying, modification or
+redistribution outside the owner's own projects.
+
+The decision (licence, copyright holder, contribution terms) is tracked in NEW-73. The options and the
+questions the owner has to answer are in docs/business/licensing-options.md.
+
+Third-party code and data keep their own licences: packages/sdk/THIRD_PARTY_NOTICES.md, packages/sdk/NOTICE,
+packages/sdk/LICENSE_FOXIT and docs/provenance/assets.md. The vendored hayro crates under vendor/ remain
+Apache-2.0 OR MIT whatever Foliark chooses.
