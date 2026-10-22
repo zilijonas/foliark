@@ -62,7 +62,7 @@ const { pageCount } = await doc.info();
 
 const page = await doc.extractText(0);                      // text, words with boxes, styles; coordinates are display space
 const hits = await doc.search("invoice", { caseSensitive: false });
-const png = await doc.renderPage(0, { scale: 1.5 });        // RGBA pixels (ImageData-compatible), plus warnings and `complete`
+const pixels = await doc.renderPage(0, { scale: 1.5 });     // RGBA pixels (ImageData-compatible), plus warnings and `complete`
 
 // Redact every hit, then export a sanitized native PDF.
 const redactions: Redaction[] = hits.map((h, i) => ({ kind: "text", id: `r${i}`, pageIndex: h.pageIndex, start: h.start, end: h.end }));
