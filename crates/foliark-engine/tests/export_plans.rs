@@ -330,13 +330,14 @@ fn redaction_over_an_image_exports_with_the_image_erased_and_reported() {
 }
 
 #[test]
-fn raster_needs_consent_then_is_refused_until_it_is_built() {
+fn raster_needs_consent_and_then_holds_a_plan_like_native() {
     let (mut e, doc) = engine(pdf_bytes(&[PAGE], &Font::default(), 0));
     let err = prepare(&mut e, &doc, ExportMode::Raster, ExportPolicy::default()).unwrap_err();
     assert_eq!(err.code, ErrorCode::ConsentRequired);
+    assert_eq!(e.stats().plan_bytes, 0);
     let mut ack = ExportPolicy::default();
     ack.raster.acknowledge_losses = true;
-    let err = prepare(&mut e, &doc, ExportMode::Raster, ack).unwrap_err();
-    assert_eq!(feature(&err), Some("exportRaster"));
-    assert_eq!(e.stats().plan_bytes, 0);
+    let p = prepare(&mut e, &doc, ExportMode::Raster, ack).unwrap();
+    assert_eq!(p.mode, ExportMode::Raster);
+    assert_eq!(e.stats().plan_bytes, p.byte_length as usize);
 }
