@@ -11,7 +11,7 @@ export const FIXTURE = new URL("../fixtures/hddn/metadata-xmp.pdf", import.meta.
 /** Spec 10.3. */
 export const MINIMAL_CSP = "script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'";
 
-const types: Record<string, string> = { ".html": "text/html", ".js": "text/javascript", ".wasm": "application/wasm" };
+const types: Record<string, string> = { ".html": "text/html", ".js": "text/javascript", ".wasm": "application/wasm", ".cmap": "text/plain" };
 
 export type Hit = { method: string; url: string; bodyBytes: number; body: string };
 
@@ -24,8 +24,8 @@ async function walk(dir: string, rel = ""): Promise<string[]> {
   return out;
 }
 
-/** The engine files a caller prepares: html, js and wasm; declarations and everything else stay out. */
-export const isAsset = (p: string) => /\.(html|js|wasm)$/.test(p);
+/** The engine files a caller prepares: html, js, wasm and the CMap pack; declarations and everything else stay out. */
+export const isAsset = (p: string) => /\.(html|js|wasm|cmap)$/.test(p);
 
 const SW = (assets: string[]) => `
 const CACHE = "foliark-offline-1";
@@ -37,7 +37,8 @@ self.addEventListener("fetch", (e) => {
 });
 `;
 
-export async function serveSite(o: { csp?: string; hide?: RegExp } = {}) {
+/** `hide`: answer 404. `corrupt`: answer with the first half of the file. */
+export async function serveSite(o: { csp?: string; hide?: RegExp; corrupt?: RegExp } = {}) {
   const dir = process.env.FOLIARK_SITE;
   if (!dir) throw new Error("FOLIARK_SITE is not set: run tests/browser/run.sh");
   const files = await walk(dir);
@@ -55,7 +56,8 @@ export async function serveSite(o: { csp?: string; hide?: RegExp } = {}) {
     if (o.csp) headers["content-security-policy"] = o.csp;
     try {
       if (o.hide?.test(path)) throw new Error("hidden");
-      const body = path === "/sw.js" ? SW(files.filter(isAsset)) : await readFile(join(dir, rel));
+      let body = path === "/sw.js" ? SW(files.filter(isAsset)) : await readFile(join(dir, rel));
+      if (o.corrupt?.test(path)) body = body.subarray(0, body.length >> 1);
       res.writeHead(200, headers).end(body);
     } catch {
       res.writeHead(404, headers).end();

@@ -345,7 +345,7 @@ fn dict<'a>(w: &Writer<'a>, id: ObjectId) -> Option<Object<'a>> {
 /// (from the semantic model; those of other fonts are ignored): the font's ToUnicode becomes
 /// a map of their codes and a TrueType program loses every other outline. If several fonts
 /// share one program, pass the survivors of all of them to each call. Type0 fonts other than
-/// Identity-H/V are refused (`FONT_UNSUPPORTED`), their code width is not known.
+/// Identity-H/V and `Uni*-UCS2-*` are refused (`FONT_UNSUPPORTED`), their code width is not known.
 pub fn touch_font<'g>(
     w: &mut Writer<'_>,
     font: ObjectId,
@@ -370,13 +370,11 @@ pub fn touch_font<'g>(
         "Type1" | "MMType1" | "TrueType" => (1, fd.clone()),
         "Type3" => (1, fd.clone()),
         "Type0" => {
-            match fd
+            let fixed = fd
                 .get::<Name<'_>>("Encoding")
-                .map(|n| n.as_str().to_owned())
-                .as_deref()
-            {
-                Some("Identity-H" | "Identity-V") => {}
-                _ => return Err(refuse("Type0 font without an Identity encoding")),
+                .and_then(|n| crate::cmaps::fixed_code_width(n.as_str()));
+            if fixed.is_none() {
+                return Err(refuse("Type0 font without a fixed two-byte encoding"));
             }
             let desc = fd
                 .get::<hayro::hayro_syntax::object::Array<'_>>("DescendantFonts")

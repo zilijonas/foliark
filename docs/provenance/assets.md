@@ -15,7 +15,7 @@ Facts from the repo and the cargo registry copies. Not legal clearance.
 
 ## (b) Fonts, CMaps and ICC data embedded in the production graph
 
-Resolved features (`cargo metadata`, wasm32): `hayro-interpret` has `embed-fonts`. `hayro-cmap` has no features, so **CMaps are not embedded**.
+Resolved features (`cargo metadata`, wasm32): `hayro-interpret` has `embed-fonts`. `hayro-cmap` has no features, so **CMaps are not embedded in the wasm**. Since NEW-88 the 63 predefined CMaps ship as separate files in the npm package (`packages/sdk/cmaps/`), verbatim Adobe resources (adobe-type-tools/cmap-resources f5cf3bca7fdfeaceb77aa82847e974f2306c20b4, adobe-type-tools/mapping-resources-pdf 2dd5e53fb74a01718b9dfd448a0d1cce6fff2aa5 for the four `Adobe-*-UCS2` maps), BSD-3-Clause, sha256 in `cmaps/MANIFEST.json`, notice in `cmaps/LICENSE.txt` and `THIRD_PARTY_NOTICES.md`.
 
 Fonts (feature `embed-fonts`, `vendor/hayro-interpret/src/font/standard_font.rs:173`, `include_bytes!`). These are the 14 Base-14 Foxit `.pfb` files:
 

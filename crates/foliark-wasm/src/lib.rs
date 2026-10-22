@@ -181,6 +181,13 @@ impl Engine {
         to_js(&self.inner.register_fonts(sources).map_err(err)?)
     }
 
+    /// One predefined-CMap pack file (spec 10.3), registered before the document that needs it is read.
+    /// `ASSET_LOAD_FAILED` with `details.feature = "cmap:<name>"` when the bytes are not that CMap.
+    #[wasm_bindgen(js_name = registerCMap)]
+    pub fn register_cmap(&mut self, name: &str, bytes: &[u8]) -> Result<(), JsValue> {
+        foliark_engine::cmaps::register(name, bytes).map_err(err)
+    }
+
     /// Idempotent.
     pub fn close(&mut self, doc: &str) {
         self.inner.close(doc);

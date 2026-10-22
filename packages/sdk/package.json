@@ -18,11 +18,13 @@
     "./worker": { "types": "./dist/worker.d.ts", "default": "./dist/worker.js" },
     "./inline": { "types": "./dist/inline.d.ts", "default": "./dist/inline.js" },
     "./wasm": "./wasm/foliark_wasm_bg.wasm",
+    "./cmaps/*": "./cmaps/*",
     "./package.json": "./package.json"
   },
   "files": [
     "dist",
     "wasm",
+    "cmaps",
     "README.md",
     "LICENSE",
     "LICENSING.md",

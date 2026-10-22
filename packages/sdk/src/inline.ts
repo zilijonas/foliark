@@ -32,6 +32,7 @@ export function createInlineFoliark(o: InlineOptions): Promise<Foliark> {
       const core = createWorkerCore({
         post: (m, transfer = []) => port2.postMessage(m, { transfer }),
         loadWasm: (url) => init({ module_or_path: wasm ?? url }).then(() => undefined),
+        cmapsUrl: new URL("../cmaps/", import.meta.url).href,
       });
       port2.onmessage = (e) => core.onMessage(e.data);
       return Object.assign(port1, { terminate: () => (port1.close(), port2.close()) }) as unknown as Worker;

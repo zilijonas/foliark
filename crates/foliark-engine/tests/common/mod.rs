@@ -258,3 +258,16 @@ pub fn tiny_pdf_bin(catalog: &str, page_extra: &str, content: &str, objs: &[Vec<
 pub fn has(bytes: &[u8], needle: &str) -> bool {
     bytes.windows(needle.len()).any(|w| w == needle.as_bytes())
 }
+
+/// Registers the CMap pack files of `generated/cjk-predefined-cmaps.pdf`, as the SDK does at open (idempotent).
+pub fn load_cjk_pack() {
+    for name in ["Adobe-GB1-UCS2", "UniGB-UCS2-H", "UniJIS-UCS2-H"] {
+        let bytes = std::fs::read(
+            repo()
+                .join("packages/sdk/cmaps")
+                .join(format!("{name}.cmap")),
+        )
+        .unwrap();
+        foliark_engine::cmaps::register(name, &bytes).unwrap();
+    }
+}
