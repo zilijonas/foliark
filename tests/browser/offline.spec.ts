@@ -38,7 +38,9 @@ test("prepared offline: reload without network, full flow, nothing of the docume
     else await context.setOffline(true);
     await page.reload();
     await runFlow(page);
-    expect(site.hits.length, "no request reached the server while offline").toBe(online);
+    // Firefox re-checks the service worker script from the browser process, which setOffline does not intercept. That
+    // request carries nothing of the page or the document, so it is the one request allowed to reach the server.
+    expect(site.hits.slice(online).filter((h) => h.url !== "/sw.js").map((h) => h.url), "requests that reached the server while offline").toEqual([]);
 
     const s = await stored(page);
     expect(s.idb).toEqual([]);
