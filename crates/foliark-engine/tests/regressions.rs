@@ -56,7 +56,7 @@ fn pdf(data: &[u8]) {
 }
 
 /// `sel` byte, then a decoded content stream: re-emission is typed and idempotent.
-fn content(input: &[u8]) {
+fn content(input: &[u8]) -> Option<ErrorCode> {
     let (&sel, data) = input.split_first().unwrap();
     let obj = ObjectId {
         num: 1,
@@ -65,12 +65,12 @@ fn content(input: &[u8]) {
     let start = (sel as usize * data.len()) / 256;
     let end = (start + 1 + (sel as usize % 7)).min(data.len());
     let _ = reemit(data, obj, &[(start..end, b"q Q".to_vec())]);
-    if let Ok(once) = reemit(data, obj, &[]) {
-        assert_eq!(
-            once,
-            reemit(&once, obj, &[]).unwrap(),
-            "re-emission is not idempotent"
-        );
+    match reemit(data, obj, &[]) {
+        Ok(once) => {
+            assert_eq!(once, reemit(&once, obj, &[]).unwrap(), "not idempotent");
+            None
+        }
+        Err(e) => Some(e.code),
     }
 }
 
@@ -94,14 +94,18 @@ fn regressions_have_typed_results() {
     let mut n = 0;
     for entry in std::fs::read_dir(dir).unwrap() {
         let path = entry.unwrap().path();
-        if path.is_dir() {
-            continue; // open-findings/: minimized, not fixed yet
-        }
         let name = path.file_name().unwrap().to_string_lossy().into_owned();
         let data = std::fs::read(&path).unwrap();
         match path.extension().and_then(|e| e.to_str()) {
             Some("pdf") => pdf(&data),
-            Some("bin") if name.starts_with("content_reemit-") => content(&data),
+            Some("bin") if name.starts_with("content_reemit-") => {
+                // Ambiguous damaged inline images are refused, never written.
+                let refused = content(&data);
+                assert!(refused.is_none() || refused == Some(ErrorCode::MalformedPdf));
+                if name == "content_reemit-3.bin" {
+                    assert_eq!(refused, Some(ErrorCode::MalformedPdf));
+                }
+            }
             Some("bin") if name.starts_with("geometry-") => geometry(&data),
             Some("json") => continue,
             _ => panic!("unrecognized regression file {name}"),

@@ -11,11 +11,29 @@ const WS: &[u8] = b"\0\t\n\x0c\r ";
 
 /// `subs` are non-overlapping `(range, ops)` pairs; `data` is the decoded stream. A
 /// substitution that touches no instruction is an error (it would silently do nothing).
+///
+/// Without substitutions the output must be a fixed point (emitting it again changes nothing);
+/// a stream whose damaged inline images cannot be delimited that way is `MALFORMED_PDF`, so
+/// ambiguous bytes are never written (ADR 0002).
 pub fn reemit(
     data: &[u8],
     obj: ObjectId,
     subs: &[(Range<usize>, Vec<u8>)],
 ) -> Result<Vec<u8>, PdfError> {
+    let out = emit(data, obj, subs)?;
+    if subs.is_empty() && emit(&out, obj, &[])? != out {
+        return Err(err(
+            ErrorCode::MalformedPdf,
+            &format!(
+                "content stream {} {} R has an ambiguous inline image",
+                obj.num, obj.generation
+            ),
+        ));
+    }
+    Ok(out)
+}
+
+fn emit(data: &[u8], obj: ObjectId, subs: &[(Range<usize>, Vec<u8>)]) -> Result<Vec<u8>, PdfError> {
     let mut out = Vec::with_capacity(data.len());
     let mut used = vec![false; subs.len()];
     let mut ops = UntypedIter::new(data);

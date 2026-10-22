@@ -66,15 +66,17 @@
       "bytes": 19,
       "origin": "synthetic, minimized by cargo fuzz tmin from a fuzz-smoke finding",
       "license": "synthetic, generated (Foliark, owner-authored)"
-    }
-  ],
-  "openFindings": [
+    },
     {
-      "path": "open-findings/content_reemit-3.bin",
+      "path": "content_reemit-3.bin",
       "target": "content_reemit",
       "kind": "non-idempotent output",
-      "cause": "nested garbage inline images (BI ID ... BI ID with EI inside data) re-emit differently on the second pass; no data of a valid stream is affected",
-      "status": "OPEN, not fixed (NEW-57 tool budget); run.sh content_reemit exits non-zero until fixed"
+      "cause": "nested garbage inline images (BI ID ... BI ID, EI inside data) re-emit differently on the second pass",
+      "fix": "writer/content.rs: output must be a fixed point of re-emission, else MALFORMED_PDF (ADR 0002)",
+      "sha256": "acd95cfbacc5742095966049fbb4b19894e8510310d4dd0e3a5734f216e7c11a",
+      "bytes": 14,
+      "origin": "synthetic, minimized by cargo fuzz tmin from a fuzz-smoke finding",
+      "license": "synthetic, generated (Foliark, owner-authored)"
     }
   ]
 }
