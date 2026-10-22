@@ -102,9 +102,18 @@ impl Filter {
             Self::LzwDecode => lzw_flate::lzw::decode(data, params, max_output)
                 .map(FilterResult::from_data)
                 .ok_or(DecodeFailure::StreamDecode),
-            Self::FlateDecode => lzw_flate::flate::decode(data, params, strict, max_output)
-                .map(FilterResult::from_data)
-                .ok_or(DecodeFailure::StreamDecode),
+            Self::FlateDecode => {
+                // The decoded size of an image, from its dictionary: one allocation, no regrowth.
+                let bits = u64::from(image_params.bpc.unwrap_or(8))
+                    * u64::from(image_params.num_components.unwrap_or(0))
+                    * u64::from(image_params.width);
+                let rows = u64::from(image_params.height);
+                let hint = usize::try_from((bits.div_ceil(8) + 1).saturating_mul(rows))
+                    .unwrap_or(0);
+                lzw_flate::flate::decode(data, params, strict, max_output, hint)
+                    .map(FilterResult::from_data)
+                    .ok_or(DecodeFailure::StreamDecode)
+            }
             #[cfg(feature = "images")]
             Self::DctDecode => {
                 dct::decode(data, params, image_params).ok_or(DecodeFailure::ImageDecode)

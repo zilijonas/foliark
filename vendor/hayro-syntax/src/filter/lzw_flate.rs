@@ -18,14 +18,15 @@ pub(crate) mod flate {
         params: &Dict<'_>,
         strict: bool,
         max: usize,
+        hint: usize,
     ) -> Option<Vec<u8>> {
         use flate2::read::{DeflateDecoder, ZlibDecoder};
         use std::io::Read;
 
         // Reads at most `max + 1` bytes, so an oversized stream is noticed without being built.
-        fn zlib_stream(data: &[u8], max: usize) -> Option<Vec<u8>> {
+        fn zlib_stream(data: &[u8], max: usize, hint: usize) -> Option<Vec<u8>> {
             let mut decoder = ZlibDecoder::new(data).take((max as u64).saturating_add(1));
-            let mut result = Vec::new();
+            let mut result = Vec::with_capacity(hint);
             decoder.read_to_end(&mut result).ok().map(|_| result)
         }
 
@@ -35,7 +36,12 @@ pub(crate) mod flate {
             decoder.read_to_end(&mut result).ok().map(|_| result)
         }
 
-        let decoded = zlib_stream(data, max)
+        // The caller's expected output size, kept under what the input can inflate to (deflate
+        // reaches about 1032:1) and the cap, so the buffer is allocated once and never regrown.
+        let hint = hint
+            .min(data.len().saturating_mul(1032))
+            .min(max.saturating_add(1));
+        let decoded = zlib_stream(data, max, hint)
             .or_else(|| deflate_stream(data, max))
             .or_else(|| {
                 warn!("flate stream is broken, decoding with fallback");
@@ -55,6 +61,7 @@ pub(crate) mod flate {
         params: &Dict<'_>,
         strict: bool,
         max: usize,
+        _hint: usize,
     ) -> Option<Vec<u8>> {
         let decoded = fallback::decode(data, strict, max)?;
         if decoded.len() > max {
@@ -1091,7 +1098,7 @@ mod tests {
             0x78, 0x9c, 0xf3, 0x48, 0xcd, 0xc9, 0xc9, 0x7, 0x0, 0x5, 0x8c, 0x1, 0xf5,
         ];
 
-        let decoded = flate::decode(&input, &Dict::default(), false, usize::MAX).unwrap();
+        let decoded = flate::decode(&input, &Dict::default(), false, usize::MAX, 0).unwrap();
         assert_eq!(decoded, b"Hello");
     }
 
@@ -1099,7 +1106,7 @@ mod tests {
     fn decode_flate() {
         let input = [0xf3, 0x48, 0xcd, 0xc9, 0xc9, 0x7, 0x0];
 
-        let decoded = flate::decode(&input, &Dict::default(), false, usize::MAX).unwrap();
+        let decoded = flate::decode(&input, &Dict::default(), false, usize::MAX, 0).unwrap();
         assert_eq!(decoded, b"Hello");
     }
     
