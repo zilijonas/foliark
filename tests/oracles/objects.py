@@ -245,6 +245,15 @@ def region_colors(pix, m, reg, cap=8_000_000):
     return seen, count
 
 
+def plane_pixmap(doc, x):
+    """Samples of image xref x. A 1-bit /ImageMask stencil has no colour space (PyMuPDF refuses it), so it is unpacked to gray by hand."""
+    if doc.xref_get_key(x, "ImageMask")[1] != "true":
+        return fitz.Pixmap(doc, x)
+    w, h = int(doc.xref_get_key(x, "Width")[1]), int(doc.xref_get_key(x, "Height")[1])
+    data, row = doc.xref_stream(x), (w + 7) // 8
+    return fitz.Pixmap(fitz.csGRAY, w, h, bytes(255 * (data[j * row + i // 8] >> (7 - i % 8) & 1) for j in range(h) for i in range(w)), False)
+
+
 def image_users(doc, xref, cache={}):
     """Pages (0-based) whose occurrences use xref; computed lazily, only to explain a failure."""
     key = id(doc)
@@ -279,7 +288,7 @@ def image_region(doc, r):
                     planes.append((key, int(v.split()[0]), None))
             bad = []
             for name, px, want in planes:
-                seen, cnt = region_colors(fitz.Pixmap(doc, px), m, reg)
+                seen, cnt = region_colors(plane_pixmap(doc, px), m, reg)
                 if not cnt:
                     bad.append("%s: no sample under region (placement not mapped)" % name)
                 elif len(seen) != 1 or (want and seen != {want}):

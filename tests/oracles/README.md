@@ -24,7 +24,7 @@ Run `controls.py` first; an oracle that has not just caught the leaky controls p
 | Revisions | exactly one `%%EOF` and `startxref`, no `/Prev`, no duplicate object definitions | REVISION |
 | Orphans | every xref object is reachable from the trailer; no raw objects missing from the xref | ORPHAN |
 | Features | no /Info values, /Metadata (XMP), /EmbeddedFiles, /JavaScript, /JS, /OpenAction, /AA, /AcroForm, /OCProperties, /Encrypt unless `allow`ed | FEATURE |
-| Image pixels | every image occurrence (page, Form XObject, any CTM: rotated, scaled, mirrored, any page /Rotate) under a display-space rect has one colour in its colour samples AND in its SMask / stencil `/Mask` samples (optionally an exact `color`); one finding per occurrence, naming the other pages that share the xref (a surviving occurrence still holding the pixels = missing clone) | IMAGE_REGION |
+| Image pixels | every image occurrence (page, Form XObject, any CTM: rotated, scaled, mirrored, any page /Rotate) under a display-space rect has one colour in its colour samples AND in its SMask / `/Mask` samples (an `/ImageMask` stencil image is unpacked bit by bit, NEW-35) (optionally an exact `color`); one finding per occurrence, naming the other pages that share the xref (a surviving occurrence still holding the pixels = missing clone) | IMAGE_REGION |
 | Vector paths | no filled or stroked path geometry (page or Form content, PyMuPDF `get_drawings`) reaches into a display-space rect beyond `tol` (0.25 pt) except the declared `fill` (RGB 0-255, must be the last painted hit and cover the region) and paths inside a declared `allow` rect | VECTOR_REGION |
 | Never silent | decode error, truncated flate, unknown filter, decode cap, unreadable file, extractor failure, crash, timeout | DECODE, UNSUPPORTED, CAP, OPEN, TIMEOUT, CRASH |
 
@@ -43,6 +43,9 @@ Each leaky output must produce its expected codes; a case that should be caught 
 - Vector check: geometry only. Clips, blend/opacity, shadings (`sh`) and tiling patterns are not evaluated; a path hidden by a clip or 0 opacity still counts. Non-axis-aligned fills are polygons (curves sampled at 12 steps).
 - Raster export outputs: use the image-region check on the page image; text checks pass vacuously by construction.
 - Encrypted outputs fail by design (the engine never re-encrypts); AES inputs need `cryptography` for pypdf, otherwise TEXT_PYPDF fails loudly.
+
+## Image samples for tests (NEW-34/35, `samples.py`)
+`samples.py out.pdf` prints every page's image XObjects and every image object of the file as JSON (pikepdf only: decoded sample hex, color space, bits, filter, SMask, /Mask, /Decode, page content text); `samples.py --jpeg|--rgba file` prints PIL's decode of a source image. The Rust redaction tests compare these independent samples with geometry computed in the test.
 
 ## Fidelity: output vs input outside the changed regions (NEW-21, `fidelity.py`)
 ```sh
