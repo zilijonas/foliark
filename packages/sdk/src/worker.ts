@@ -34,7 +34,7 @@ async function run(op: OpName, doc: string | undefined, a: Args): Promise<{ resu
       return { result: Array.from({ length: wasm.pageCount(id) }, (_, i) => wasm.pageGeometry(id, i)) };
     case "renderPage": {
       const r = wasm.renderPage(id, a.page, a.scale ?? 1);
-      const data = r.data.buffer as ArrayBuffer;
+      const data = r.takeData().buffer as ArrayBuffer;
       const scale = a.scale ?? 1;
       const out = { width: r.width, height: r.height, scale, clip: { x: 0, y: 0, width: r.width / scale, height: r.height / scale }, complete: true, warnings: [], data };
       r.free();

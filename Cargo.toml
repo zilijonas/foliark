@@ -31,3 +31,14 @@ lto = true
 codegen-units = 1
 panic = "abort"
 strip = true
+# Raster hot path at opt-level 3 (4 ms/page vs 130 at "s", docs/performance/render-spike.md); everything else stays "s" for size.
+[profile.release.package.vello_cpu]
+opt-level = 3
+[profile.release.package.vello_common]
+opt-level = 3
+[profile.release.package.fearless_simd]
+opt-level = 3
+[profile.release.package.hayro]
+opt-level = 3
+[profile.release.package.kurbo]
+opt-level = 3
