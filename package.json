@@ -9,6 +9,7 @@
     "smoke": "node tests/smoke/run.mjs"
   },
   "devDependencies": {
+    "binaryen": "132.0.0",
     "playwright": "1.62.1"
   }
 }

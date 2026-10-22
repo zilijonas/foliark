@@ -1,0 +1,6 @@
+{
+  "name": "consumer-esbuild",
+  "private": true,
+  "type": "module",
+  "devDependencies": { "esbuild": "0.28.2", "typescript": "5.9.3" }
+}
