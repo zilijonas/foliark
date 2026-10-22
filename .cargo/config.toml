@@ -1,0 +1,4 @@
+# vello_cpu/fearless_simd only take their SIMD paths when simd128 is a compile-time feature (30x on the raster path).
+# All evergreen browsers ship wasm SIMD (Chrome 91, Firefox 89, Safari 16.4).
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "target-feature=+simd128"]

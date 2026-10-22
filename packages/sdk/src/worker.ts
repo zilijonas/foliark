@@ -17,7 +17,7 @@ function handle(m: Msg): { result: unknown; transfer?: Transferable[] } {
       return { result: wasm.pageGeometry(m.doc, m.page) };
     case "renderPage": {
       const r = wasm.renderPage(m.doc, m.page, m.scale);
-      const data = r.data;
+      const data = r.takeData();
       const out = { width: r.width, height: r.height, data };
       r.free();
       return { result: out, transfer: [data.buffer] };

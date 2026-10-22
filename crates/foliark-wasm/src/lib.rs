@@ -67,10 +67,10 @@ impl RenderedPage {
     pub fn height(&self) -> u32 {
         self.height
     }
-    /// RGBA8 straight alpha, copied out of wasm memory.
-    #[wasm_bindgen(getter)]
-    pub fn data(&self) -> Vec<u8> {
-        self.data.clone()
+    /// RGBA8 straight alpha, copied out of wasm memory. Moves the pixels out: a second call returns an empty array.
+    #[wasm_bindgen(js_name = takeData)]
+    pub fn take_data(&mut self) -> Vec<u8> {
+        std::mem::take(&mut self.data)
     }
 }
 
