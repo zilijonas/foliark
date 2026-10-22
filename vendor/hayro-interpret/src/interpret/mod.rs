@@ -39,6 +39,8 @@ pub type CMapResolverFn =
     Arc<dyn Fn(hayro_cmap::CMapName<'_>) -> Option<&'static [u8]> + Send + Sync>;
 /// A callback function for resolving warnings during interpretation.
 pub type WarningSinkFn = Arc<dyn Fn(InterpreterWarning) + Send + Sync>;
+/// A callback asked before every operator whether interpretation should stop.
+pub type StopFn = Arc<dyn Fn() -> bool + Send + Sync>;
 
 #[derive(Clone)]
 /// Settings that should be applied during the interpretation process.
@@ -113,6 +115,12 @@ pub struct InterpreterSettings {
     /// Do not draw (or decode) an image or inline image with more pixels than this and report
     /// [`InterpreterWarning::ImageTooLarge`]. Default `u64::MAX`, so nothing is skipped.
     pub max_image_pixels: u64,
+    /// Asked before every operator (also inside Forms, patterns, Type3 procedures and
+    /// annotation appearances). Once it returns `true` the interpreter stops: every remaining
+    /// operator is skipped and nothing more is drawn or reported, so the output is incomplete
+    /// and the caller must discard it. A caller that needs cancellation or a work budget keeps
+    /// its own flag and answers from it.
+    pub should_stop: Option<StopFn>,
 }
 
 impl Default for InterpreterSettings {
@@ -135,6 +143,7 @@ impl Default for InterpreterSettings {
             strict_streams: false,
             report_font_substitution: false,
             max_image_pixels: u64::MAX,
+            should_stop: None,
         }
     }
 }
@@ -181,6 +190,9 @@ pub fn interpret_page<'a>(
         && let Some(annot_arr) = page.raw().get::<Array<'_>>(ANNOTS)
     {
         for annot in annot_arr.iter::<Dict<'_>>() {
+            if context.should_stop() {
+                break;
+            }
             let flags = annot.get::<u32>(F).unwrap_or(0);
 
             // Annotation should be hidden.
@@ -273,6 +285,9 @@ pub fn interpret<'a>(
     context.save_state();
 
     while let Some((op, span)) = ops.next_with_span() {
+        if context.should_stop() {
+            break;
+        }
         let (stream, range) = context.source.locate(span);
         device.begin_operator(stream, range);
 

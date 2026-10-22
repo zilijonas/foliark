@@ -14,6 +14,7 @@ use hayro::vello_cpu::color::{AlphaColor, Srgb};
 use hayro::vello_cpu::peniko::ImageAlphaType;
 use hayro::vello_cpu::{Pixmap, RasterizerSettings, RenderContext, Resources, TargetInit};
 use hayro::{RenderCache, RenderSettings, render_into};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 /// Spec §1.3: each rendered side is at most 16384 px.
@@ -110,9 +111,17 @@ impl Document {
 
         let page = self.0.page(index)?;
         let warnings = Arc::new(Mutex::new(Vec::<RenderWarning>::new()));
+        // The renderer has no device of ours to charge, so count operators here (one work unit
+        // each) and let the interpreter stop on a cancel or when the count passes the budget.
+        let ops = Arc::new(AtomicU64::new(0));
+        let (cancel, counted, max_ops) =
+            (self.0.cancel_handle(), ops.clone(), limits.max_work_units);
         let mut settings = InterpreterSettings {
             render_annotations: annotations,
             report_font_substitution: true,
+            should_stop: Some(Arc::new(move || {
+                cancel.load(Ordering::Relaxed) || counted.fetch_add(1, Ordering::Relaxed) >= max_ops
+            })),
             max_image_pixels: limits.max_image_pixels.into(),
             ..Default::default()
         };
@@ -220,6 +229,11 @@ impl Document {
             &mut ctx,
             Affine::new([a, b, c, d, e, f]),
         );
+        if self.0.cancelled() {
+            return Err(PdfError::new(ErrorCode::Cancelled));
+        }
+        let ops = ops.load(Ordering::Relaxed);
+        limits::check("maxWorkUnits", ops, max_ops)?;
         // Inline images and images the budget scan did not see are refused at draw time.
         if let Some(pixels) = *too_large.lock().unwrap() {
             return Err(PdfError::limit(

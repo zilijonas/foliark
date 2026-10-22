@@ -1,7 +1,11 @@
 //! Reader, renderer, text and the `Engine` session layer (spec §13); the other §14 modules land with their tasks.
 use foliark_model::{Limits, PageGeometry, PdfError};
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
+mod cache;
 mod document;
+pub mod edit;
 mod engine;
 pub mod interpret;
 pub mod limits;
@@ -12,7 +16,7 @@ pub mod text;
 pub mod writer;
 
 pub use document::{Applied, Binding, Committed, EditApplier, NotBuilt, StoredRedaction};
-pub use engine::{BoxTask, DocId, Engine, Step, Task};
+pub use engine::{BoxTask, DocId, Engine, Stats, Step, Task};
 pub use render::{RenderOptions, RenderedPage};
 
 pub struct Document(reader::Document);
@@ -43,6 +47,15 @@ impl Document {
             allow_repaired,
             limits,
         )?))
+    }
+
+    /// See [`reader::Document::with_cancel`].
+    pub fn with_cancel(self, flag: Arc<AtomicBool>) -> Self {
+        Self(self.0.with_cancel(flag))
+    }
+
+    pub fn cancel_handle(&self) -> Arc<AtomicBool> {
+        self.0.cancel_handle()
     }
 
     /// The strict reader behind this document.

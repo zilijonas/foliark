@@ -3,7 +3,7 @@
 //! views into wasm memory. Errors are thrown as `{ code, message, details? }` objects.
 //! Long ops are started (`startX` returns a task id) and driven with `step` so the worker can
 //! yield and check cancellation between steps.
-use foliark_engine::{BoxTask, RenderOptions, RenderedPage, Step};
+use foliark_engine::{RenderOptions, RenderedPage, Step};
 use foliark_model::{
     ChangeSet, ExportMode, ExportPolicy, ExtractOptions, FoliarkError, FontSource, FontStyle,
     Limits, PdfError, Point, Rect, SearchOptions,
@@ -11,8 +11,10 @@ use foliark_model::{
 use js_sys::{Object, Reflect, Uint8Array};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
+
+mod operation;
+use operation::Operations;
 
 fn to_js<T: Serialize>(v: &T) -> Result<JsValue, JsValue> {
     let s = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
@@ -37,16 +39,6 @@ fn err(e: PdfError) -> JsValue {
 
 fn set(o: &Object, key: &str, v: JsValue) -> Result<(), JsValue> {
     Reflect::set(o, &key.into(), &v).map(|_| ())
-}
-
-/// A task with its output type erased to the JS value the worker receives.
-type Erased = Box<dyn FnMut(&mut foliark_engine::Engine, u64) -> Result<Step<JsValue>, JsValue>>;
-
-fn erase<T: 'static>(mut task: BoxTask<T>, finish: fn(T) -> Result<JsValue, JsValue>) -> Erased {
-    Box::new(move |e, budget| match task.step(e, budget).map_err(err)? {
-        Step::Pending(p) => Ok(Step::Pending(p)),
-        Step::Done(v) => finish(v).map(Step::Done),
-    })
 }
 
 /// Spec 1.3 `RenderedPage`: the header fields plus `data`, an owned RGBA8 copy.
@@ -74,11 +66,18 @@ struct RenderArgs {
     background: Option<[f64; 4]>,
 }
 
+/// Linear memory the module has grown to (it never shrinks; a new worker returns it).
+fn memory_bytes() -> f64 {
+    #[cfg(target_arch = "wasm32")]
+    return (core::arch::wasm32::memory_size(0) * 65536) as f64;
+    #[cfg(not(target_arch = "wasm32"))]
+    0.0
+}
+
 #[wasm_bindgen]
 pub struct Engine {
     inner: foliark_engine::Engine,
-    tasks: HashMap<u32, Erased>,
-    next_task: u32,
+    ops: Operations,
 }
 
 #[wasm_bindgen]
@@ -89,8 +88,7 @@ impl Engine {
         let limits: Limits = from_js(limits)?;
         Ok(Engine {
             inner: foliark_engine::Engine::new(limits).with_generation(generation),
-            tasks: HashMap::new(),
-            next_task: 0,
+            ops: Operations::default(),
         })
     }
 
@@ -182,12 +180,6 @@ impl Engine {
         self.inner.close(doc);
     }
 
-    fn start(&mut self, task: Erased) -> u32 {
-        self.next_task += 1;
-        self.tasks.insert(self.next_task, task);
-        self.next_task
-    }
-
     #[wasm_bindgen(js_name = startExtractText)]
     pub fn start_extract_text(
         &mut self,
@@ -196,8 +188,8 @@ impl Engine {
         options: JsValue,
     ) -> Result<u32, JsValue> {
         let o: ExtractOptions = from_js(options)?;
-        let t = erase(self.inner.extract_text(doc, page, o), |v| to_js(&v));
-        Ok(self.start(t))
+        let t = operation::erase(self.inner.extract_text(doc, page, o), |v| to_js(&v));
+        Ok(self.ops.start(t))
     }
 
     #[wasm_bindgen(js_name = startSearch)]
@@ -208,8 +200,8 @@ impl Engine {
         options: JsValue,
     ) -> Result<u32, JsValue> {
         let o: SearchOptions = from_js(options)?;
-        let t = erase(self.inner.search(doc, query, o), |v| to_js(&v));
-        Ok(self.start(t))
+        let t = operation::erase(self.inner.search(doc, query, o), |v| to_js(&v));
+        Ok(self.ops.start(t))
     }
 
     #[wasm_bindgen(js_name = startRender)]
@@ -222,23 +214,23 @@ impl Engine {
             annotations: a.annotations.unwrap_or(d.annotations),
             background: a.background.unwrap_or(d.background),
         };
-        let t = erase(self.inner.render(doc, page, o), rendered);
-        Ok(self.start(t))
+        let t = operation::erase(self.inner.render(doc, page, o), rendered);
+        Ok(self.ops.start(t))
     }
 
     #[wasm_bindgen(js_name = startCapabilities)]
     pub fn start_capabilities(&mut self, doc: &str, deep: Option<bool>) -> u32 {
-        let t = erase(self.inner.capabilities(doc, deep.unwrap_or(false)), |v| {
+        let t = operation::erase(self.inner.capabilities(doc, deep.unwrap_or(false)), |v| {
             to_js(&v)
         });
-        self.start(t)
+        self.ops.start(t)
     }
 
     #[wasm_bindgen(js_name = startApplyChanges)]
     pub fn start_apply_changes(&mut self, doc: &str, changes: JsValue) -> Result<u32, JsValue> {
         let cs: ChangeSet = required(changes)?;
-        let t = erase(self.inner.apply_changes(doc, cs), |v| to_js(&v));
-        Ok(self.start(t))
+        let t = operation::erase(self.inner.apply_changes(doc, cs), |v| to_js(&v));
+        Ok(self.ops.start(t))
     }
 
     #[wasm_bindgen(js_name = startPrepareExport)]
@@ -249,8 +241,8 @@ impl Engine {
         policy: JsValue,
     ) -> Result<u32, JsValue> {
         let (mode, policy): (ExportMode, ExportPolicy) = (required(mode)?, from_js(policy)?);
-        let t = erase(self.inner.prepare_export(doc, mode, policy), |v| to_js(&v));
-        Ok(self.start(t))
+        let t = operation::erase(self.inner.prepare_export(doc, mode, policy), |v| to_js(&v));
+        Ok(self.ops.start(t))
     }
 
     #[wasm_bindgen(js_name = prepareParagraph)]
@@ -279,14 +271,9 @@ impl Engine {
     /// Advance a task by about `budget` work units: `{ done: false, progress }` or
     /// `{ done: true, result }`. A task that fails, finishes or is cancelled is gone.
     pub fn step(&mut self, task: u32, budget: f64) -> Result<JsValue, JsValue> {
-        let mut t = self
-            .tasks
-            .remove(&task)
-            .ok_or_else(|| err(PdfError::new(foliark_model::ErrorCode::InvalidArgument)))?;
         let out = Object::new();
-        match t(&mut self.inner, budget as u64)? {
+        match self.ops.step(&mut self.inner, task, budget as u64)? {
             Step::Pending(p) => {
-                self.tasks.insert(task, t);
                 set(&out, "done", false.into())?;
                 set(&out, "progress", to_js(&p)?)?;
             }
@@ -298,8 +285,26 @@ impl Engine {
         Ok(out.into())
     }
 
+    /// Diagnostics for leak checks, no document content: what is held right now.
+    pub fn stats(&self) -> Result<JsValue, JsValue> {
+        let s = self.inner.stats();
+        let out = Object::new();
+        for (key, v) in [
+            ("documents", s.documents as f64),
+            ("sourceBytes", s.source_bytes as f64),
+            ("cacheEntries", s.cache_entries as f64),
+            ("cacheBytes", s.cache_bytes as f64),
+            ("cacheEvictions", s.cache_evictions as f64),
+            ("tasks", self.ops.len() as f64),
+            ("memoryBytes", memory_bytes()),
+        ] {
+            set(&out, key, v.into())?;
+        }
+        Ok(out.into())
+    }
+
     /// Drop a task without finishing it. Unknown ids are ignored.
     pub fn cancel(&mut self, task: u32) {
-        self.tasks.remove(&task);
+        self.ops.cancel(task);
     }
 }

@@ -1,6 +1,6 @@
 // Main-thread client (spec 1, 10): owns the worker, speaks the validated envelope of spec 10.4, keeps the
-// registered fonts so a reset can re-send them, and hands out `DocumentHandle`s. Hang supervision and crash
-// recovery policy are NEW-29; `restart()` and the error/fatal paths already share one reset routine.
+// registered fonts so a reset can re-send them, and hands out `DocumentHandle`s. Every way a worker is replaced
+// (hang watchdog, error, fatal, out of memory, restart()) goes through the one `reset` routine (spec 10.2).
 import { makeHandle, type DocumentHandle, type Link, type Signal } from "./document.js";
 import type { DocumentInfo } from "./generated/DocumentInfo.js";
 import type { FontMatchRule } from "./generated/FontMatchRule.js";
@@ -8,7 +8,9 @@ import type { FontSource } from "./generated/FontSource.js";
 import type { Limits } from "./generated/Limits.js";
 import type { OpName } from "./generated/OpName.js";
 import type { RegisteredFont } from "./generated/RegisteredFont.js";
+import { Lifecycle } from "./lifecycle.js";
 import { checkRequest, Correlator, FoliarkError, postTransfer } from "./protocol.js";
+import { DEFAULT_HANG_TIMEOUT_MS, failureReason, Watchdog } from "./worker-supervisor.js";
 
 export type ResetReason = "hang" | "crash" | "oom" | "restart";
 
@@ -56,13 +58,37 @@ export async function createFoliark(o: FoliarkOptions): Promise<Foliark> {
   if ((o.workerUrl === undefined) === (o.worker === undefined)) {
     throw new FoliarkError("INVALID_ARGUMENT", "pass exactly one of workerUrl and worker");
   }
+  const hangTimeoutMs = o.hangTimeoutMs ?? DEFAULT_HANG_TIMEOUT_MS;
+  if (!(Number.isFinite(hangTimeoutMs) && hangTimeoutMs > 0)) {
+    throw new FoliarkError("INVALID_ARGUMENT", "hangTimeoutMs must be a positive number");
+  }
   const corr = new Correlator<Waiter>();
   const violation = o.onProtocolViolation ?? ((reason) => console.warn(`foliark protocol violation: ${reason}`));
   const listeners = new Set<(e: { generation: number; reason: ResetReason }) => void>();
   /** Client-held bytes of every registered font, re-sent after a reset (spec 10.2). */
   const fonts: { bytes: Uint8Array; family: string; weight: number; style: string }[] = [];
+  const lifecycle = new Lifecycle();
   let disposed = false;
   let worker!: Worker;
+  // No message from the worker for `hangTimeoutMs` while a request is unanswered: it is stuck in one call.
+  const watchdog = new Watchdog(hangTimeoutMs, () => {
+    violation(`worker silent for ${hangTimeoutMs} ms`);
+    reset("hang").catch(resetFailed);
+  });
+  const resetFailed = (e: unknown) => {
+    if (!disposed) violation(`reset failed: ${e instanceof Error ? e.message : String(e)}`);
+  };
+  /** Terminal: no worker, no timer, every waiter settled. */
+  const shutdown = () => {
+    disposed = true;
+    watchdog.stop();
+    worker.terminate();
+    const err = new FoliarkError("CLIENT_DISPOSED", "client disposed");
+    for (const w of corr.reset()) w.reject(err);
+    lifecycle.releaseAll();
+    fonts.length = 0; // the client-held font bytes are the one big thing it keeps
+    listeners.clear();
+  };
 
   const call = <R>(op: OpName, args: object, c: { doc?: string; transfer?: ArrayBuffer[]; signal?: AbortSignal } = {}) =>
     new Promise<R>((resolve, reject) => {
@@ -81,6 +107,7 @@ export async function createFoliark(o: FoliarkOptions): Promise<Foliark> {
         reject: (e) => settle(() => reject(e))(),
       });
       msg.id = id;
+      watchdog.arm();
       // The worker answers a cancelled op itself (CANCELLED), so the correlator settles it like any other.
       if (c.signal) {
         onAbort = () => worker.postMessage({ v: 1, cancel: id });
@@ -101,6 +128,8 @@ export async function createFoliark(o: FoliarkOptions): Promise<Foliark> {
     w.onmessage = (e) => {
       if (w !== worker) return;
       const m = corr.receive(e.data);
+      if (corr.size) watchdog.kick();
+      else watchdog.stop();
       if (m.kind === "result") m.ctx.resolve(m.value);
       else if (m.kind === "failure") {
         if (m.error.code === "PROTOCOL_ERROR") violation(m.error.message);
@@ -108,7 +137,9 @@ export async function createFoliark(o: FoliarkOptions): Promise<Foliark> {
       } else if (m.kind === "dropped") violation(m.reason);
       else if (m.kind === "event" && m.event === "fatal") crash(m.reason ?? "worker fatal");
     };
-    w.onerror = (e) => crash(`worker error: ${e.message}`);
+    w.onerror = (e) => {
+      if (w === worker) crash(`worker error: ${e.message}`, e.message);
+    };
     const init = call("init", {
       wasmUrl: String(o.wasmUrl),
       cmapsUrl: o.cmapsUrl === undefined ? undefined : String(o.cmapsUrl),
@@ -126,7 +157,9 @@ export async function createFoliark(o: FoliarkOptions): Promise<Foliark> {
 
   async function reset(reason: ResetReason): Promise<void> {
     if (disposed) return;
+    watchdog.stop();
     worker.terminate();
+    lifecycle.releaseAll(); // every handle of the dead generation is gone, whoever still holds it
     const err = new FoliarkError("WORKER_RESET", `worker reset (${reason})`, { recoverable: true });
     for (const w of corr.reset()) w.reject(err);
     const ready = spawn();
@@ -139,9 +172,9 @@ export async function createFoliark(o: FoliarkOptions): Promise<Foliark> {
     }
     await ready;
   }
-  const crash = (why: string) => {
+  const crash = (why: string, cause: unknown = why) => {
     violation(why);
-    reset("crash").catch((e) => violation(`reset failed: ${e instanceof Error ? e.message : String(e)}`));
+    reset(failureReason(cause)).catch(resetFailed);
   };
 
   const link: Link = {
@@ -152,9 +185,16 @@ export async function createFoliark(o: FoliarkOptions): Promise<Foliark> {
       return disposed;
     },
     call,
+    own: (release) => lifecycle.own(release),
   };
 
-  await spawn();
+  try {
+    await spawn();
+  } catch (e) {
+    // A client that never started owns no worker.
+    shutdown();
+    throw e;
+  }
 
   return {
     get generation() {
@@ -183,11 +223,7 @@ export async function createFoliark(o: FoliarkOptions): Promise<Foliark> {
       return () => void listeners.delete(cb);
     },
     async dispose() {
-      if (disposed) return;
-      disposed = true;
-      worker.terminate();
-      const err = new FoliarkError("CLIENT_DISPOSED", "client disposed");
-      for (const w of corr.reset()) w.reject(err);
+      if (!disposed) shutdown();
     },
   };
 }

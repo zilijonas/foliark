@@ -8,6 +8,8 @@ use hayro::hayro_syntax::object::{Array, Dict, Name, ObjRef, Object, Stream};
 use hayro::hayro_syntax::page::Page;
 use hayro::hayro_syntax::{DecryptionError, LoadPdfError, Pdf};
 use std::cell::OnceCell;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 mod preflight;
 
@@ -31,6 +33,8 @@ pub struct Document {
     limits: Limits,
     /// Result of the whole-document budget scan, filled on first use.
     scanned: OnceCell<Result<(), PdfError>>,
+    /// Set by the host to stop the interpreter mid-page (hayro P15); see [`Self::with_cancel`].
+    cancel: Arc<AtomicBool>,
 }
 
 impl Document {
@@ -88,9 +92,25 @@ impl Document {
             allow_repaired,
             limits,
             scanned: OnceCell::new(),
+            cancel: Arc::default(),
         };
         doc.check_repaired()?;
         Ok(doc)
+    }
+
+    /// Share `flag` with the host: while it is set, interpreting a page stops at the next
+    /// operator and the operation fails `CANCELLED` (never a partial page). The host clears it.
+    pub fn with_cancel(mut self, flag: Arc<AtomicBool>) -> Self {
+        self.cancel = flag;
+        self
+    }
+
+    pub fn cancel_handle(&self) -> Arc<AtomicBool> {
+        self.cancel.clone()
+    }
+
+    pub(crate) fn cancelled(&self) -> bool {
+        self.cancel.load(Ordering::Relaxed)
     }
 
     /// Whether the xref table was rebuilt. Repair is lazy, so this can turn true after `open`

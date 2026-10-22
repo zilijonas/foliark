@@ -1,6 +1,7 @@
 //! Engine sessions (spec §13): one `Engine` per worker owns the limits, the open documents,
 //! the font registry and the long-op `Task`s. One method per public op, `DocId` strings as
 //! handles. Ops that are not built yet return the typed refusal in [`not_built`].
+use crate::cache::DOC_CACHE_BYTES;
 use crate::document::{Binding, Committed, EditApplier, NotBuilt, Session};
 use crate::{Document, RenderOptions, RenderedPage};
 use foliark_model::{
@@ -11,6 +12,8 @@ use foliark_model::{
 };
 use foliark_text::Registry;
 use std::collections::HashMap;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
 pub type DocId = String;
 
@@ -28,6 +31,18 @@ pub trait Task {
 }
 
 pub type BoxTask<T> = Box<dyn Task<Out = T>>;
+
+/// Diagnostics for tests and leak checks: what the engine currently holds. No content.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct Stats {
+    pub documents: usize,
+    /// Input bytes kept by open documents (each also lives parsed).
+    pub source_bytes: usize,
+    pub cache_entries: usize,
+    /// Estimated heap of the cached page layouts.
+    pub cache_bytes: usize,
+    pub cache_evictions: u64,
+}
 
 /// An op the spec defines but this build does not implement. `INVALID_ARGUMENT` with
 /// `details.feature` is the refusal: the spec has no dedicated code, `INTERNAL` would make
@@ -70,6 +85,8 @@ pub struct Engine {
     docs: HashMap<DocId, Session>,
     fonts: Registry,
     applier: Box<dyn EditApplier>,
+    cancel: Arc<AtomicBool>,
+    cache_bytes: usize,
 }
 
 fn finite(values: &[f64]) -> Result<(), PdfError> {
@@ -89,7 +106,23 @@ impl Engine {
             docs: HashMap::new(),
             fonts: Registry::new(),
             applier: Box::new(NotBuilt),
+            cancel: Arc::default(),
+            cache_bytes: DOC_CACHE_BYTES,
         }
+    }
+
+    /// Cap the layout cache of each document opened from now on (default 16 MiB).
+    pub fn with_cache_bytes(mut self, bytes: usize) -> Self {
+        self.cache_bytes = bytes;
+        self
+    }
+
+    /// Setting this flag from another thread stops the page being interpreted at the next
+    /// operator, and that operation fails `CANCELLED` with nothing changed. The host clears it
+    /// afterwards. A single-threaded wasm worker cannot set it mid-step: there a cancel is
+    /// honoured between steps, and a step that does not return is ended by the client's reset.
+    pub fn cancel_handle(&self) -> Arc<AtomicBool> {
+        self.cancel.clone()
     }
 
     /// Replace the text-edit implementation (default: every edit is refused as not built).
@@ -114,6 +147,28 @@ impl Engine {
 
     pub fn open_documents(&self) -> usize {
         self.docs.len()
+    }
+
+    pub fn stats(&self) -> Stats {
+        self.docs.values().fold(Stats::default(), |mut s, d| {
+            s.documents += 1;
+            s.source_bytes += d.source_len();
+            s.cache_entries += d.index.len();
+            s.cache_bytes += d.index.bytes();
+            s.cache_evictions += d.index.evictions();
+            s
+        })
+    }
+
+    /// Spec §4: a task started at one revision must finish at it. A commit in between makes it
+    /// `STALE_REVISION` instead of mixing two revisions in one result. `at` is the revision when
+    /// the task was created (`None`: the document was not open then, which fails as it always did).
+    fn still_at(&self, doc: &str, at: Option<u32>) -> Result<(), PdfError> {
+        let now = self.get(doc)?.revision;
+        match at {
+            Some(r) if r != now => Err(PdfError::new(ErrorCode::StaleRevision)),
+            _ => Ok(()),
+        }
     }
 
     fn get(&self, doc: &str) -> Result<&Session, PdfError> {
@@ -168,13 +223,14 @@ impl Engine {
             return Err(PdfError::limit("maxOpenDocuments", open + 1, max));
         }
         let source = bytes.clone();
-        let doc = Document::open_with_limits(bytes, password, allow_repaired, self.limits.clone())?;
+        let doc = Document::open_with_limits(bytes, password, allow_repaired, self.limits.clone())?
+            .with_cancel(self.cancel.clone());
         let info = doc.reader().info()?;
         self.next_doc += 1;
         let id = format!("{}-{}", self.generation, self.next_doc);
         self.docs.insert(
             id.clone(),
-            Session::new(id.clone(), source, doc, info.clone()),
+            Session::new(id.clone(), source, doc, info.clone(), self.cache_bytes),
         );
         Ok((id, info))
     }
@@ -253,8 +309,10 @@ impl Engine {
     }
 
     pub fn extract_text(&self, doc: &str, page: u32, opts: ExtractOptions) -> BoxTask<TextPage> {
+        let at = self.revision(doc).ok();
         let doc = doc.to_owned();
         once(move |e| {
+            e.still_at(&doc, at)?;
             let s = e.session(&doc)?;
             let mut text = s.layout(page, opts.include_ocg_hidden)?.page.clone();
             if !opts.chars {
@@ -267,6 +325,7 @@ impl Engine {
     /// Searches `opts.pages` (default all) in page order, one batch of pages per step.
     pub fn search(&self, doc: &str, query: &str, opts: SearchOptions) -> BoxTask<Vec<SearchHit>> {
         Box::new(SearchTask {
+            at: self.revision(doc).ok(),
             doc: doc.to_owned(),
             query: query.to_owned(),
             opts,
@@ -277,8 +336,12 @@ impl Engine {
     }
 
     pub fn render(&self, doc: &str, page: u32, opts: RenderOptions) -> BoxTask<RenderedPage> {
+        let at = self.revision(doc).ok();
         let doc = doc.to_owned();
-        once(move |e| e.session(&doc)?.doc().render_page(page as usize, opts))
+        once(move |e| {
+            e.still_at(&doc, at)?;
+            e.session(&doc)?.doc().render_page(page as usize, opts)
+        })
     }
 
     pub fn capabilities(&self, _doc: &str, _deep: bool) -> BoxTask<Capabilities> {
@@ -325,6 +388,7 @@ impl Engine {
 
 struct SearchTask {
     doc: DocId,
+    at: Option<u32>,
     query: String,
     opts: SearchOptions,
     /// Sorted, deduplicated; resolved on the first step so a gone document fails there.
@@ -337,6 +401,7 @@ impl Task for SearchTask {
     type Out = Vec<SearchHit>;
 
     fn step(&mut self, e: &mut Engine, budget: u64) -> Result<Step<Self::Out>, PdfError> {
+        e.still_at(&self.doc, self.at)?;
         let s = e.session(&self.doc)?;
         let pages = self.pages.get_or_insert_with(|| {
             let mut p: Vec<u32> = self

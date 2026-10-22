@@ -73,6 +73,13 @@ pub struct Context<'a> {
     pub(crate) source: Source,
 }
 
+impl Context<'_> {
+    /// Whether [`crate::InterpreterSettings::should_stop`] asks to stop.
+    pub(crate) fn should_stop(&self) -> bool {
+        self.settings.should_stop.as_ref().is_some_and(|f| f())
+    }
+}
+
 /// Where the instructions that are currently interpreted come from.
 pub(crate) struct Source {
     stream: ObjRef,

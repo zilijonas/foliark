@@ -79,6 +79,8 @@ export interface DocumentHandle {
 export interface Link {
   readonly generation: number;
   readonly disposed: boolean;
+  /** Register what the handle holds so reset and dispose release it (see lifecycle.ts); returns the early release. */
+  own(release: () => void): () => void;
   call<R>(op: OpName, args: object, o?: { doc?: string; transfer?: ArrayBuffer[]; signal?: AbortSignal }): Promise<R>;
 }
 
@@ -91,6 +93,11 @@ export function makeHandle(link: Link, id: string, info: DocumentInfo): Document
   let revision = 0;
   let closed = false;
   let pages: PageGeometry[] | undefined;
+  /** Gone: closed, or its worker was replaced or disposed. Drops what the handle caches. */
+  const release = link.own(() => {
+    closed = true;
+    pages = undefined;
+  });
 
   /** One validated call. A closed document, or one from before a reset, is gone. */
   const call = async <R>(op: OpName, args: object, signal?: AbortSignal, transfer?: ArrayBuffer[]): Promise<R> => {
@@ -161,13 +168,9 @@ export function makeHandle(link: Link, id: string, info: DocumentInfo): Document
     },
     async close() {
       if (closed) return;
-      if (link.disposed || link.generation !== generation) {
-        closed = true; // the worker that held it is gone, so there is nothing left to free
-        return;
-      }
+      if (link.disposed || link.generation !== generation) return release(); // its worker is gone, nothing left to free
       await call<null>("close", {});
-      closed = true;
-      pages = undefined;
+      release();
     },
   };
 }
