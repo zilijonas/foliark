@@ -5,7 +5,7 @@
 //! with their exact typed code and hand over no bytes. No skips: every manifest entry is a row.
 //! `cargo test -p foliark-engine --test strict_native -- --nocapture` prints the evidence table.
 mod common;
-use common::{python, repo, run, tmp};
+use common::{load_cjk_pack, python, repo, run, tmp};
 use foliark_engine::Engine;
 use foliark_model::{
     ChangeSet, ErrorCode, ExportMode, ExportPolicy, ExportReport, ExtractOptions, Limits, LossCode,
@@ -133,6 +133,7 @@ fn cases() -> Vec<Case> {
 /// secret (found by Foliark's own text) and region, native export, hand-over. The first typed
 /// error stops it; no stage after an error runs, so there are no bytes to take.
 fn export(c: &Case, input: &[u8], redact: bool) -> Result<(Vec<u8>, ExportReport), PdfError> {
+    load_cjk_pack(); // the SDK registers a document's CMaps at open
     let mut e = Engine::new(Limits::default());
     let result = (|| {
         let (doc, info) = e.open(input.to_vec(), c.password.as_deref(), false)?;

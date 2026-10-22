@@ -1,6 +1,7 @@
 //! Preflight: a cheap inventory of what a file contains, before any extraction. Reads
 //! dictionaries only; actions are never executed and signatures are only reported.
 use super::{Document, object_id};
+use crate::cmaps;
 use crate::limits::{self, Budget};
 use foliark_model::{DocumentFeatures, DocumentInfo, ErrorCode, PdfError};
 use hayro::hayro_syntax::object::stream::Stream;
@@ -40,12 +41,36 @@ impl Scan {
             || d.contains_key("AA")
             || d.get::<Dict<'_>>("A").is_some_and(|a| is_js_action(&a));
         self.embedded_files |= d.contains_key("EF") || name_is(d, "Subtype", "FileAttachment");
-        // Predefined CMaps (not Identity) are fetched from the optional CMap pack (spec §10.3).
+        // Predefined CMaps (not Identity) come from the CMap pack (spec §10.3); a name the pack cannot supply
+        // is not listed (the page then warns CMAP_MISSING).
         for key in ["Encoding", "UseCMap"] {
             if let Some(n) = d.get::<Name<'_>>(key) {
                 let is_cmap_font = name_is(d, "Subtype", "Type0") || key == "UseCMap";
-                if is_cmap_font && !n.as_str().starts_with("Identity") {
+                if is_cmap_font && cmaps::is_predefined(n.as_str()) {
                     self.assets.insert(format!("cmap:{}", n.as_str()));
+                }
+            }
+        }
+        // A CID font the file does not embed is drawn with a stand-in; its text still maps to Unicode through the
+        // Adobe collection's CID->UCS2 map.
+        if name_is(d, "Subtype", "Type0")
+            && let Some(cid) = d
+                .get::<Array<'_>>("DescendantFonts")
+                .and_then(|a| a.iter::<Dict<'_>>().next())
+        {
+            let embedded = cid.get::<Dict<'_>>("FontDescriptor").is_some_and(|fd| {
+                ["FontFile", "FontFile2", "FontFile3"]
+                    .iter()
+                    .any(|k| fd.contains_key(k))
+            });
+            let ordering = cid
+                .get::<Dict<'_>>("CIDSystemInfo")
+                .and_then(|i| i.get::<hayro::hayro_syntax::object::String<'_>>("Ordering"))
+                .and_then(|o| String::from_utf8(o.as_bytes().to_vec()).ok());
+            if let (false, Some(o)) = (embedded, ordering) {
+                let map = format!("Adobe-{o}-UCS2");
+                if cmaps::is_predefined(&map) {
+                    self.assets.insert(format!("cmap:{map}"));
                 }
             }
         }

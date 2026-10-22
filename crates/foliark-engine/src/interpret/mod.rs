@@ -584,6 +584,7 @@ impl Document {
         let settings = InterpreterSettings {
             ocg_override: true,
             strict_streams: true,
+            cmap_resolver: Arc::new(crate::cmaps::resolve),
             warning_sink: Arc::new(move |w| sink.lock().expect("warning sink").push(w)),
             should_stop: Some(Arc::new(move || {
                 cancel.load(Ordering::Relaxed) || over.load(Ordering::Relaxed)

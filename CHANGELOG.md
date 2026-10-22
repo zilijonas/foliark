@@ -26,7 +26,7 @@ Not published. Candidate tarball and checksums: `docs/release/candidate.md`. The
 
 ### Known limits
 - Browsers: Chromium (desktop, macOS arm64) supported with budgets; WebKit engine supported, not as Safari; Firefox functional only. Real Safari, iPhone, iPad, Android, Windows and Linux: not established (NEW-64, device access NEW-22). No minimum browser version is promised.
-- Predefined CMaps (legacy CJK encodings) are unsupported: `cmapsUrl` is accepted and ignored, render warns `CMAP_MISSING`.
+- Predefined CMaps (legacy CJK encodings) ship as a self-hosted pack in the package (`cmaps/`, 63 Adobe files, BSD-3-Clause), fetched at `open` from `cmapsUrl` (default: the package folder) and cached by the caller for offline use.
 - Paragraph edit does not cover CFF/Type1 embedded faces, RTL, CJK, vertical text or auto-fit.
 - Encrypted raster fidelity, abort while an operation runs through the packed SDK, and files unlike the synthetic corpus are not proven.
 - Budgets were frozen on one machine (Apple M4); reproducibility across machines is not shown.

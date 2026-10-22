@@ -7,9 +7,9 @@
   "python": "3.9"
  },
  "counts": {
-  "total": 39,
+  "total": 40,
   "hddn": 20,
-  "generated": 19,
+  "generated": 20,
   "byFeature": {
    "actualtext": 1,
    "additional-actions": 1,
@@ -17,13 +17,14 @@
    "aes-256": 1,
    "annotation": 2,
    "appearance-stream": 2,
+   "cjk": 1,
    "corrupt-flate": 1,
    "cyclic-form": 1,
    "decode-ratio": 1,
    "deep-form": 1,
    "dimension-bomb": 1,
    "embedded-file": 2,
-   "embedded-font": 2,
+   "embedded-font": 3,
    "encrypted": 5,
    "flate-bomb": 1,
    "font-payload": 1,
@@ -49,6 +50,7 @@
    "ocr-layer": 1,
    "openaction": 1,
    "outline": 1,
+   "predefined-cmap": 1,
    "prior-revision": 1,
    "rc4-128": 1,
    "rc4-40": 1,
@@ -2060,6 +2062,63 @@
     ],
     "mustKeepText": [
      "KEEP_PUBLIC_UNICODE_GLYPH_WIDTHS"
+    ]
+   }
+  },
+  {
+   "id": "cjk-predefined-cmaps",
+   "path": "generated/cjk-predefined-cmaps.pdf",
+   "sha256": "306ed421a4ee12ecc8cc76113311d8b3e1d4083e4ee4d5e70c9ada8f6212f468",
+   "bytes": 3298,
+   "pages": 1,
+   "features": [
+    "cjk",
+    "predefined-cmap",
+    "embedded-font"
+   ],
+   "origin": "tests/fixtures/generators/generate.py",
+   "license": "synthetic, generated (original)",
+   "deterministic": true,
+   "expected": {
+    "behavior": "Type0 fonts with predefined Unicode CMaps (UniGB-UCS2-H, UniJIS-UCS2-H) over a synthetic embedded box font, plus a non-embedded STSong-Light; no ToUnicode. Text needs the CMap pack; extraction equals the Unicode of the codes",
+    "mustRemove": [
+     "\u6587\u6d4b"
+    ],
+    "mustKeepText": [
+     "KEEP_PUBLIC_CJK",
+     "\u4e2d",
+     "\u8bd5",
+     "\u65e5\u672c\u8a9e",
+     "\u4f60\u597d"
+    ],
+    "requiredAssets": [
+     "cmap:Adobe-GB1-UCS2",
+     "cmap:UniGB-UCS2-H",
+     "cmap:UniJIS-UCS2-H"
+    ],
+    "regions": [
+     {
+      "kind": "sensitive",
+      "page": 0,
+      "rectTopLeft": [
+       44,
+       78,
+       92,
+       104
+      ],
+      "text": "\u6587\u6d4b"
+     },
+     {
+      "kind": "public",
+      "page": 0,
+      "rectTopLeft": [
+       20,
+       28.8,
+       135.5,
+       43.5
+      ],
+      "text": "KEEP_PUBLIC_CJK"
+     }
     ]
    }
   },

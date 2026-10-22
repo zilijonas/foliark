@@ -59,6 +59,10 @@ fn corpus() -> Vec<(String, Option<String>, Vec<String>)> {
 const REFUSED: &[(&str, ErrorCode)] = &[
     ("hddn/annotation-comment.pdf", ErrorCode::RenderIncomplete), // annotation without appearance
     ("generated/forms-cyclic.pdf", ErrorCode::RenderIncomplete),
+    (
+        "generated/cjk-predefined-cmaps.pdf",
+        ErrorCode::RenderIncomplete,
+    ), // non-embedded CJK font drawn with a stand-in
     ("hddn/malformed-truncated.pdf", ErrorCode::RepairedPdf),
     ("hddn/malformed-xref.pdf", ErrorCode::RepairedPdf),
     ("hddn/oversized-image.pdf", ErrorCode::LimitExceeded),

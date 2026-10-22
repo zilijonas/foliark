@@ -401,7 +401,23 @@ impl Type0Font {
             return to_unicode.lookup_bf_string(key);
         }
 
-        None
+        // No ToUnicode and no UCS2 map: a Unicode encoding (UniJIS-UCS2-H, UniGB-UTF16-H, ...) is itself the answer.
+        let name = self.encoding.metadata().name.as_deref()?;
+        let name = std::str::from_utf8(name).ok()?;
+        if !name.starts_with("Uni") {
+            return None;
+        }
+        let scalar = if name.contains("-UCS2-") {
+            code
+        } else if name.contains("-UTF16-") && code > 0xFFFF {
+            let (hi, lo) = ((code >> 16) as u16, code as u16);
+            char::decode_utf16([hi, lo]).next()?.ok().map(u32::from)?
+        } else if name.contains("-UTF16-") {
+            code
+        } else {
+            return None;
+        };
+        char::from_u32(scalar).map(BfString::Char)
     }
 }
 

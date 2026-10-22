@@ -12,8 +12,8 @@
 //!   rewritten in a clone of that occurrence's chain (`forms`); the other occurrences keep
 //!   the original. A Form drawn exactly once in the document is rewritten in place.
 //! - A removed glyph of a font whose dictionary is a direct object cannot get a rebuilt
-//!   ToUnicode: `FONT_UNSUPPORTED`. Type0 fonts other than Identity-H/V likewise (their code
-//!   width is unknown).
+//!   ToUnicode: `FONT_UNSUPPORTED`. Type0 fonts other than Identity-H/V and the two-byte
+//!   `Uni*-UCS2-*` CMaps likewise (their code width is unknown).
 //! - CFF / Type 1 programs are kept and Type3 CharProcs are not dropped: both are listed in
 //!   [`TextReport::fonts_with_glyph_inventory`] for `FONT_GLYPH_INVENTORY_RETAINED`.
 //! - Two font dictionaries sharing one TrueType program: the later one's survivors win.
@@ -139,7 +139,8 @@ fn font_names(doc: &Document, font: ObjectId) -> Result<(String, String), PdfErr
     ))
 }
 
-/// Bytes per character code: 1 for simple fonts, 2 for Type0 with Identity-H/V.
+/// Bytes per character code: 1 for simple fonts, 2 for Type0 with Identity-H/V or a fixed-width predefined
+/// UCS-2 CMap (`UniJIS-UCS2-H`, ...). Other predefined CMaps mix code lengths and stay refused.
 fn code_width(doc: &Document, font: ObjectId) -> Result<usize, PdfError> {
     let d = font_dict(doc, font)?;
     if d.get::<Name<'_>>("Subtype")
@@ -150,7 +151,7 @@ fn code_width(doc: &Document, font: ObjectId) -> Result<usize, PdfError> {
             .map(|n| n.as_str().to_owned())
             .as_deref()
         {
-            Some("Identity-H" | "Identity-V") => Ok(2),
+            Some(n) if crate::cmaps::fixed_code_width(n).is_some() => Ok(2),
             _ => Err(PdfError::at(ErrorCode::FontUnsupported, font)),
         };
     }
