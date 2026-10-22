@@ -1,8 +1,8 @@
 //! Resource budgets (spec §9). Every check uses checked arithmetic and runs before the
 //! allocation or work it guards; `LIMIT_EXCEEDED` carries which limit, the value and the max.
 use foliark_model::{ErrorCode, Limits, ObjectId, PdfError};
-use hayro::hayro_syntax::object::Stream;
 use hayro::hayro_syntax::object::stream::DecodeFailure;
+use hayro::hayro_syntax::object::{Name, Stream};
 use std::borrow::Cow;
 
 const MIB: u64 = 1 << 20;
@@ -64,7 +64,9 @@ pub(crate) fn image_pixels(limits: &Limits, width: u32, height: u32) -> Result<u
 }
 
 /// Strict decode of one stream under `maxStreamDecodedBytes` and `maxDecodeRatio` (the ratio
-/// only applies once the output passes 1 MiB). The decoder stops at the cap, so a bomb is
+/// only applies once the output passes 1 MiB, and never to an image XObject: its decoded size
+/// is bounded by `maxImagePixels` and deflate reaches about 1030:1 on flat data, so a blank
+/// scanned page, 6.3 MB of white at 150 dpi, would otherwise look like a bomb). The decoder stops at the cap, so a bomb is
 /// never built. `actual` is a lower bound: decoding stops at the first byte over the cap.
 pub(crate) fn decode_stream<'a>(
     stream: &Stream<'a>,
@@ -77,7 +79,11 @@ pub(crate) fn decode_stream<'a>(
     let allowed = (stream.raw_data().len() as u64)
         .saturating_mul(ratio)
         .max(MIB);
-    let by_ratio = allowed < max;
+    let image = stream
+        .dict()
+        .get::<Name<'_>>("Subtype")
+        .is_some_and(|n| n.as_str() == "Image");
+    let by_ratio = !image && allowed < max;
     let cap = if by_ratio { allowed } else { max };
     let cap_usize = usize::try_from(cap).unwrap_or(usize::MAX);
     match stream.decoded_capped(cap_usize) {

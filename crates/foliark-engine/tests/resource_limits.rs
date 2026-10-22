@@ -67,6 +67,33 @@ fn page_pdf(content: &[u8], filter: Option<Filter>, image: Option<(i32, i32)>) -
     pdf.finish()
 }
 
+/// One page drawing a Flate DeviceRGB image `/Im` of `w` x `h` whose deflated samples are `flate`.
+fn image_pdf(flate: &[u8], w: i32, h: i32) -> Vec<u8> {
+    let (cat, tree, page, c, im) = (
+        Ref::new(1),
+        Ref::new(2),
+        Ref::new(3),
+        Ref::new(4),
+        Ref::new(5),
+    );
+    let mut pdf = Pdf::new();
+    pdf.catalog(cat).pages(tree);
+    pdf.pages(tree).kids([page]).count(1);
+    let mut p = pdf.page(page);
+    p.parent(tree)
+        .media_box(Rect::new(0.0, 0.0, 612.0, 792.0))
+        .contents(c);
+    p.resources().x_objects().pair(Name(b"Im"), im);
+    p.finish();
+    pdf.stream(c, b"q 612 0 0 792 0 0 cm /Im Do Q");
+    let mut i = pdf.image_xobject(im, flate);
+    i.width(w).height(h).bits_per_component(8);
+    i.filter(Filter::FlateDecode);
+    i.color_space().device_rgb();
+    i.finish();
+    pdf.finish()
+}
+
 fn pages_pdf(n: i32, claimed: i32) -> Vec<u8> {
     let mut pdf = Pdf::new();
     pdf.catalog(Ref::new(1)).pages(Ref::new(2));
@@ -196,6 +223,18 @@ fn expansion_bomb_stops_at_the_cap_and_the_edge_passes() {
         ..Default::default()
     };
     assert!(open(pdf, loose).unwrap().page_contents(0).is_ok());
+
+    // An image XObject is exempt from the ratio (maxImagePixels bounds it): a blank 150 dpi RGB
+    // letter scan is 6.3 MB of 0xFF at ratio 1026 and the default limits take it (HDDN NEW-82).
+    let (w, h) = (1275i32, 1650i32);
+    let flat = zlib(&vec![0xffu8; (w * h * 3) as usize]);
+    assert!(
+        flat.len() * 1000 < (w * h * 3) as usize,
+        "the scan must be over the ratio"
+    );
+    let scan = image_pdf(&flat, w, h);
+    let doc = open(scan, Limits::default()).unwrap();
+    assert!(doc.info().is_ok() && doc.page_contents(0).is_ok());
 
     // Exactly the cap passes, one byte more does not.
     let spaces = |n| page_pdf(&zlib(&vec![b' '; n]), Some(Filter::FlateDecode), None);

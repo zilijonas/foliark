@@ -38,17 +38,16 @@ which never import foliark, and runs the same privacy check on the INPUT as a ne
 Oracle findings that were test-side, not product defects, and what was changed: (1) the short needle `34567` also matches a UTF-16 character range inside an embedded TrueType program (`objects.py` STREAM on font bytes), so the check uses the whole phone string; (2) "Confirm all markings" also confirms the auto-detected name, so the name is a declared redaction; (3) raster regions are the real word boxes, not a sampled strip. The extracted-text, pypdf and PyMuPDF checks were clean throughout.
 Only the Chromium exports were judged; Firefox and WebKit run the same cases and assert the same words in the saved file, but their files were not re-judged by the oracles.
 
-### Isolated worker harness findings (8 fixtures; nothing waived, nothing weakened)
-Harness: `tests/pdf/harness`, the real production worker in docker with Poppler, pypdf and object traversal. The only harness edit: APPLY_REDACTIONS in `browser-driver.mjs` passes `acknowledgeLosses` for `flattened`, as the UI does after consent (NEW-69 made it mandatory). Report: kept as a scratch file, regenerate with the command above.
-| Fixture | Mode | Finding | Reading |
-|---|---|---|---|
-| hidden-ocr-text | native | `SECRET_INVISIBLE_OCR` still extractable (Poppler, pypdf, object) after a corner redaction | **product finding to triage**: invisible (render mode 3) text outside any marking is kept; the old HDDN path refused it (`native-invisible-text-unsupported`). Relates to HDDN-11 |
-| shared-image, shared-vector | native | "recoverable fixture secret in independently decoded graphic" | **unresolved**: not analysed here; relates to HDDN-12 shared-object redaction |
-| oversized-image, compressed-stream | both | `unexpected rejection: pdfImport.resourceExhausted` | harness expectation is the PyMuPDF one; `hddn-adapter.md` records the Foliark refusal as the intended accepted difference. The expectation was not changed here, so the suite stays red until the owner agrees |
-| annotation-comment | image-only | `errors.rasterIncompletePages` | raster export refused with a typed code, harness expects a file |
-| actualtext | image-only | `PUBLIC_GLYPHS` not found in the rendered page | rasterizer or check difference, unanalysed |
-| unicode-glyph-widths | image-only | rendered content differs from the source render (edit, undo, redo rows) | rasterizer difference vs Poppler, unanalysed |
-Next step: triage these 8 (three are expectation changes the owner must accept, one is a likely real privacy gap, four are unanalysed) before NEW-77. The 25-case UI e2e and the oracle run above do not cover these fixtures.
+### Isolated worker harness findings (8 fixtures, triaged in NEW-82; no privacy expectation weakened)
+`pnpm run test:pdf:isolated` exits 0 on the NEW-82 build (21 fixtures x 2 modes). Every change and its reason is in HDDN `tests/pdf/README.md` ("Isolated worker harness on Foliark").
+| Fixture | Verdict | What changed |
+|---|---|---|
+| hidden-ocr-text | adapter policy | native export uses `invisibleText: 'remove'`; notice `invisibleRemoved` (scan search layers are not kept in native output) |
+| shared-image, shared-vector | adapter policy | native export stops (`native-redaction-unsupported`, `errors.nativeSharedContentPages`) while a marked graphic is still drawn on an unmarked page; marking that page, or image-only, exports. Engine spec 5.2 unchanged |
+| oversized-image | by spec | 10^10-pixel bomb; typed refusal is the fixture's required outcome |
+| compressed-stream | by spec, plus a limit retuned | the 8 MiB no-op content stream stays refused (bomb). `maxDecodeRatio` no longer applies to image XObjects (a blank 150 dpi scan was refused at 1026:1); regression in `resource_limits.rs` |
+| annotation-comment | adapter policy | image-only retries with `annotations: 'remove'` on `RENDER_INCOMPLETE` |
+| actualtext, unicode-glyph-widths | check tolerance | image-only pixel comparison forgives a 2 px rasterizer shift; privacy checks unchanged |
 
 ### Mobile, offline, save and cancel
 - Real mobile: **not established, pending NEW-64 (device access NEW-22).** No claim. Playwright WebKit is not Safari.

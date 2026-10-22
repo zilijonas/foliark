@@ -53,8 +53,8 @@ Boxes: worst edge deviation 0.211 pt (spec 3.6 allows 0.75).
 Accepted differences:
 - `actualtext`: MuPDF returns the marked-content ActualText (`SECRET_ACTUALTEXT`) for a word whose glyphs show `PUBLIC_GLYPHS`; Foliark extracts what is drawn. The hidden string is
   not searchable or detectable on screen; removing it at export is the sanitizer's job (spec 8, NEW-69).
-- `oversized-image` (100000 x 100000 px) and `compressed-stream` (decode ratio 1001): Foliark refuses at `maxImagePixels` / `maxDecodeRatio` while PyMuPDF loads them. Both
-  fixtures' `inputPolicy` asks for explicit resource rejection, so `resource-exhausted` is correct.
+- `oversized-image` (100000 x 100000 px, 10^10 pixels from 3 payload bytes): Foliark refuses at `maxImagePixels` while PyMuPDF loads it. The fixture's `inputPolicy` asks for explicit resource rejection, so `resource-exhausted` is correct.
+- `compressed-stream` (8 MiB of no-op operators, decode ratio 1001): refused at `maxDecodeRatio`; it is a content-stream bomb and the fixture's `inputPolicy` asks for bounded decode or explicit rejection. NEW-82 exempted image XObjects from the ratio (a blank 150 dpi RGB letter scan, 6.3 MB of 0xFF, ratio 1026, was refused too; `maxImagePixels` and `maxStreamDecodedBytes` still bound images).
 - Page sizes ignore `/UserUnit` in PyMuPDF and include it in Foliark (normalized boxes are invariant); no fixture sets it.
 
 ## Limits of NEW-66 (historical: NEW-67 added scanned fixtures and the signature scan, NEW-70 bumped the cache name)
