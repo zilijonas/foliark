@@ -26,6 +26,7 @@ use hayro::hayro_interpret::{
 use hayro::vello_cpu::peniko::kurbo::{Affine, BezPath, Rect, Shape};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::ops::Range;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 mod fonts;
@@ -175,16 +176,20 @@ struct Builder<'x> {
     error: Option<PdfError>,
     /// Every Form that was entered, to tell a cycle from a damaged object.
     entered: HashSet<ObjectId>,
+    /// Set on the first budget failure: the interpreter's `should_stop` (hayro P15) reads it,
+    /// so the rest of the page is not walked.
+    tripped: Arc<AtomicBool>,
 }
 
 impl Builder<'_> {
-    /// Charge work units; the first failure is kept and everything after it is ignored. The
-    /// interpreter cannot be stopped from a device, so it still walks the rest of the stream.
+    /// Charge work units; the first failure is kept, stops the interpreter and everything
+    /// reported before it lands is ignored.
     fn charge(&mut self, units: u64) -> bool {
         if self.error.is_none()
             && let Err(e) = self.budget.charge(units)
         {
             self.error = Some(e);
+            self.tripped.store(true, Ordering::Relaxed);
         }
         self.error.is_none()
     }
@@ -476,10 +481,15 @@ impl Document {
         let page = self.page(index)?;
         let warnings = Arc::new(Mutex::new(Vec::new()));
         let sink = warnings.clone();
+        let tripped = Arc::new(AtomicBool::new(false));
+        let (cancel, over) = (self.cancel_handle(), tripped.clone());
         let settings = InterpreterSettings {
             ocg_override: true,
             strict_streams: true,
             warning_sink: Arc::new(move |w| sink.lock().expect("warning sink").push(w)),
+            should_stop: Some(Arc::new(move || {
+                cancel.load(Ordering::Relaxed) || over.load(Ordering::Relaxed)
+            })),
             ..InterpreterSettings::default()
         };
         let [x0, y0, x1, y1] = geometry.crop_box;
@@ -518,8 +528,12 @@ impl Document {
             direct_font_reported: false,
             error: None,
             entered: HashSet::new(),
+            tripped,
         };
         interpret_page(page, &mut ctx, &mut device);
+        if self.cancelled() {
+            return Err(PdfError::new(foliark_model::ErrorCode::Cancelled));
+        }
         if let Some(e) = device.error {
             return Err(e);
         }

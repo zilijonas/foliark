@@ -1,0 +1,51 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Foliark hang</title>
+<script type="module">
+  import { createFoliark } from "/packages/sdk/dist/index.js";
+  const out = {};
+  const code = (p) => p.then(() => "completed", (e) => e.code ?? String(e));
+  const make = (hangTimeoutMs) => createFoliark({
+    wasmUrl: "/packages/sdk/wasm/foliark_wasm_bg.wasm",
+    workerUrl: "/packages/sdk/dist/worker.js",
+    limits: { maxDecodeRatio: 1_000_000 },
+    hangTimeoutMs,
+  });
+  try {
+    const busy = new Uint8Array(await (await fetch("/busy.pdf")).arrayBuffer());
+    // Baseline: how long the page really keeps the worker busy when nothing interrupts it.
+    const base = await make(600_000);
+    const t0 = performance.now();
+    const doc0 = await base.open(busy.slice());
+    out.openMs = performance.now() - t0;
+    const t1 = performance.now();
+    await doc0.extractText(0);
+    out.fullMs = performance.now() - t1;
+    await base.dispose();
+
+    // Supervised: the watchdog is a fraction of that, so it must end the op, not wait for it.
+    out.hangMs = Math.max(500, Math.round(out.fullMs / 3));
+    const foliark = await make(out.hangMs);
+    const resets = [];
+    foliark.onReset((e) => resets.push(e));
+    const doc = await foliark.open(busy.slice());
+    const t2 = performance.now();
+    const stuck = code(doc.extractText(0));
+    const queued = code(doc.search("x")); // waits behind it in the worker
+    out.stuck = await stuck;
+    out.stuckMs = performance.now() - t2;
+    out.queued = await queued;
+    out.resets = resets;
+    out.generation = foliark.generation;
+    out.gone = await code(doc.pages());
+    // The same client is usable again on the new generation.
+    const small = await foliark.open(new Uint8Array(await (await fetch("/tests/smoke/one-page.pdf")).arrayBuffer()));
+    out.after = (await small.extractText(0)).text.trim();
+    out.afterGeneration = small.generation;
+    await foliark.dispose();
+    out.disposed = await code(foliark.open(busy.slice()));
+  } catch (e) {
+    out.error = String(e);
+  }
+  window.__hang = out;
+</script>

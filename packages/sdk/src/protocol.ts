@@ -320,6 +320,11 @@ export class Correlator<T> {
   private readonly pending = new Map<number, { op: OpName; ctx: T }>();
   constructor(private readonly maxBytes = DEFAULT_MAX_BUFFER_BYTES) {}
 
+  /** Requests sent and not yet answered. */
+  get size(): number {
+    return this.pending.size;
+  }
+
   register(op: OpName, ctx: T): number {
     this.pending.set(++this.last, { op, ctx });
     return this.last;

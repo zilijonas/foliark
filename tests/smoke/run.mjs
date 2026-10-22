@@ -5,16 +5,20 @@ import { createServer } from "node:http";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import playwright from "playwright";
+import { busyPdf } from "./busy-pdf.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const types = { ".html": "text/html", ".js": "text/javascript", ".wasm": "application/wasm", ".pdf": "application/pdf" };
+
+// 30M "q Q" pairs = 120 MB decoded, under the 128 MiB stream cap: seconds of interpretation in one call.
+const virtual = { "/busy.pdf": () => busyPdf(30_000_000) };
 
 const server = createServer(async (req, res) => {
   const path = normalize(decodeURIComponent(new URL(req.url, "http://x").pathname));
   try {
     if (path.includes("..")) throw new Error("bad path");
     res.writeHead(200, { "content-type": types[extname(path)] ?? "application/octet-stream" });
-    res.end(await readFile(join(root, path)));
+    res.end(virtual[path]?.() ?? (await readFile(join(root, path))));
   } catch {
     res.writeHead(404).end();
   }
@@ -52,6 +56,20 @@ try {
   assert.equal(r.fixture.render[2], r.fixture.render[0] * r.fixture.render[1] * 4);
   assert.equal(r.refused, "INVALID_ARGUMENT", "prepareExport is refused until NEW-46");
   console.log(`smoke ${name}: ok (${r.width}x${r.height}, ${r.nonWhite} non-white px)`);
+
+  // Hard recovery in a real worker: a synchronous call that never returns is terminated by the watchdog.
+  const hang = await browser.newPage();
+  hang.on("pageerror", (e) => console.error("pageerror:", e.message));
+  await hang.goto(`http://127.0.0.1:${server.address().port}/tests/smoke/hang.html`);
+  await hang.waitForFunction(() => window.__hang, null, { timeout: 240_000 });
+  const h = await hang.evaluate(() => window.__hang);
+  assert.equal(h.error, undefined, h.error);
+  assert.ok(h.fullMs > 3 * h.openMs, `the op must be long next to open: ${JSON.stringify(h)}`);
+  assert.deepEqual([h.stuck, h.queued], ["WORKER_RESET", "WORKER_RESET"], "stuck and queued calls reject WORKER_RESET");
+  assert.ok(h.stuckMs >= h.hangMs && h.stuckMs < h.fullMs, `terminated after the timeout, before the op would end: ${JSON.stringify(h)}`);
+  assert.deepEqual([h.generation, h.resets, h.gone], [2, [{ generation: 2, reason: "hang" }], "DOCUMENT_GONE"]);
+  assert.deepEqual([h.after, h.afterGeneration, h.disposed], ["Hello Foliark", 2, "CLIENT_DISPOSED"]);
+  console.log(`smoke ${name}: hang ok (op ${Math.round(h.fullMs)} ms, watchdog ${h.hangMs} ms, reset after ${Math.round(h.stuckMs)} ms)`);
 } finally {
   await browser.close();
   server.close();

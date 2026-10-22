@@ -5,6 +5,7 @@
 import * as wasm from "../wasm/foliark_wasm.js";
 import type { OpName } from "./generated/OpName.js";
 import type { Progress } from "./generated/Progress.js";
+import { isOutOfMemory } from "./worker-supervisor.js";
 import {
   asFoliarkError, checkRequest, errRes, FoliarkError, isCtl, isErrorCode, okRes, postTransfer,
 } from "./protocol.js";
@@ -154,8 +155,12 @@ export function createWorkerCore(host: WorkerHost, stepBudget = STEP_BUDGET) {
         throw asFoliarkError(e);
       }
     } catch (err) {
-      // A wasm trap leaves the instance unusable: the client resets the worker instead of getting an answer.
-      if (err instanceof WebAssembly.RuntimeError) {
+      if (!(err instanceof FoliarkError) && isOutOfMemory(err)) {
+        // The failing op is answered; the instance may be half-grown, so the client replaces the worker (spec 9).
+        host.post(errRes(req.id, new FoliarkError("OUT_OF_MEMORY", "out of memory", { recoverable: false })));
+        host.post({ v: 1, event: "fatal", gen: generation, reason: "out of memory" });
+      } else if (err instanceof WebAssembly.RuntimeError) {
+        // A wasm trap leaves the instance unusable: the client resets the worker instead of getting an answer.
         host.post({ v: 1, event: "fatal", gen: generation, reason: "wasm trap" });
       } else {
         host.post(errRes(req.id, fromWasm(err)));

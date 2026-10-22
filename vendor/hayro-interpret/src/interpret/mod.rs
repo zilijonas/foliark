@@ -39,6 +39,8 @@ pub type CMapResolverFn =
     Arc<dyn Fn(hayro_cmap::CMapName<'_>) -> Option<&'static [u8]> + Send + Sync>;
 /// A callback function for resolving warnings during interpretation.
 pub type WarningSinkFn = Arc<dyn Fn(InterpreterWarning) + Send + Sync>;
+/// A callback asked before every operator whether interpretation should stop.
+pub type StopFn = Arc<dyn Fn() -> bool + Send + Sync>;
 
 #[derive(Clone)]
 /// Settings that should be applied during the interpretation process.
@@ -110,6 +112,12 @@ pub struct InterpreterSettings {
     /// Report [`InterpreterWarning::FontSubstituted`] for a simple font that is drawn with a
     /// standard face because the PDF does not embed it.
     pub report_font_substitution: bool,
+    /// Asked before every operator (also inside Forms, patterns, Type3 procedures and
+    /// annotation appearances). Once it returns `true` the interpreter stops: every remaining
+    /// operator is skipped and nothing more is drawn or reported, so the output is incomplete
+    /// and the caller must discard it. A caller that needs cancellation or a work budget keeps
+    /// its own flag and answers from it.
+    pub should_stop: Option<StopFn>,
 }
 
 impl Default for InterpreterSettings {
@@ -131,6 +139,7 @@ impl Default for InterpreterSettings {
             ocg_override: false,
             strict_streams: false,
             report_font_substitution: false,
+            should_stop: None,
         }
     }
 }
@@ -174,6 +183,9 @@ pub fn interpret_page<'a>(
         && let Some(annot_arr) = page.raw().get::<Array<'_>>(ANNOTS)
     {
         for annot in annot_arr.iter::<Dict<'_>>() {
+            if context.should_stop() {
+                break;
+            }
             let flags = annot.get::<u32>(F).unwrap_or(0);
 
             // Annotation should be hidden.
@@ -266,6 +278,9 @@ pub fn interpret<'a>(
     context.save_state();
 
     while let Some((op, span)) = ops.next_with_span() {
+        if context.should_stop() {
+            break;
+        }
         let (stream, range) = context.source.locate(span);
         device.begin_operator(stream, range);
 

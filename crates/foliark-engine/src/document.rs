@@ -8,7 +8,7 @@
 //! and run at export (spec §5); text edits are applied by an [`EditApplier`] (NEW-51).
 use crate::Document;
 use crate::engine::not_built;
-use crate::text::{ClusterId, TextLayout};
+use crate::text::{ClusterId, TextIndex, TextLayout};
 use foliark_model::{
     ChangeResult, ChangeSet, DocumentInfo, EditLayout, ErrorCode, Limits, PdfError, Rect,
     Redaction, RejectedChange, TextEdit,
@@ -115,7 +115,6 @@ fn fill_ok(fill: Option<[f64; 3]>) -> bool {
 }
 
 pub(crate) struct Session {
-    id: String,
     source: Document,
     source_bytes: Vec<u8>,
     /// Present iff the committed edit list is not empty; otherwise the source is the working copy.
@@ -123,9 +122,8 @@ pub(crate) struct Session {
     pub(crate) info: DocumentInfo,
     pub(crate) revision: u32,
     pub(crate) committed: Committed,
-    /// The last page layout built (hit testing and selection hit one page repeatedly). Dropped
-    /// on every commit.
-    layout: Option<(usize, bool, TextLayout)>,
+    /// Lazily built page layouts, byte-bounded and bound to `revision` (spec §4).
+    pub(crate) index: TextIndex,
 }
 
 impl Session {
@@ -134,17 +132,22 @@ impl Session {
         source_bytes: Vec<u8>,
         source: Document,
         info: DocumentInfo,
+        cache_bytes: usize,
     ) -> Self {
         Self {
-            id,
+            index: TextIndex::new(id, cache_bytes),
             source,
             source_bytes,
             working: None,
             info,
             revision: 0,
             committed: Committed::default(),
-            layout: None,
         }
+    }
+
+    /// Bytes of the input this session keeps (the source is held a second time, parsed).
+    pub(crate) fn source_len(&self) -> usize {
+        self.source_bytes.len()
     }
 
     /// The working copy at the current revision: what extract, render, select and search read.
@@ -153,21 +156,8 @@ impl Session {
     }
 
     pub(crate) fn layout(&mut self, page: u32, hidden: bool) -> Result<&TextLayout, PdfError> {
-        let page = page as usize;
-        if self
-            .layout
-            .as_ref()
-            .is_none_or(|(p, h, _)| (*p, *h) != (page, hidden))
-        {
-            let mut l = self.doc().text_layout(page, hidden)?;
-            l.page.doc_id.clone_from(&self.id);
-            l.page.revision = self.revision;
-            self.layout = Some((page, hidden, l));
-        }
-        self.layout
-            .as_ref()
-            .map(|(_, _, l)| l)
-            .ok_or(PdfError::new(ErrorCode::Internal))
+        let doc = self.working.as_ref().unwrap_or(&self.source);
+        self.index.layout(doc, page, hidden)
     }
 
     fn check_page(&self, page: u32) -> Result<(), PdfError> {
@@ -262,6 +252,7 @@ impl Session {
         // An id names one operation across both lists, and may not be empty.
         let mut fresh = |id: &str| !id.is_empty() && seen.insert(id.to_owned());
 
+        let replaced = cs.text_edits.is_some();
         let edits = cs.text_edits;
         for e in edits.iter().flatten() {
             if !fresh(&e.id) {
@@ -294,7 +285,8 @@ impl Session {
         {
             match applier.apply(&self.source_bytes, list, limits) {
                 Ok(a) => {
-                    let doc = Document::open_with_limits(a.bytes, None, false, limits.clone())?;
+                    let doc = Document::open_with_limits(a.bytes, None, false, limits.clone())?
+                        .with_cancel(self.source.cancel_handle());
                     if doc.page_count() != self.source.page_count() {
                         return Err(PdfError::new(ErrorCode::Internal));
                     }
@@ -335,7 +327,8 @@ impl Session {
         }
         self.committed = next;
         self.revision = revision;
-        self.layout = None;
+        // A new working copy renumbers objects, so every cached glyph id would be wrong.
+        self.index.advance(revision, replaced);
         Ok(ChangeResult {
             accepted: true,
             revision,
