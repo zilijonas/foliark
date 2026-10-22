@@ -2,7 +2,7 @@
 //! limit-gated, refusing incomplete renders by page, bound to its revision like a native plan.
 mod common;
 use common::{Font, fixture, pdf_bytes, run};
-use foliark_engine::{Engine, Step, Task};
+use foliark_engine::{Engine, Step};
 use foliark_model::{
     CapabilityStatus, ChangeSet, ErrorCode, ExportMode, ExportPlan, ExportPolicy, Limits, PdfError,
     Rect, Redaction, SignedInputPolicy,
@@ -83,7 +83,8 @@ fn pages_with_fonts(stand_in: &[bool]) -> Vec<u8> {
         );
     }
     for (id, name) in [(3, "Helvetica"), (4, "ZzQuuxSerifBook")] {
-        pdf.type1_font(Ref::new(id)).base_font(Name(name.as_bytes()));
+        pdf.type1_font(Ref::new(id))
+            .base_font(Name(name.as_bytes()));
     }
     pdf.finish()
 }
@@ -91,10 +92,7 @@ fn pages_with_fonts(stand_in: &[bool]) -> Vec<u8> {
 #[test]
 fn a_document_native_export_refuses_is_still_raster_eligible_and_never_falls_back() {
     // OCG layers: native refuses by code. The raster export draws what is visible.
-    let (mut e, doc) = engine(
-        fixture("generated/ocg-hidden-text.pdf"),
-        Limits::default(),
-    );
+    let (mut e, doc) = engine(fixture("generated/ocg-hidden-text.pdf"), Limits::default());
     let err = prepare(&mut e, &doc, ExportMode::Native, consenting()).unwrap_err();
     assert_eq!(err.code, ErrorCode::OptionalContentUnsupported);
     // The refusal held nothing and asked nobody to rasterize: no plan, raster still unproven.
@@ -121,7 +119,11 @@ fn a_document_native_export_refuses_is_still_raster_eligible_and_never_falls_bac
 
 #[test]
 fn raster_needs_consent_a_sane_scale_and_a_page_that_fits_the_limits() {
-    let bytes = pdf_bytes(&["BT /F1 10 Tf 20 380 Td (hello) Tj ET"], &Font::default(), 0);
+    let bytes = pdf_bytes(
+        &["BT /F1 10 Tf 20 380 Td (hello) Tj ET"],
+        &Font::default(),
+        0,
+    );
     let (mut e, doc) = engine(bytes.clone(), Limits::default());
     let refuse = |e: &mut Engine, p: ExportPolicy| {
         let err = prepare(e, &doc, ExportMode::Raster, p).unwrap_err();
@@ -135,14 +137,21 @@ fn raster_needs_consent_a_sane_scale_and_a_page_that_fits_the_limits() {
     for scale in [0.0, -1.0, f64::NAN, f64::INFINITY] {
         let mut p = consenting();
         p.raster.scale = scale;
-        assert_eq!(refuse(&mut e, p).code, ErrorCode::InvalidArgument, "{scale}");
+        assert_eq!(
+            refuse(&mut e, p).code,
+            ErrorCode::InvalidArgument,
+            "{scale}"
+        );
     }
     // A 300 x 400 pt page at scale 40 is 12000 x 16000 px: over maxRenderPixels (50 MP default).
     let mut huge = consenting();
     huge.raster.scale = 40.0;
     let err = refuse(&mut e, huge);
     assert_eq!(err.code, ErrorCode::LimitExceeded);
-    assert_eq!(err.details.unwrap().limit.as_deref(), Some("maxRenderPixels"));
+    assert_eq!(
+        err.details.unwrap().limit.as_deref(),
+        Some("maxRenderPixels")
+    );
     let mut wide = consenting();
     wide.raster.scale = 100.0;
     let err = refuse(&mut e, wide);
@@ -155,7 +164,10 @@ fn raster_needs_consent_a_sane_scale_and_a_page_that_fits_the_limits() {
     };
     let (mut e, doc) = engine(bytes, tight);
     let err = prepare(&mut e, &doc, ExportMode::Raster, consenting()).unwrap_err();
-    assert_eq!(err.details.unwrap().limit.as_deref(), Some("maxRenderPixels"));
+    assert_eq!(
+        err.details.unwrap().limit.as_deref(),
+        Some("maxRenderPixels")
+    );
 }
 
 #[test]
@@ -208,7 +220,11 @@ fn pages_that_draw_with_a_warning_refuse_the_export_and_name_every_one() {
 #[test]
 fn a_raster_plan_is_bound_to_its_revision_mode_and_settings() {
     let (mut e, doc) = engine(
-        pdf_bytes(&["BT /F1 10 Tf 20 380 Td (hello) Tj ET"], &Font::default(), 0),
+        pdf_bytes(
+            &["BT /F1 10 Tf 20 380 Td (hello) Tj ET"],
+            &Font::default(),
+            0,
+        ),
         Limits::default(),
     );
     let native = prepare(&mut e, &doc, ExportMode::Native, consenting()).unwrap();

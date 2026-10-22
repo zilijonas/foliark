@@ -117,11 +117,7 @@ impl RasterPlan {
             let side = |len: f64| (len * scale).round().max(1.0);
             let (w, h) = (side(g.width), side(g.height));
             if w > MAX_SIDE as f64 || h > MAX_SIDE as f64 {
-                return Err(PdfError::limit(
-                    "maxRenderSide",
-                    w.max(h) as u64,
-                    MAX_SIDE,
-                ));
+                return Err(PdfError::limit("maxRenderSide", w.max(h) as u64, MAX_SIDE));
             }
             limits::check(
                 "maxRenderPixels",

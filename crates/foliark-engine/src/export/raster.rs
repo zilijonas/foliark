@@ -4,10 +4,10 @@
 //!
 //! A page that draws with a warning is not encoded; once one has, the rest are only drawn small
 //! to learn which others are incomplete, and the job ends in `RENDER_INCOMPLETE {pages}`.
+use super::Prepared;
 use super::raster_pixels::render;
 use super::raster_plan::{PageSpec, RasterPlan, incomplete};
 use super::raster_write::{Encoded, encode, prepared};
-use super::Prepared;
 use crate::document::{Binding, Committed};
 use crate::{Document, RenderOptions};
 use foliark_model::{ErrorCode, ExportPolicy, Limits, PdfError};

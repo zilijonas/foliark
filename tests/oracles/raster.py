@@ -1,19 +1,35 @@
 #!/usr/bin/env python3
 """Independent raster-export probes (NEW-55, NEW-56): PyMuPDF only, knows nothing of foliark.
 
-  raster.py geometry file.pdf            -> per page "W H rotation images fonts" (display rect, points)
+  raster.py geometry file.pdf [PASSWORD] -> per page "W H rotation images fonts" (display rect, points)
   raster.py redbox file.pdf PAGE SCALE   -> display-space bbox in points of the pure red pixels of a MuPDF render
+  raster.py annots file.pdf [PASSWORD]   -> "annotations links widgets" over all pages (non-link non-widget with an appearance / links / widgets)
   raster.py image file.pdf PAGE out.rgb  -> decodes the page's one image, writes raw RGB, prints "W H components images"
 """
 import sys
 import fitz  # PyMuPDF
 
 
-def geometry(path):
+def geometry(path, password=""):
     doc = fitz.open(path)
+    if doc.needs_pass:
+        doc.authenticate(password)
     for p in doc:
         r = p.rect
         print(f"{r.width:.3f} {r.height:.3f} {p.rotation} {len(p.get_images(full=True))} {len(p.get_fonts(full=True))}")
+
+
+def annots(path, password=""):
+    doc = fitz.open(path)
+    if doc.needs_pass:
+        doc.authenticate(password)
+    a = l = w = 0
+    for p in doc:
+        l += len(p.get_links())
+        for an in p.annots() or []:
+            a += an.type[0] not in (1, 16)  # links are counted above, popups carry no content
+        w += len(list(p.widgets() or []))
+    print(a, l, w)
 
 
 def redbox(path, page, scale):
@@ -49,4 +65,4 @@ def image(path, page, out):
 
 
 if __name__ == "__main__":
-    {"geometry": geometry, "redbox": redbox, "image": image}[sys.argv[1]](*sys.argv[2:])
+    {"geometry": geometry, "annots": annots, "redbox": redbox, "image": image}[sys.argv[1]](*sys.argv[2:])

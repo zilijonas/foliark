@@ -5,8 +5,8 @@ mod common;
 use common::{Font, pdf_bytes, python, run, tmp};
 use foliark_engine::{Applied, EditApplier, Engine, RenderOptions};
 use foliark_model::{
-    ChangeSet, ExportMode, ExportPolicy, ExtractOptions, Limits, Rect, Redaction,
-    RejectedChange, TextEdit,
+    ChangeSet, ExportMode, ExportPolicy, ExtractOptions, Limits, Rect, Redaction, RejectedChange,
+    TextEdit,
 };
 use pdf_writer::{Finish, Pdf, Rect as PdfRect, Ref};
 
@@ -60,7 +60,13 @@ struct Decoded {
 /// The output page's single image as PyMuPDF decodes it.
 fn decode(pdf: &[u8], name: &str) -> Decoded {
     let (file, raw) = (at(pdf, name), tmp("raster-pixels", &format!("{name}.rgb")));
-    let (ok, log) = python(&["tests/oracles/raster.py", "image", &file, "0", raw.to_str().unwrap()]);
+    let (ok, log) = python(&[
+        "tests/oracles/raster.py",
+        "image",
+        &file,
+        "0",
+        raw.to_str().unwrap(),
+    ]);
     assert!(ok, "raster.py image: {log}");
     let dims: Vec<usize> = log.split_whitespace().map(|v| v.parse().unwrap()).collect();
     let rgb = std::fs::read(raw).unwrap();
@@ -73,7 +79,13 @@ fn decode(pdf: &[u8], name: &str) -> Decoded {
 }
 
 fn red_box_pt(src: &[u8], name: &str) -> Rect {
-    let (ok, log) = python(&["tests/oracles/raster.py", "redbox", &at(src, name), "0", "2"]);
+    let (ok, log) = python(&[
+        "tests/oracles/raster.py",
+        "redbox",
+        &at(src, name),
+        "0",
+        "2",
+    ]);
     assert!(ok, "{log}");
     let v: Vec<f64> = log.split_whitespace().map(|v| v.parse().unwrap()).collect();
     Rect {
@@ -111,7 +123,12 @@ fn export(e: &mut Engine, doc: &str) -> Vec<u8> {
 fn burned(r: &Rect, w: usize, h: usize) -> (usize, usize, usize, usize) {
     let lo = |v: f64, max: usize| ((v * SCALE).floor().max(0.0) as usize).min(max);
     let hi = |v: f64, max: usize| ((v * SCALE).ceil().max(0.0) as usize).min(max);
-    (lo(r.x, w), lo(r.y, h), hi(r.x + r.width, w), hi(r.y + r.height, h))
+    (
+        lo(r.x, w),
+        lo(r.y, h),
+        hi(r.x + r.width, w),
+        hi(r.y + r.height, h),
+    )
 }
 
 /// Burned pixels are black, nothing else differs from the engine's unburned render of the same
@@ -123,7 +140,10 @@ fn check_burn(src: &[u8], region: Rect, label: &str) -> Decoded {
     let reference = run(&mut e, t).unwrap();
     redact(&mut e, &doc, 0, region);
     let out = decode(&export(&mut e, &doc), label);
-    let (w, h) = (reference.header.width as usize, reference.header.height as usize);
+    let (w, h) = (
+        reference.header.width as usize,
+        reference.header.height as usize,
+    );
     assert_eq!((out.width, out.height), (w, h), "{label}: pixel grid");
     let (x0, y0, x1, y1) = burned(&region, w, h);
     assert!(x1 > x0 && y1 > y0);
@@ -141,16 +161,29 @@ fn check_burn(src: &[u8], region: Rect, label: &str) -> Decoded {
         }
     }
     assert_eq!(wrong, 0, "{label}: pixels differ from burned reference");
-    let red = out.rgb.chunks_exact(3).filter(|p| p[0] > 200 && p[1] < 60 && p[2] < 60).count();
+    let red = out
+        .rgb
+        .as_chunks::<3>()
+        .0
+        .iter()
+        .filter(|p| p[0] > 200 && p[1] < 60 && p[2] < 60)
+        .count();
     assert_eq!(red, 0, "{label}: red marker survived");
-    let blue = out.rgb.chunks_exact(3).filter(|p| p[2] > 200 && p[0] < 60 && p[1] < 60).count();
+    let blue = out
+        .rgb
+        .as_chunks::<3>()
+        .0
+        .iter()
+        .filter(|p| p[2] > 200 && p[0] < 60 && p[1] < 60)
+        .count();
     assert!(blue > 100, "{label}: public marker lost");
     out
 }
 
 #[test]
 fn burned_pixels_follow_display_space_on_rotated_cropped_and_scaled_pages() {
-    let cases: [(&str, i32, Option<[f32; 4]>, Option<f32>); 6] = [
+    type Case = (&'static str, i32, Option<[f32; 4]>, Option<f32>);
+    let cases: [Case; 6] = [
         ("plain", 0, None, None),
         ("r90", 90, None, None),
         ("r270", 270, None, None),
@@ -179,7 +212,12 @@ fn a_region_on_a_pixel_edge_burns_exactly_the_squares_it_touches_with_area() {
     let src = marker_pdf(0, None, None);
     let mut e = Engine::new(Limits::default());
     let (doc, _) = e.open(src, None, false).unwrap();
-    let region = Rect { x: 10.0, y: 30.25, width: 10.25, height: 9.75 };
+    let region = Rect {
+        x: 10.0,
+        y: 30.25,
+        width: 10.25,
+        height: 9.75,
+    };
     redact(&mut e, &doc, 0, region);
     let out = decode(&export(&mut e, &doc), "edge");
     let black = |x: usize, y: usize| out.rgb[(y * out.width + x) * 3..][..3] == [0, 0, 0];
@@ -216,7 +254,12 @@ fn a_redaction_over_edited_text_burns_the_edited_pixels_not_the_original_ones() 
             text_edits: Some(vec![TextEdit {
                 id: "e".into(),
                 page_index: 0,
-                rects: vec![Rect { x: 20.0, y: 80.0, width: 100.0, height: 20.0 }],
+                rects: vec![Rect {
+                    x: 20.0,
+                    y: 80.0,
+                    width: 100.0,
+                    height: 20.0,
+                }],
                 text: "EDITED".into(),
                 font: None,
             }]),
@@ -233,12 +276,33 @@ fn a_redaction_over_edited_text_burns_the_edited_pixels_not_the_original_ones() 
         .unwrap()
         .render_page(0, RenderOptions::at(SCALE))
         .unwrap();
-    let rgb = |d: &[u8]| d.chunks_exact(4).flat_map(|p| p[..3].to_vec()).collect::<Vec<u8>>();
-    assert_eq!(edited.rgb, rgb(&working.data), "export draws the working copy");
-    assert_ne!(edited.rgb, rgb(&source.data), "export is not the stale original");
+    let rgb = |d: &[u8]| {
+        d.as_chunks::<4>()
+            .0
+            .iter()
+            .flat_map(|p| p[..3].to_vec())
+            .collect::<Vec<u8>>()
+    };
+    assert_eq!(
+        edited.rgb,
+        rgb(&working.data),
+        "export draws the working copy"
+    );
+    assert_ne!(
+        edited.rgb,
+        rgb(&source.data),
+        "export is not the stale original"
+    );
 
     // Redact the 4th and 5th glyph boxes of the edited line: those boxes are black, whole.
-    let t = e.extract_text(&doc, 0, ExtractOptions { chars: true, ..Default::default() });
+    let t = e.extract_text(
+        &doc,
+        0,
+        ExtractOptions {
+            chars: true,
+            ..Default::default()
+        },
+    );
     let page = run(&mut e, t).unwrap();
     let glyphs: Vec<_> = page.clusters.into_iter().flatten().collect();
     let (a, b) = (glyphs[3].quad.bounds(), glyphs[4].quad.bounds());
@@ -247,7 +311,12 @@ fn a_redaction_over_edited_text_burns_the_edited_pixels_not_the_original_ones() 
         &mut e,
         &doc,
         1,
-        Rect { x: a.x + a.width / 2.0, y: a.y, width: a.width / 2.0 + b.width, height: a.height },
+        Rect {
+            x: a.x + a.width / 2.0,
+            y: a.y,
+            width: a.width / 2.0 + b.width,
+            height: a.height,
+        },
     );
     let out = decode(&export(&mut e, &doc), "edited-redacted");
     let black_in = |r: &Rect| {
@@ -259,7 +328,8 @@ fn a_redaction_over_edited_text_burns_the_edited_pixels_not_the_original_ones() 
     // The first glyph, far from the region, is untouched ink.
     let first = glyphs[0].quad.bounds();
     let (x0, y0, x1, y1) = burned(&first, out.width, out.height);
-    let ink = (y0..y1).any(|y| (x0..x1).any(|x| out.rgb[(y * out.width + x) * 3..][..3] != [255, 255, 255]));
+    let ink = (y0..y1)
+        .any(|y| (x0..x1).any(|x| out.rgb[(y * out.width + x) * 3..][..3] != [255, 255, 255]));
     assert!(ink, "outside the region the edited text is still drawn");
 }
 
@@ -267,12 +337,16 @@ fn a_redaction_over_edited_text_burns_the_edited_pixels_not_the_original_ones() 
 
 #[test]
 fn a_cancel_between_pages_leaves_no_plan_and_the_engine_usable() {
-    use foliark_engine::{Step, Task};
+    use foliark_engine::Step;
     let page = "BT /F1 12 Tf 20 300 Td (page) Tj ET";
     let (mut e, doc) = {
         let mut e = Engine::new(Limits::default());
         let (doc, _) = e
-            .open(pdf_bytes(&[page, page, page], &Font::default(), 0), None, false)
+            .open(
+                pdf_bytes(&[page, page, page], &Font::default(), 0),
+                None,
+                false,
+            )
             .unwrap();
         (e, doc)
     };
@@ -292,10 +366,12 @@ fn a_cancel_between_pages_leaves_no_plan_and_the_engine_usable() {
     // The cooperative flag stops the next page's draw: typed error, still no plan.
     let mut task = e.prepare_export(&doc, ExportMode::Raster, consenting());
     assert!(matches!(task.step(&mut e, 1).unwrap(), Step::Pending(_)));
-    e.cancel_handle().store(true, std::sync::atomic::Ordering::Relaxed);
+    e.cancel_handle()
+        .store(true, std::sync::atomic::Ordering::Relaxed);
     let err = task.step(&mut e, 1).err().expect("cancelled");
     assert_eq!(err.code, foliark_model::ErrorCode::Cancelled);
     assert_eq!(e.stats().plan_bytes, 0);
-    e.cancel_handle().store(false, std::sync::atomic::Ordering::Relaxed);
-    assert_eq!(export(&mut e, &doc).starts_with(b"%PDF-"), true);
+    e.cancel_handle()
+        .store(false, std::sync::atomic::Ordering::Relaxed);
+    assert!(export(&mut e, &doc).starts_with(b"%PDF-"));
 }

@@ -30,7 +30,7 @@ pub fn burn(rgba: &mut [u8], width: u32, height: u32, scale: f64, burns: &[Burn]
         let (y0, y1) = span(b.rect.y, b.rect.height, height);
         for y in y0..y1 {
             let row = &mut rgba[(y * width as usize + x0) * 4..(y * width as usize + x1) * 4];
-            for px in row.chunks_exact_mut(4) {
+            for px in row.as_chunks_mut::<4>().0 {
                 px[..3].copy_from_slice(&b.fill);
                 px[3] = 255;
             }

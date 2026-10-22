@@ -97,4 +97,24 @@ describe("text redaction and sanitized native export", () => {
     expect(await code(doc.prepareExport({ mode: "raster" }))).toBe("CONSENT_REQUIRED");
     expect((await doc.extractText(0)).pageIndex).toBe(0);
   });
+
+  it("a raster export succeeds where native refuses, keeps the page geometry and has no text layer", async () => {
+    const f = await client();
+    const doc = await f.open(fixture("hddn/acroform.pdf"));
+    expect(await code(doc.prepareExport({ mode: "native" }))).toBe("INVALID_ARGUMENT");
+    const plan = await doc.prepareExport({ mode: "raster", policy: { raster: { acknowledgeLosses: true, scale: 1 } } });
+    expect(plan.mode).toBe("raster");
+    const lost = plan.report.losses.map((l) => l.code);
+    expect(lost).toEqual(expect.arrayContaining(["TEXT_SEARCH_LOST", "VECTOR_RASTERIZED", "FORMS_FLATTENED"]));
+    expect((await doc.capabilities()).exportRaster.status).toBe("supported");
+    const bytes = await doc.export(plan);
+    expect(bytes.byteLength).toBe(plan.report.outputBytes);
+
+    const out = await f.open(bytes);
+    expect((await out.extractText(0)).text).toBe("");
+    const [src, dst] = [(await doc.pages())[0], (await out.pages())[0]];
+    expect([dst.width, dst.height, dst.rotation]).toEqual([src.width, src.height, 0]);
+    const page = await out.renderPage(0, { scale: 1 });
+    expect(page.complete).toBe(true);
+  });
 });

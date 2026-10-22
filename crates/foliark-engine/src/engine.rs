@@ -586,7 +586,10 @@ impl Task for RasterTask {
             )?;
             self.job = Some(job);
         }
-        let job = self.job.as_mut().ok_or(PdfError::new(ErrorCode::Internal))?;
+        let job = self
+            .job
+            .as_mut()
+            .ok_or(PdfError::new(ErrorCode::Internal))?;
         let out = match job.step(e.get(&self.doc)?.doc(), &e.limits, budget)? {
             Some(out) => out,
             None => {

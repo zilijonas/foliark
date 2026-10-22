@@ -17,8 +17,8 @@ use crate::Document;
 use flate2::Compression;
 use flate2::write::ZlibEncoder;
 use foliark_model::{
-    EditsReport, ExportMode, ExportReport, ExtractOptions, Flattened, KeptReport, Limits,
-    PdfError, RedactionReport,
+    EditsReport, ExportMode, ExportReport, ExtractOptions, Flattened, KeptReport, Limits, PdfError,
+    RedactionReport,
 };
 use pdf_writer::{Content, Filter, Finish, Name, Pdf, Rect, Ref};
 use std::io::Write;
@@ -40,7 +40,7 @@ pub fn encode(px: &Pixels) -> Result<Encoded, PdfError> {
     let mut row = Vec::with_capacity(px.width as usize * 3);
     for src in px.rgba.chunks_exact(px.width as usize * 4) {
         row.clear();
-        for p in src.chunks_exact(4) {
+        for p in src.as_chunks::<4>().0 {
             row.extend_from_slice(&p[..3]);
         }
         z.write_all(&row).map_err(io)?;
@@ -109,9 +109,8 @@ pub fn verify(bytes: &[u8], plan: &RasterPlan, limits: &Limits) -> Result<(), Pd
 }
 
 pub fn report(plan: &RasterPlan, edits: usize, bytes: &[u8]) -> Result<ExportReport, PdfError> {
-    let output_bytes = u32::try_from(bytes.len()).map_err(|_| {
-        PdfError::limit("maxOutputBytes", bytes.len() as u64, u64::from(u32::MAX))
-    })?;
+    let output_bytes = u32::try_from(bytes.len())
+        .map_err(|_| PdfError::limit("maxOutputBytes", bytes.len() as u64, u64::from(u32::MAX)))?;
     let flat = plan.annotations;
     Ok(ExportReport {
         mode: ExportMode::Raster,

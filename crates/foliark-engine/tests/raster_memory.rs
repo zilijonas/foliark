@@ -38,7 +38,11 @@ fn peak(pages: usize) -> usize {
     let page = "BT /F1 12 Tf 20 300 Td (some text) Tj ET";
     let mut e = Engine::new(Limits::default());
     let (doc, _) = e
-        .open(pdf_bytes(&vec![page; pages], &Font::default(), 0), None, false)
+        .open(
+            pdf_bytes(&vec![page; pages], &Font::default(), 0),
+            None,
+            false,
+        )
         .unwrap();
     let mut policy = ExportPolicy::default();
     policy.raster.acknowledge_losses = true;
@@ -57,5 +61,8 @@ fn peak_memory_is_one_page_buffer_whatever_the_page_count() {
     assert!(few >= one_page, "the probe sees the page buffer: {few}");
     // 28 more pages add their encoded size and nothing like another page buffer.
     assert!(many - few < one_page / 4, "peak grew {few} -> {many}");
-    assert!(many < 2 * one_page + one_page / 2, "more than ~two buffers: {many}");
+    assert!(
+        many < 2 * one_page + one_page / 2,
+        "more than ~two buffers: {many}"
+    );
 }
