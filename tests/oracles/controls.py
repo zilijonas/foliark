@@ -90,6 +90,10 @@ def leak_image_under_overlay():
     return out(d)
 
 
+def leak_dangling():
+    return simple(text(20, 360, "KEEP_PUBLIC_TEXT"), {6: b"<< /Ref 99 0 R >>"}, resources_extra="/Properties << /P 6 0 R >>")
+
+
 def leak_bogus_filter():
     return simple(b"", extra={4: stream("/Filter /Bogus", b"abc")})
 
@@ -335,6 +339,7 @@ CASES = [
     ("leaky: ActualText / Alt", leak_actualtext, {"forbidden": ["SECRET_ACTUALTEXT", "SECRET_ALT_TEXT"]}, {"STREAM"}, set()),
     ("leaky: JS OpenAction + metadata + attachment", gen.leaks_metadata_attachment_js, {"forbidden": ["SECRET_OPENACTION_JS", "SECRET_ATTACHMENT_BODY"]}, {"FEATURE", "STRING", "STREAM"}, set()),
     ("leaky: encrypted output", lambda: gen._encrypted("AES_128"), {"password": gen.ENC_USER}, {"FEATURE"}, set()),
+    ("leaky: reference to an undefined object", leak_dangling, {}, {"DANGLING"}, set()),
     ("never silent: corrupt flate", gen.corrupt_flate, {}, {"DECODE"}, set()),
     ("never silent: unsupported filter", leak_bogus_filter, {}, {"UNSUPPORTED"}, set()),
     ("never silent: decode cap", leak_bomb, {"cap": 1_000_000}, {"CAP"}, set()),

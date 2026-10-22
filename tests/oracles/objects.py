@@ -6,7 +6,7 @@
   "occurrences":[{"page":0,"path":[0],"forbid":[],"require":[]}], "no_unused_xobjects":true}
 
 Exit 0 iff no finding. Importable: check_isolated(path, spec) -> [finding strings "CODE: detail"].
-Finding codes: OPEN TEXT_PYPDF TEXT_FITZ BYTES_RAW STREAM STRING REVISION ORPHAN FEATURE DECODE UNSUPPORTED CAP IMAGE_REGION VECTOR_REGION OCCURRENCE UNUSED_XOBJECT TIMEOUT CRASH.
+Finding codes: OPEN TEXT_PYPDF TEXT_FITZ BYTES_RAW STREAM STRING REVISION ORPHAN DANGLING FEATURE DECODE UNSUPPORTED CAP IMAGE_REGION VECTOR_REGION OCCURRENCE UNUSED_XOBJECT TIMEOUT CRASH.
 Every decode problem, unsupported filter or unsupported geometry is a finding, never a silent pass.
 """
 import json
@@ -174,8 +174,9 @@ def check(path, spec):
         F.append("REVISION: %d %%EOF / %d startxref markers (want 1/1)" % (raw.count(b"%%EOF"), raw.count(b"startxref")))
     if re.search(rb"/Prev\s+\d+", raw):
         F.append("REVISION: /Prev in file")
-    allobj = {o.objgen for o in pdf.objects}
     heads = [(int(a), int(b)) for a, b in re.findall(rb"(?m)^(\d+) (\d+) obj\b", raw)]
+    objs = [o for o in pdf.objects if o is not None]
+    allobj = {o.objgen for o in objs} | set(heads)  # a dangling target comes back as None
     if len(heads) != len(set(heads)):
         F.append("REVISION: duplicate object definitions (prior revision bytes)")
     for g in set(heads) - allobj:
@@ -188,7 +189,12 @@ def check(path, spec):
                 continue
             seen.add(o.objgen)
         stack.extend(v for _, v in children(o))
-    for o in pdf.objects:
+    # qpdf drops null-valued keys and materializes the target of a reference nothing defines as a null object, so an
+    # undefined target shows as more null objects than the file's own `null` definitions.
+    undefined = len(pdf.objects) - len(objs) - len(re.findall(rb"(?m)^\d+ \d+ obj\s+null\b", raw))
+    if undefined > 0:
+        F.append("DANGLING: %d reference(s) to an object the file does not define" % undefined)
+    for o in objs:
         if o.objgen not in seen and not (o._type_code == T.stream and str(o.get("/Type", "")) in ("/ObjStm", "/XRef")):
             F.append("ORPHAN: unreachable object %s" % (o.objgen,))
     # (b) forbidden content in raw bytes, every decoded stream, every string/name
@@ -203,7 +209,7 @@ def check(path, spec):
     if info is not None and len(info.keys()) and "info" not in allow:
         F.append("FEATURE: /Info present (%s)" % ",".join(info.keys()))
     feats = dict(feats0)
-    for o in pdf.objects:
+    for o in objs:
         t = o._type_code
         if t not in (T.dictionary, T.stream, T.array):
             continue

@@ -14,6 +14,18 @@ pub(crate) fn check(limit: &'static str, actual: u64, max: u64) -> Result<(), Pd
     Ok(())
 }
 
+/// Spec §9 `maxOutputBytes` covers the writer buffer and the transfer copy: an output of `len`
+/// bytes is held once by the engine and handed to JS once more, so it meters twice. Checked
+/// before the bytes are built where their size is known, and again on the finished buffer.
+/// `handed_over` is false for a working copy, which never leaves the engine (meters once).
+pub(crate) fn check_output(len: u64, handed_over: bool, limits: &Limits) -> Result<(), PdfError> {
+    check(
+        "maxOutputBytes",
+        len.saturating_mul(1 + u64::from(handed_over)),
+        limits.max_output_bytes.into(),
+    )
+}
+
 /// Work units of one operation (spec §9): one interpreted operator, 1 KiB decoded or encoded,
 /// 1,000 pixels, or one shaped cluster. Decoded bytes of all streams add up here, so there is
 /// no separate total-decoded limit.

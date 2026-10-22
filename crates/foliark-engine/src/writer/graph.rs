@@ -499,11 +499,7 @@ impl<'a> Walk<'a> {
     /// building, not after).
     pub fn push(&mut self, node: Node) -> Result<(), PdfError> {
         self.bytes += node.data.as_ref().map_or(0, Vec::len) + 64;
-        limits::check(
-            "maxOutputBytes",
-            self.bytes as u64,
-            self.limits.max_output_bytes.into(),
-        )?;
+        limits::check_output(self.bytes as u64, !self.preserve, self.limits)?;
         self.nodes.push(node);
         Ok(())
     }
@@ -1003,6 +999,8 @@ impl<'a> Walk<'a> {
                 .raw_data_strict()
                 .map_err(|_| err_obj(ErrorCode::DecodeFailed, "decryption failed", id))?;
             self.budget.charge_bytes(raw.len())?;
+            // Refuse before the copy below allocates.
+            limits::check_output((self.bytes + raw.len()) as u64, !self.preserve, self.limits)?;
             let names: Vec<Val> = fs
                 .iter()
                 .map(|f| {

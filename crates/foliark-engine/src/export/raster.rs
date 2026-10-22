@@ -82,10 +82,7 @@ impl Job {
                     let img = encode(&px)?;
                     drop(px);
                     self.bytes += img.flate.len() as u64;
-                    let max = u64::from(limits.max_output_bytes);
-                    if self.bytes > max {
-                        return Err(PdfError::limit("maxOutputBytes", self.bytes, max));
-                    }
+                    crate::limits::check_output(self.bytes, true, limits)?;
                     self.done.push((spec.clone(), img));
                 } else {
                     self.bad.push(self.next as u32);

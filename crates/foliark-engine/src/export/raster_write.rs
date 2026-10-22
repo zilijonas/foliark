@@ -153,10 +153,7 @@ pub fn prepared(
     limits: &Limits,
 ) -> Result<Prepared, PdfError> {
     let bytes = assemble(pages);
-    let max = u64::from(limits.max_output_bytes);
-    if bytes.len() as u64 > max {
-        return Err(PdfError::limit("maxOutputBytes", bytes.len() as u64, max));
-    }
+    crate::limits::check_output(bytes.len() as u64, true, limits)?;
     verify(&bytes, plan, limits)?;
     let report = report(plan, edits, &bytes)?;
     Ok(Prepared {

@@ -1,7 +1,7 @@
 //! Native writer (spec §8.1, ADR 0002): a fresh, reachable-only, unencrypted, single-revision
 //! file built from an allowlist. Content streams are re-emitted from tokens; later tasks
 //! rewrite operator spans, clone Forms and re-encode images through the substitution API.
-use crate::reader;
+use crate::{limits, reader};
 use foliark_model::{ErrorCode, Limits, ObjectId, PdfError};
 use pdf_writer::{Name, Null, Obj, Pdf, Ref, Str};
 use std::collections::{BTreeMap, BTreeSet};
@@ -317,8 +317,6 @@ impl<'d> Writer<'d> {
             [&self.page_fonts, &self.page_xobjects],
             &self.dropped_xobjects,
         )?;
-        let max = u64::from(self.limits.max_output_bytes);
-        let over = |actual: usize| PdfError::limit("maxOutputBytes", actual as u64, max);
         let mut pdf = Pdf::new();
         if !self.preserve {
             pdf.catalog(Ref::new(1)).pages(Ref::new(2));
@@ -357,14 +355,10 @@ impl<'d> Writer<'d> {
                     }
                 }
             }
-            if pdf.len() as u64 > max {
-                return Err(over(pdf.len()));
-            }
+            limits::check_output(pdf.len() as u64, !self.preserve, &self.limits)?;
         }
         let out = pdf.finish();
-        if out.len() as u64 > max {
-            return Err(over(out.len()));
-        }
+        limits::check_output(out.len() as u64, !self.preserve, &self.limits)?;
         Ok(out)
     }
 }
