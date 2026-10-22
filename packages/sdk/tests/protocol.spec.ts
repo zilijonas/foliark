@@ -90,6 +90,37 @@ describe("generation and correlation", () => {
   });
 });
 
+describe("per-op payloads", () => {
+  const point = { x: 1, y: 2 };
+  const quad = [point, point, point, point];
+  const hit = { start: 0, end: 1, wordIndex: 0, quad };
+
+  it("validates results of the text ops, so a wrong shape cannot reach the caller", () => {
+    const check = (op: "hitTest" | "select" | "search" | "open", value: unknown) => {
+      const c = new Correlator<string>();
+      return c.receive(okRes(c.register(op, "x"), value)).kind;
+    };
+    expect(check("hitTest", null)).toBe("result");
+    expect(check("hitTest", hit)).toBe("result");
+    expect(check("hitTest", { ...hit, quad: [point] })).toBe("failure");
+    expect(check("hitTest", { ...hit, start: 1.5 })).toBe("failure");
+    expect(check("select", { start: 0, end: 1, text: "a", quads: [quad], partialCluster: false })).toBe("result");
+    expect(check("select", { start: 0, end: 1, text: "a", quads: [quad] })).toBe("failure");
+    expect(check("search", [{ start: 0, end: 1, text: "a", quads: [quad], partialCluster: false, pageIndex: 0 }])).toBe("failure"); // no revision
+    expect(check("open", { docId: "1-1" })).toBe("failure"); // no info
+  });
+
+  it("rejects malformed arguments of the new ops before they reach the worker", () => {
+    const req = (op: string, args: unknown, doc: string | undefined = "1-1") => ({ v: 1, id: 1, gen: 1, op, doc, args });
+    expect(checkRequest(req("hitTest", { page: 0, point }), 1).ok).toBe(true);
+    expect(checkRequest(req("hitTest", { page: 0, point: { x: NaN, y: 0 } }), 1).ok).toBe(false);
+    expect(checkRequest(req("quadsFor", { page: 0, start: 2, end: -1 }), 1).ok).toBe(false);
+    expect(checkRequest(req("search", { query: 5 }), 1).ok).toBe(false);
+    expect(checkRequest(req("registerFonts", { fonts: [{ bytes: new Uint8Array(4), family: "A", weight: 400, style: "normal" }] }, undefined), 1).ok).toBe(false); // a view
+    expect(checkRequest(req("registerFonts", { fonts: [{ bytes: new ArrayBuffer(4), family: "A", weight: 500, style: "normal" }] }, undefined), 1).ok).toBe(false);
+  });
+});
+
 describe("buffer ownership", () => {
   it("accepts a render result only when its pixel buffer is exactly width*height*4", () => {
     for (const [data, expected] of [

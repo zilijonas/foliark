@@ -1,6 +1,31 @@
 export { createFoliark } from "./client.js";
-export type { DocumentHandle, Foliark, FoliarkOptions, RenderedPage } from "./client.js";
+export type { Foliark, FoliarkOptions, OpenOptions, ResetReason } from "./client.js";
+export type {
+  DocumentHandle, ExportOptions, ExtractTextOptions, RenderedPage, RenderOptions, SearchOptions,
+} from "./document.js";
 export { FoliarkError } from "./protocol.js";
+export type { Capabilities } from "./generated/Capabilities.js";
+export type { ChangeResult } from "./generated/ChangeResult.js";
+export type { ChangeSet } from "./generated/ChangeSet.js";
+export type { Cluster } from "./generated/Cluster.js";
+export type { DocumentInfo } from "./generated/DocumentInfo.js";
 export type { ErrorCode } from "./generated/ErrorCode.js";
 export type { ErrorDetails } from "./generated/ErrorDetails.js";
+export type { ExportPlan } from "./generated/ExportPlan.js";
+export type { ExportPolicy } from "./generated/ExportPolicy.js";
+export type { FontMatchRule } from "./generated/FontMatchRule.js";
+export type { FontSource } from "./generated/FontSource.js";
+export type { Hit } from "./generated/Hit.js";
+export type { Limits } from "./generated/Limits.js";
+export type { Matrix } from "./generated/Matrix.js";
 export type { PageGeometry } from "./generated/PageGeometry.js";
+export type { ParagraphInfo } from "./generated/ParagraphInfo.js";
+export type { Point } from "./generated/Point.js";
+export type { Quad } from "./generated/Quad.js";
+export type { Rect } from "./generated/Rect.js";
+export type { RegisteredFont } from "./generated/RegisteredFont.js";
+export type { SearchHit } from "./generated/SearchHit.js";
+export type { StyleRun } from "./generated/StyleRun.js";
+export type { TextPage } from "./generated/TextPage.js";
+export type { TextRange } from "./generated/TextRange.js";
+export type { Word } from "./generated/Word.js";

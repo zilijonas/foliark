@@ -1,110 +1,193 @@
-// Thin main-thread client over the worker, speaking the validated envelope of spec 10.4.
-// Smoke ops only (open, pages, renderPage, close); the rest of the API, supervisor and restart arrive with NEW-27/29.
+// Main-thread client (spec 1, 10): owns the worker, speaks the validated envelope of spec 10.4, keeps the
+// registered fonts so a reset can re-send them, and hands out `DocumentHandle`s. Hang supervision and crash
+// recovery policy are NEW-29; `restart()` and the error/fatal paths already share one reset routine.
+import { makeHandle, type DocumentHandle, type Link, type Signal } from "./document.js";
+import type { DocumentInfo } from "./generated/DocumentInfo.js";
+import type { FontMatchRule } from "./generated/FontMatchRule.js";
+import type { FontSource } from "./generated/FontSource.js";
+import type { Limits } from "./generated/Limits.js";
 import type { OpName } from "./generated/OpName.js";
-import type { PageGeometry } from "./generated/PageGeometry.js";
+import type { RegisteredFont } from "./generated/RegisteredFont.js";
 import { checkRequest, Correlator, FoliarkError, postTransfer } from "./protocol.js";
 
-export interface RenderOptions {
-  /** Pixels per point (1). */
-  scale?: number;
-  /** Display-space rect to render (the whole page). */
-  clip?: { x: number; y: number; width: number; height: number };
-  /** Draw annotation appearances (true). */
-  annotations?: boolean;
-  /** Straight-alpha sRGB, each 0..1 (opaque white). */
-  background?: [number, number, number, number];
-}
-
-export interface RenderedPage {
-  width: number;
-  height: number;
-  data: Uint8ClampedArray; // RGBA8 straight alpha
-  scale: number;
-  clip: { x: number; y: number; width: number; height: number };
-  /** False iff `warnings` is not empty. */
-  complete: boolean;
-  warnings: { code: "FONT_SUBSTITUTED" | "IMAGE_DECODE_FAILED" | "ANNOTATION_APPEARANCE_MISSING" | "CMAP_MISSING"; detail: string }[];
-}
-
-export interface DocumentHandle {
-  readonly pageCount: number;
-  pageGeometry(page: number): Promise<PageGeometry>;
-  renderPage(page: number, o?: RenderOptions): Promise<RenderedPage>;
-  close(): Promise<void>;
-}
-
-export interface Foliark {
-  /** An `ArrayBuffer` is transferred (detached in the caller) unless `transfer: false`; a view is always copied. */
-  open(bytes: ArrayBuffer | Uint8Array, o?: { password?: string; transfer?: boolean }): Promise<DocumentHandle>;
-  dispose(): void;
-}
+export type ResetReason = "hang" | "crash" | "oom" | "restart";
 
 export interface FoliarkOptions {
   wasmUrl: string | URL;
-  workerUrl: string | URL;
+  /** Exactly one of `workerUrl` and `worker`. */
+  workerUrl?: string | URL;
+  worker?: () => Worker;
+  /** Optional CMap pack base (spec 10.3). */
+  cmapsUrl?: string | URL;
+  limits?: Partial<Limits>;
+  fontMatch?: FontMatchRule[];
+  /** Default 10000 (spec 10.2). */
+  hangTimeoutMs?: number;
   /** Called with a reason (never content) for every message that broke the protocol and was dropped or failed. */
   onProtocolViolation?: (reason: string) => void;
 }
 
+export interface OpenOptions extends Signal {
+  /** User or owner password; not retained. */
+  password?: string;
+  /** Accept a file whose xref had to be rebuilt (false). */
+  allowRepaired?: boolean;
+  /** An `ArrayBuffer` is transferred (detached in the caller) unless `false`; a view is always copied. Default true. */
+  transfer?: boolean;
+}
+
+export interface Foliark {
+  /** +1 per worker (re)start. */
+  readonly generation: number;
+  open(bytes: ArrayBuffer | Uint8Array, o?: OpenOptions): Promise<DocumentHandle>;
+  registerFonts(f: FontSource[], o?: Signal): Promise<RegisteredFont[]>;
+  /** Hard reset: a fresh worker, pending calls reject `WORKER_RESET`, old handles are gone (spec 10.2). */
+  restart(): Promise<void>;
+  onReset(cb: (e: { generation: number; reason: ResetReason }) => void): () => void;
+  /** Later calls reject `CLIENT_DISPOSED`. */
+  dispose(): Promise<void>;
+}
+
 type Waiter = { resolve(v: any): void; reject(e: Error): void };
 
+const copyOf = (b: ArrayBuffer | Uint8Array): Uint8Array => (b instanceof Uint8Array ? b.slice() : new Uint8Array(b.slice(0)));
+
 export async function createFoliark(o: FoliarkOptions): Promise<Foliark> {
-  const worker = new Worker(o.workerUrl, { type: "module" });
+  if ((o.workerUrl === undefined) === (o.worker === undefined)) {
+    throw new FoliarkError("INVALID_ARGUMENT", "pass exactly one of workerUrl and worker");
+  }
   const corr = new Correlator<Waiter>();
   const violation = o.onProtocolViolation ?? ((reason) => console.warn(`foliark protocol violation: ${reason}`));
-  let dead: FoliarkError | undefined;
+  const listeners = new Set<(e: { generation: number; reason: ResetReason }) => void>();
+  /** Client-held bytes of every registered font, re-sent after a reset (spec 10.2). */
+  const fonts: { bytes: Uint8Array; family: string; weight: number; style: string }[] = [];
+  let disposed = false;
+  let worker!: Worker;
 
-  const die = (e: FoliarkError) => {
-    dead ??= e;
-    worker.terminate();
-    for (const w of corr.reset()) w.reject(e);
-  };
-  worker.onmessage = (e) => {
-    const m = corr.receive(e.data);
-    if (m.kind === "result") m.ctx.resolve(m.value);
-    else if (m.kind === "failure") {
-      if (m.error.code === "PROTOCOL_ERROR") violation(m.error.message);
-      m.ctx.reject(m.error);
-    } else if (m.kind === "dropped") violation(m.reason);
-    else if (m.kind === "event" && m.event === "fatal") die(new FoliarkError("WORKER_RESET", m.reason ?? "worker fatal", { recoverable: true }));
-  };
-  worker.onerror = (e) => die(new FoliarkError("WORKER_RESET", `worker error: ${e.message}`, { recoverable: true }));
-
-  const call = <R>(op: OpName, args: object, doc?: string, transfer: ArrayBuffer[] = []) =>
+  const call = <R>(op: OpName, args: object, c: { doc?: string; transfer?: ArrayBuffer[]; signal?: AbortSignal } = {}) =>
     new Promise<R>((resolve, reject) => {
-      if (dead) return reject(dead);
-      const msg = { v: 1 as const, id: 0, gen: corr.generation, op, ...(doc === undefined ? {} : { doc }), args };
+      if (disposed) return reject(new FoliarkError("CLIENT_DISPOSED", "client disposed"));
+      if (c.signal?.aborted) return reject(new FoliarkError("CANCELLED", "operation cancelled", { recoverable: true }));
+      const msg = { v: 1 as const, id: 0, gen: corr.generation, op, ...(c.doc === undefined ? {} : { doc: c.doc }), args };
       const checked = checkRequest(msg, corr.generation);
       if (!checked.ok) return reject(checked.error);
-      msg.id = corr.register(op, { resolve, reject });
+      let onAbort: (() => void) | undefined;
+      const settle = (f: () => void) => () => {
+        if (onAbort) c.signal?.removeEventListener("abort", onAbort);
+        f();
+      };
+      const id = corr.register(op, {
+        resolve: (v) => settle(() => resolve(v))(),
+        reject: (e) => settle(() => reject(e))(),
+      });
+      msg.id = id;
+      // The worker answers a cancelled op itself (CANCELLED), so the correlator settles it like any other.
+      if (c.signal) {
+        onAbort = () => worker.postMessage({ v: 1, cancel: id });
+        c.signal.addEventListener("abort", onAbort, { once: true });
+      }
       try {
-        postTransfer(worker, msg, transfer);
+        postTransfer(worker, msg, c.transfer ?? []);
       } catch (e) {
         reject(e as Error);
       }
     });
 
-  await call("init", { wasmUrl: String(o.wasmUrl) });
+  const fontArgs = () => ({ fonts: fonts.map((f) => ({ ...f, bytes: f.bytes.slice().buffer })) });
+
+  /** Start a worker for the current generation: init, then the registered fonts, in order. */
+  function spawn(): Promise<unknown> {
+    const w = (worker = o.worker ? o.worker() : new Worker(o.workerUrl!, { type: "module" }));
+    w.onmessage = (e) => {
+      if (w !== worker) return;
+      const m = corr.receive(e.data);
+      if (m.kind === "result") m.ctx.resolve(m.value);
+      else if (m.kind === "failure") {
+        if (m.error.code === "PROTOCOL_ERROR") violation(m.error.message);
+        m.ctx.reject(m.error);
+      } else if (m.kind === "dropped") violation(m.reason);
+      else if (m.kind === "event" && m.event === "fatal") crash(m.reason ?? "worker fatal");
+    };
+    w.onerror = (e) => crash(`worker error: ${e.message}`);
+    const init = call("init", {
+      wasmUrl: String(o.wasmUrl),
+      cmapsUrl: o.cmapsUrl === undefined ? undefined : String(o.cmapsUrl),
+      limits: o.limits,
+      fontMatch: o.fontMatch,
+    });
+    const registered = fonts.length
+      ? (() => {
+          const args = fontArgs();
+          return call("registerFonts", args, { transfer: args.fonts.map((f) => f.bytes) });
+        })()
+      : undefined;
+    return Promise.all([init, registered]);
+  }
+
+  async function reset(reason: ResetReason): Promise<void> {
+    if (disposed) return;
+    worker.terminate();
+    const err = new FoliarkError("WORKER_RESET", `worker reset (${reason})`, { recoverable: true });
+    for (const w of corr.reset()) w.reject(err);
+    const ready = spawn();
+    for (const cb of [...listeners]) {
+      try {
+        cb({ generation: corr.generation, reason });
+      } catch {
+        // a listener's bug must not break the reset
+      }
+    }
+    await ready;
+  }
+  const crash = (why: string) => {
+    violation(why);
+    reset("crash").catch((e) => violation(`reset failed: ${e instanceof Error ? e.message : String(e)}`));
+  };
+
+  const link: Link = {
+    get generation() {
+      return corr.generation;
+    },
+    get disposed() {
+      return disposed;
+    },
+    call,
+  };
+
+  await spawn();
 
   return {
-    async open(bytes, opts) {
-      const buf = bytes instanceof ArrayBuffer && opts?.transfer !== false ? bytes : (bytes instanceof ArrayBuffer ? bytes.slice(0) : bytes.slice().buffer);
-      const { docId, pageCount } = await call<{ docId: string; pageCount: number }>("open", { bytes: buf, password: opts?.password }, undefined, [buf]);
-      let pages: Promise<PageGeometry[]> | undefined;
-      return {
-        pageCount,
-        async pageGeometry(page) {
-          const g = (await (pages ??= call<PageGeometry[]>("pages", {}, docId)))[page];
-          if (!g) throw new FoliarkError("INVALID_ARGUMENT", `page ${page} out of range (count ${pageCount})`);
-          return g;
-        },
-        async renderPage(page, ro) {
-          const r = await call<Omit<RenderedPage, "data"> & { data: ArrayBuffer }>("renderPage", { page, ...ro }, docId);
-          return { ...r, data: new Uint8ClampedArray(r.data) };
-        },
-        close: () => call<null>("close", {}, docId).then(() => undefined),
-      };
+    get generation() {
+      return corr.generation;
     },
-    dispose: () => die(new FoliarkError("CLIENT_DISPOSED", "client disposed")),
+    async open(bytes, opts) {
+      const transferable = bytes instanceof ArrayBuffer && opts?.transfer !== false;
+      const buf = transferable ? bytes : (copyOf(bytes).buffer as ArrayBuffer);
+      const { docId, info } = await call<{ docId: string; info: DocumentInfo }>(
+        "open",
+        { bytes: buf, password: opts?.password, allowRepaired: opts?.allowRepaired },
+        { transfer: [buf], signal: opts?.signal },
+      );
+      return makeHandle(link, docId, info);
+    },
+    async registerFonts(list, opts) {
+      const kept = list.map((f) => ({ bytes: copyOf(f.bytes), family: f.family, weight: f.weight, style: f.style }));
+      const args = { fonts: kept.map((f) => ({ ...f, bytes: f.bytes.slice().buffer })) };
+      const registered = await call<RegisteredFont[]>("registerFonts", args, { transfer: args.fonts.map((f) => f.bytes), signal: opts?.signal });
+      fonts.push(...kept);
+      return registered;
+    },
+    restart: () => reset("restart"),
+    onReset(cb) {
+      listeners.add(cb);
+      return () => void listeners.delete(cb);
+    },
+    async dispose() {
+      if (disposed) return;
+      disposed = true;
+      worker.terminate();
+      const err = new FoliarkError("CLIENT_DISPOSED", "client disposed");
+      for (const w of corr.reset()) w.reject(err);
+    },
   };
 }

@@ -44,7 +44,13 @@ try {
     [r.part.width, r.part.height, r.part.clip, r.part.red, r.part.corner],
     [200, 200, { x: 100, y: 0, width: 100, height: 100 }, [255, 0, 0, 255], [0, 0, 0, 0]],
   );
-  assert.match(r.outOfRange, /InvalidArgument/);
+  assert.equal(r.outOfRange, "INVALID_ARGUMENT");
+  assert.equal(r.pdfVersion, "1.7");
+  assert.equal(r.helloText.trim(), "Hello Foliark");
+  assert.deepEqual([r.fixture.pages, r.fixture.hits > 0, r.fixture.sliced, r.fixture.closedCode], [4, true, true, "DOCUMENT_GONE"]);
+  assert.match(r.fixture.text, /KEEP_PUBLIC_ROTATION_CROP/);
+  assert.equal(r.fixture.render[2], r.fixture.render[0] * r.fixture.render[1] * 4);
+  assert.equal(r.refused, "INVALID_ARGUMENT", "prepareExport is refused until NEW-46");
   console.log(`smoke ${name}: ok (${r.width}x${r.height}, ${r.nonWhite} non-white px)`);
 } finally {
   await browser.close();

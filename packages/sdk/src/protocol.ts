@@ -140,31 +140,108 @@ export function postTransfer(
   if (buffers.some((b) => b.byteLength !== 0 && !isDetached(b))) throw new FoliarkError("INTERNAL", "buffer was not detached by transfer");
 }
 
-// ---- per-op payloads (spec 10.4; ops not listed are validated at the envelope only until NEW-27) -----
+// ---- per-op payloads (spec 10.4). Deep ChangeSet/ExportReport/ParagraphInfo checks belong to the ops that build them ----
 
 type Guard = (x: unknown) => boolean;
 const isNull: Guard = (x) => x === null;
+const isBool: Guard = (x) => typeof x === "boolean";
 const isEmptyArgs: Guard = isRec;
+const isPoint = shape({ x: isNum, y: isNum });
+const isQuad: Guard = (x) => Array.isArray(x) && x.length === 4 && x.every(isPoint);
+const isRgb = tuple(3);
+
+const isDocumentInfo = shape({
+  pageCount: isU32, pdfVersion: isStr, encrypted: isBool, repaired: isBool, requiredAssets: arrayOf(isStr),
+  features: shape({
+    forms: isBool, xfa: isBool, signatures: isBool, optionalContent: isBool, javascript: isBool, embeddedFiles: isBool,
+    annotations: isU32, structTree: isBool, outlines: isBool, thumbnails: isBool, metadata: isBool,
+  }),
+});
+const isWord = shape({
+  text: isStr, start: isU32, end: isU32, box: isRect, blockIndex: isU32, lineIndex: isU32, wordIndex: isU32,
+  styleIndex: isU32, invisible: isBool, ocgHidden: opt((x) => x === true), source: (x) => x === "native",
+});
+const isStyleRun = shape({
+  fontName: isStr, fontRef: isStr, size: isNum, color: isRgb, renderMode: isU32,
+  flags: shape({ bold: isBool, italic: isBool, serif: isBool, mono: isBool }),
+});
+const isCluster = shape({ start: isU32, end: isU32, quad: isQuad, styleIndex: isU32, glyphs: isU32, flags: isU32 });
+const isTextPage = shape({
+  docId: isStr, revision: isU32, pageIndex: isU32, text: isStr, words: arrayOf(isWord), styles: arrayOf(isStyleRun),
+  clusters: opt(arrayOf(isCluster)),
+  stats: shape({ visibleClusters: isU32, invisibleClusters: isU32, unmappedGlyphs: isU32, imageCoverage: isNum }),
+});
+const isHit = shape({ start: isU32, end: isU32, wordIndex: isU32, quad: isQuad });
+const isTextRange = shape({ start: isU32, end: isU32, text: isStr, quads: arrayOf(isQuad), partialCluster: isBool });
+const isSearchHit = (x: unknown) => isTextRange(x) && shape({ pageIndex: isU32, revision: isU32 })(x);
+const isCapability = shape({
+  status: (x) => x === "supported" || x === "unsupported" || x === "unknown",
+  reasons: arrayOf(shape({ code: isErrorCode, pages: opt(arrayOf(isU32)) })),
+});
+const isCapabilities = shape({
+  extract: isCapability, render: isCapability, edit: isCapability, redact: isCapability, exportNative: isCapability,
+  exportRaster: isCapability,
+});
+const isRegisteredFont = shape({
+  id: isStr, family: isStr, weight: isU32, style: (x) => x === "normal" || x === "italic", postscriptName: isStr, glyphCount: isU32,
+});
+const isMode = (x: unknown) => x === "native" || x === "raster";
 
 export const argsGuards = (maxBytes = DEFAULT_MAX_BUFFER_BYTES): Partial<Record<OpName, Guard>> => ({
-  init: shape({ wasmUrl: isStr }),
-  open: shape({ bytes: (x) => isBuffer(x, maxBytes, 1), password: opt(isStr), allowRepaired: opt((x) => typeof x === "boolean") }),
+  init: shape({ wasmUrl: isStr, cmapsUrl: opt(isStr), limits: opt(isRec), fontMatch: opt(arrayOf(shape({ pattern: isStr, family: isStr }))) }),
+  open: shape({ bytes: (x) => isBuffer(x, maxBytes, 1), password: opt(isStr), allowRepaired: opt(isBool) }),
+  info: isEmptyArgs,
   pages: isEmptyArgs,
+  capabilities: shape({ deep: opt(isBool) }),
+  extractText: shape({ page: isU32, chars: opt(isBool), includeOcgHidden: opt(isBool) }),
+  hitTest: shape({ page: isU32, point: isPoint, tolerance: opt((x) => isNum(x) && x >= 0) }),
+  select: shape({ page: isU32, from: isPoint, to: isPoint }),
+  quadsFor: shape({ page: isU32, start: isU32, end: isU32 }),
+  search: shape({
+    query: isStr, pages: opt(arrayOf(isU32)), caseSensitive: opt(isBool), diacriticSensitive: opt(isBool), wholeWord: opt(isBool),
+    maxHits: opt(isU32),
+  }),
   renderPage: shape({
-    page: isU32, scale: opt((x) => isNum(x) && x > 0), clip: opt(isRect), annotations: opt((x) => typeof x === "boolean"),
-    background: opt(tuple(4)),
+    page: isU32, scale: opt((x) => isNum(x) && x > 0), clip: opt(isRect), annotations: opt(isBool), background: opt(tuple(4)),
+  }),
+  prepareParagraph: shape({ page: isU32, rects: arrayOf(isRect), font: opt(isStr), editorFace: opt(isBool) }),
+  applyChanges: shape({ changes: shape({ baseRevision: isU32 }) }),
+  prepareExport: shape({ mode: isMode, policy: opt(isRec) }),
+  export: shape({ planId: isStr }),
+  registerFonts: shape({
+    fonts: arrayOf(shape({
+      bytes: (x) => isBuffer(x, maxBytes, 1), family: isStr, weight: (x) => x === 400 || x === 700,
+      style: (x) => x === "normal" || x === "italic",
+    })),
   }),
   close: isEmptyArgs,
 });
 
 export const resultGuards = (maxBytes = DEFAULT_MAX_BUFFER_BYTES): Partial<Record<OpName, Guard>> => ({
   init: isNull,
-  open: shape({ docId: isStr, pageCount: isU32 }),
+  open: shape({ docId: isStr, info: isDocumentInfo }),
+  info: isDocumentInfo,
   pages: arrayOf(isPageGeometry),
+  capabilities: isCapabilities,
+  extractText: isTextPage,
+  hitTest: (x) => x === null || isHit(x),
+  select: (x) => x === null || isTextRange(x),
+  quadsFor: isTextRange,
+  search: arrayOf(isSearchHit),
   renderPage: (x) =>
     isRenderedHeader(x) &&
     isBuffer((x as Rec).data, maxBytes, 1) &&
     ((x as Rec).data as ArrayBuffer).byteLength === x.width * x.height * 4,
+  prepareParagraph: shape({ docId: isStr, revision: isU32, pageIndex: isU32, bounds: isRect, font: isRec }),
+  applyChanges: shape({
+    accepted: isBool, revision: isU32, rejected: arrayOf(isRec), changedPages: arrayOf(isU32), layouts: arrayOf(isRec),
+  }),
+  prepareExport: shape({
+    planId: isStr, docId: isStr, generation: isU32, revision: isU32, mode: isMode, policyHash: isStr,
+    fontRegistryVersion: isU32, byteLength: isU32, report: isRec,
+  }),
+  export: (x) => isBuffer(x, maxBytes, 1),
+  registerFonts: arrayOf(isRegisteredFont),
   close: isNull,
 });
 

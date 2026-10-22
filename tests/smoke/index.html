@@ -11,21 +11,36 @@
     });
     const bytes = new Uint8Array(await (await fetch("/tests/smoke/one-page.pdf")).arrayBuffer());
     const doc = await foliark.open(bytes);
-    const geometry = await doc.pageGeometry(0);
+    const info = await doc.info();
+    const geometry = (await doc.pages())[0];
     const page = await doc.renderPage(0, { scale: 1 });
     const px = (x, y) => Array.from(page.data.subarray((y * page.width + x) * 4, (y * page.width + x) * 4 + 4));
     let nonWhite = 0;
     for (let i = 0; i < page.data.length; i += 4) {
       if (page.data[i] !== 255 || page.data[i + 1] !== 255 || page.data[i + 2] !== 255) nonWhite++;
     }
+    const helloText = doc.extractText(0).then((t) => t.text);
     const part = await doc.renderPage(0, { scale: 2, clip: { x: 100, y: 0, width: 100, height: 100 }, background: [0, 0, 0, 0] });
     const ppx = (x, y) => Array.from(part.data.subarray((y * part.width + x) * 4, (y * part.width + x) * 4 + 4));
     let outOfRange = "";
-    await doc.renderPage(5).catch((e) => (outOfRange = e.message));
+    await doc.renderPage(5).catch((e) => (outOfRange = e.code));
+    // Native text from the fixture corpus: extract, search a known word, hit-test it.
+    const fx = await fetch("/tests/fixtures/hddn/rotation-crop.pdf");
+    const fixture = await foliark.open(await fx.arrayBuffer());
+    const text = await fixture.extractText(0);
+    const hits = await fixture.search("SECRET_ROTATION_CROP");
+    const sliced = hits.length > 0 && text.text.slice(hits[0].start, hits[0].end) === hits[0].text;
+    const fixtureInfo = await fixture.info();
+    const fixtureRender = await fixture.renderPage(0, { scale: 0.5 });
+    await fixture.close();
+    const closedCode = await fixture.pages().then(() => "none", (e) => e.code);
+    const refused = await doc.prepareExport({ mode: "native" }).then(() => "none", (e) => e.code);
     await doc.close();
-    foliark.dispose();
+    await foliark.dispose();
     Object.assign(out, {
-      ok: true, pageCount: doc.pageCount, geometry, width: page.width, height: page.height,
+      ok: true, pageCount: info.pageCount, pdfVersion: info.pdfVersion,
+      fixture: { pages: fixtureInfo.pageCount, text: text.text, hits: hits.length, sliced, render: [fixtureRender.width, fixtureRender.height, fixtureRender.data.length], closedCode },
+      refused, helloText: await helloText, geometry, width: page.width, height: page.height,
       length: page.data.length, nonWhite, red: px(140, 75), corner: px(190, 5), outOfRange,
       complete: page.complete, warnings: page.warnings, clip: page.clip,
       part: { width: part.width, height: part.height, clip: part.clip, red: ppx(80, 150), corner: ppx(180, 10) },
