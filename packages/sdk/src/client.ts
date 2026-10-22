@@ -123,7 +123,7 @@ export async function createFoliark(o: FoliarkOptions): Promise<Foliark> {
   const fontArgs = () => ({ fonts: fonts.map((f) => ({ ...f, bytes: f.bytes.slice().buffer })) });
 
   /** Start a worker for the current generation: init, then the registered fonts, in order. */
-  function spawn(): Promise<unknown> {
+  function spawn(first = false): Promise<unknown> {
     const w = (worker = o.worker ? o.worker() : new Worker(o.workerUrl!, { type: "module" }));
     w.onmessage = (e) => {
       if (w !== worker) return;
@@ -137,15 +137,23 @@ export async function createFoliark(o: FoliarkOptions): Promise<Foliark> {
       } else if (m.kind === "dropped") violation(m.reason);
       else if (m.kind === "event" && m.event === "fatal") crash(m.reason ?? "worker fatal");
     };
+    // A first worker that dies before init answered could not load its script (missing, offline): an asset failure (spec 10.3).
+    // Later workers keep the crash path (their script was already fetched once).
+    let failInit!: (e: Error) => void;
+    const unloadable = new Promise<never>((_, reject) => (failInit = reject));
+    let starting = first;
     w.onerror = (e) => {
-      if (w === worker) crash(`worker error: ${e.message}`, e.message);
+      if (w !== worker) return;
+      if (starting) failInit(new FoliarkError("ASSET_LOAD_FAILED", `worker script failed to load${e.message ? `: ${e.message}` : ""}`));
+      else crash(`worker error: ${e.message}`, e.message);
     };
-    const init = call("init", {
+    const initCall = call("init", {
       wasmUrl: String(o.wasmUrl),
       cmapsUrl: o.cmapsUrl === undefined ? undefined : String(o.cmapsUrl),
       limits: o.limits,
       fontMatch: o.fontMatch,
     });
+    const init = Promise.race([unloadable, initCall]).finally(() => (starting = false));
     const registered = fonts.length
       ? (() => {
           const args = fontArgs();
@@ -189,7 +197,7 @@ export async function createFoliark(o: FoliarkOptions): Promise<Foliark> {
   };
 
   try {
-    await spawn();
+    await spawn(true);
   } catch (e) {
     // A client that never started owns no worker.
     shutdown();
