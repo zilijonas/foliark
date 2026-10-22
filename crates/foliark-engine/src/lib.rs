@@ -6,6 +6,7 @@ mod engine;
 pub mod interpret;
 pub mod limits;
 pub mod reader;
+pub mod redaction;
 mod render;
 pub mod text;
 pub mod writer;

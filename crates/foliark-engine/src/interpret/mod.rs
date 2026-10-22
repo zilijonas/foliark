@@ -116,6 +116,9 @@ pub struct PathItem {
     /// The fill rule, or the clip rule of a clip-only item.
     pub fill: Option<FillRule>,
     pub stroke: Option<StrokeProps>,
+    /// Factor from the stroke's line width (the CTM's user units) to page user space:
+    /// `sqrt(|det CTM|)`. 1 for a clip-only item.
+    pub stroke_scale: f64,
     pub clip_only: bool,
 }
 
@@ -294,6 +297,7 @@ impl Builder<'_> {
             geometry: props.transform * path.clone(),
             fill,
             stroke,
+            stroke_scale: props.transform.determinant().abs().sqrt(),
             clip_only: false,
         };
         match &props.paint {
@@ -327,6 +331,7 @@ impl<'a> Device<'a> for Builder<'_> {
                 geometry: clip.path.clone(),
                 fill: Some(clip.fill),
                 stroke: None,
+                stroke_scale: 1.0,
                 clip_only: true,
             }));
         }
