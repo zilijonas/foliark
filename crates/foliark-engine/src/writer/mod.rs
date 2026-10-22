@@ -66,6 +66,8 @@ pub(crate) type XObjectEdits = (Vec<(Vec<u8>, Val)>, Vec<Vec<u8>>);
 /// ids no input object has (generation 65535 is a free slot, never a live object).
 #[derive(Debug, Default)]
 pub(crate) struct Redirects {
+    /// Source objects that are written as another value wherever they are referenced.
+    pub superseded: BTreeMap<ObjectId, Val>,
     /// Clone id -> the source object it copies (dictionary and stream data).
     pub aliases: BTreeMap<ObjectId, ObjectId>,
     /// A page's `/Contents` entry `source` is written as the clone instead.
@@ -90,6 +92,7 @@ pub struct Writer<'d> {
     embedded: BTreeSet<String>,
     redirects: Redirects,
     layers_resolved: bool,
+    preserve: bool,
 }
 
 /// Resources added per page: (resource name, object).
@@ -112,7 +115,24 @@ impl<'d> Writer<'d> {
             embedded: BTreeSet::new(),
             redirects: Redirects::default(),
             layers_resolved: false,
+            preserve: false,
         }
+    }
+
+    /// Preserve mode (spec §8.3): the same writer without the allowlist. Everything reachable
+    /// from the trailer (Info, Metadata, AcroForm, annotations, OCProperties, StructTreeRoot,
+    /// Names, Outlines, ...) is kept with its keys verbatim; content streams are still
+    /// re-emitted from tokens and the file is still unencrypted. Only for working copies that
+    /// export reads back through the allowlist writer, never for a file that leaves the engine.
+    pub fn preserve(&mut self) -> &mut Self {
+        self.preserve = true;
+        self
+    }
+
+    /// Write `new` (an added object) wherever the input refers to `old`, and not `old` itself.
+    pub fn supersede(&mut self, old: ObjectId, new: Val) -> &mut Self {
+        self.redirects.superseded.insert(old, new);
+        self
     }
 
     /// The caller has flattened optional content ([`crate::sanitize::visibility`]): hidden
@@ -291,6 +311,7 @@ impl<'d> Writer<'d> {
         );
         walk.layers_resolved = self.layers_resolved;
         walk.encoded = &self.encoded;
+        walk.preserve = self.preserve;
         let pages = walk.build(
             &self.appended,
             [&self.page_fonts, &self.page_xobjects],
@@ -299,12 +320,32 @@ impl<'d> Writer<'d> {
         let max = u64::from(self.limits.max_output_bytes);
         let over = |actual: usize| PdfError::limit("maxOutputBytes", actual as u64, max);
         let mut pdf = Pdf::new();
-        pdf.catalog(Ref::new(1)).pages(Ref::new(2));
-        pdf.pages(Ref::new(2))
-            .kids(pages.iter().copied())
-            .count(pages.len() as i32);
+        if !self.preserve {
+            pdf.catalog(Ref::new(1)).pages(Ref::new(2));
+            pdf.pages(Ref::new(2))
+                .kids(pages.iter().copied())
+                .count(pages.len() as i32);
+        }
         for node in &walk.nodes {
             match &node.data {
+                None if self.preserve && node.id == Ref::new(1) => {
+                    let Val::Dict(entries) = &node.val else {
+                        return Err(err(ErrorCode::Internal, "catalog is not a dictionary"));
+                    };
+                    let mut c = pdf.catalog(node.id);
+                    for (k, v) in entries {
+                        put(c.insert(Name(k)), v)?;
+                    }
+                }
+                None if walk.info == Some(node.id) => {
+                    let Val::Dict(entries) = &node.val else {
+                        return Err(err(ErrorCode::Internal, "info is not a dictionary"));
+                    };
+                    let mut i = pdf.document_info(node.id);
+                    for (k, v) in entries {
+                        put(i.insert(Name(k)), v)?;
+                    }
+                }
                 None => put(pdf.indirect(node.id), &node.val)?,
                 Some(data) => {
                     let mut s = pdf.stream(node.id, data);

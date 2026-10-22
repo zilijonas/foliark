@@ -10,7 +10,7 @@ use crate::limits;
 use crate::reader::object_id;
 use foliark_model::{ErrorCode, ObjectId, PdfError};
 use foliark_text::{LayoutPlan, RegisteredFace};
-use hayro::hayro_syntax::object::{Dict, MaybeRef, Name, Object, ObjectIdentifier, Stream};
+use hayro::hayro_syntax::object::{Array, Dict, MaybeRef, Name, Object, ObjectIdentifier, Stream};
 use skrifa::{FontRef, MetadataProvider, instance::LocationRef, instance::Size};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
@@ -460,16 +460,31 @@ fn glyph_count(program: &[u8]) -> Option<usize> {
 
 /// Glyphs of one registered font that content uses, with the text each stands for.
 #[derive(Debug, Default, Clone)]
-pub struct UsedGlyphs(BTreeMap<u16, String>);
+pub struct UsedGlyphs {
+    glyphs: BTreeMap<u16, String>,
+    /// Glyphs an earlier embedding of the font already holds, in CID order (CID 1, 2, ...).
+    prior: Vec<u16>,
+}
 
 impl UsedGlyphs {
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Start from the glyphs an earlier embedding of the font holds ([`registered_state`]):
+    /// they keep their CIDs, so content that already uses the old font still reads right.
+    pub fn from_prior(prior: Vec<(u16, String)>) -> Self {
+        let mut used = Self::default();
+        for (gid, text) in prior {
+            used.prior.push(gid);
+            used.glyphs.insert(gid, text);
+        }
+        used
+    }
+
     /// Add one glyph and its text; the first text for a glyph wins.
     pub fn add(&mut self, gid: u16, text: &str) {
-        self.0.entry(gid).or_insert_with(|| text.to_owned());
+        self.glyphs.entry(gid).or_insert_with(|| text.to_owned());
     }
 
     /// Every glyph the runs of `plan` set in registered font `font_id`; `text` is the
@@ -514,14 +529,39 @@ pub struct EmbeddedFont {
     pub widths: BTreeMap<u16, f64>,
 }
 
-/// FNV-1a over the registry font id and the glyph set: the stable `ABCDEF+` subset tag.
-fn subset_tag(font_id: &str, gids: impl Iterator<Item = u16>) -> String {
+/// FNV-1a over the registry font id: the `ABCDEF+` subset tag. It does not depend on the glyph
+/// set, so one font keeps its tag when later edits add glyphs, and the tag finds it again.
+fn subset_tag(font_id: &str) -> String {
     let mut h = 0xcbf2_9ce4_8422_2325u64;
-    for b in font_id.bytes().chain(gids.flat_map(u16::to_le_bytes)) {
+    for b in font_id.bytes() {
         h = (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3);
     }
     (0..6)
         .map(|i| char::from(b'A' + ((h >> (i * 8)) % 26) as u8))
+        .collect()
+}
+
+/// The page resource name of registered font `font_id` (one name per font, document-wide).
+pub fn registered_resource(font_id: &str) -> String {
+    format!("FkR{}", subset_tag(font_id))
+}
+
+/// Key of the Type0 font dictionary that lists the glyphs in CID order, each as gid and text
+/// (what [`UsedGlyphs::from_prior`] needs). Working copies keep it; export drops it.
+const GLYPHS_KEY: &str = "FoliarkGlyphs";
+
+/// What [`embed_registered_font`] recorded in `font`, a font dictionary of a working copy.
+pub fn registered_state(font: &Dict<'_>) -> Option<Vec<(u16, String)>> {
+    let items: Vec<Object<'_>> = font.get::<Array<'_>>(GLYPHS_KEY)?.iter().collect();
+    items
+        .chunks(2)
+        .map(|pair| match pair {
+            [Object::Number(g), Object::String(t)] => Some((
+                g.as_f64() as u16,
+                String::from_utf8(t.as_bytes().to_vec()).ok()?,
+            )),
+            _ => None,
+        })
         .collect()
 }
 
@@ -552,14 +592,15 @@ pub fn embed_registered_font(
         return Err(err(ErrorCode::InvalidArgument, "font already embedded"));
     }
     let unsupported = |m: &str| err(ErrorCode::FontUnsupported, m);
+    // Earlier glyphs first, in their old order: their CIDs do not move.
     let mut remap = subsetter::GlyphRemapper::new();
-    for &g in used.0.keys() {
+    for &g in used.prior.iter().chain(used.glyphs.keys()) {
         remap.remap(g);
     }
     let subset = subsetter::subset(face.bytes(), 0, &remap)
         .map_err(|_| unsupported("font cannot be subset"))?;
     let cid: BTreeMap<u16, u16> = used
-        .0
+        .glyphs
         .keys()
         .filter_map(|&g| remap.get(g).map(|n| (g, n)))
         .collect();
@@ -596,11 +637,7 @@ pub fn embed_registered_font(
     flush(&mut run, &mut w_array);
 
     let cff = subset.get(..4) == Some(b"OTTO");
-    let ps = format!(
-        "{}+{}",
-        subset_tag(&id, cid.keys().copied()),
-        face.info().postscript_name
-    );
+    let ps = format!("{}+{}", subset_tag(&id), face.info().postscript_name);
     let bold = face.info().weight >= 700;
     let italic = face.info().style == foliark_model::FontStyle::Italic;
     let flags = 32 | if italic { 64 } else { 0 } | if bold { 1 << 18 } else { 0 };
@@ -656,9 +693,18 @@ pub fn embed_registered_font(
     let cmap = rebuild_to_unicode(
         2,
         cid.iter()
-            .filter_map(|(old, new)| Some((u32::from(*new), used.0.get(old)?.as_str()))),
+            .filter_map(|(old, new)| Some((u32::from(*new), used.glyphs.get(old)?.as_str()))),
     )?;
     let to_unicode = w.add_object(Val::Dict(Vec::new()), Some(cmap));
+    let mut in_cid_order: Vec<_> = cid.iter().map(|(old, new)| (*new, *old)).collect();
+    in_cid_order.sort_unstable();
+    let record = in_cid_order.into_iter().flat_map(|(_, old)| {
+        let text = used
+            .glyphs
+            .get(&old)
+            .map_or(Vec::new(), |t| t.as_bytes().to_vec());
+        [Val::Int(i32::from(old)), Val::Str(text)]
+    });
     let type0 = w.add_object(
         Val::Dict(vec![
             entry("Type", name("Font")),
@@ -667,6 +713,7 @@ pub fn embed_registered_font(
             entry("Encoding", name("Identity-H")),
             entry("DescendantFonts", array([cid_font])),
             entry("ToUnicode", to_unicode),
+            entry(GLYPHS_KEY, array(record)),
         ]),
         None,
     );

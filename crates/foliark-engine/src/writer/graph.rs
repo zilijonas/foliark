@@ -53,6 +53,9 @@ pub(crate) enum Class {
     DecodeParms,
     /// Opaque data (JBIG2 globals, CIDToGIDMap, Indexed lookup).
     Data,
+    /// Preserve mode only: any object no class above claims. Every key is kept, a stream keeps
+    /// its bytes.
+    Raw,
 }
 
 /// How a value is copied.
@@ -66,6 +69,9 @@ pub(crate) enum V {
     Many(Class),
     /// A dictionary name -> object of the class.
     Map(Class),
+    /// Preserve mode: copy the value as is; every reference becomes an output object, classified
+    /// by what it points to.
+    Any,
     /// An array with per-position specs; further items are plain.
     Tuple(&'static [V]),
 }
@@ -329,7 +335,9 @@ impl Class {
                 ("JBIG2Globals", One(C::Data)),
                 ("ColorTransform", Plain),
             ],
-            C::XObject | C::Font | C::Pattern | C::ColorSpace | C::Content | C::Data => &[],
+            C::XObject | C::Font | C::Pattern | C::ColorSpace | C::Content | C::Data | C::Raw => {
+                &[]
+            }
         }
     }
 
@@ -340,7 +348,14 @@ impl Class {
     fn allows_data_stream(self) -> bool {
         matches!(
             self,
-            C::Image | C::FontFile | C::CMap | C::IccStream | C::Data | C::Shading | C::Function
+            C::Image
+                | C::FontFile
+                | C::CMap
+                | C::IccStream
+                | C::Data
+                | C::Shading
+                | C::Function
+                | C::Raw
         )
     }
 }
@@ -382,6 +397,13 @@ fn refine(class: Class, val: &Val, obj: ObjectId) -> Result<Class, PdfError> {
     refined.ok_or_else(|| err_obj(ErrorCode::MalformedPdf, "unclassifiable object", obj))
 }
 
+/// See `Walk::kind`.
+enum Kind {
+    Missing,
+    PageTree,
+    Is(Class),
+}
+
 pub(crate) struct Node {
     pub id: Ref,
     pub val: Val,
@@ -408,6 +430,13 @@ pub(crate) struct Walk<'a> {
     pub layers_resolved: bool,
     /// Encoded stream bytes that replace the source's (`Writer::replace_stream_data`).
     pub encoded: &'a BTreeMap<ObjectId, Vec<u8>>,
+    /// Preserve mode (spec 8.3, `Writer::preserve`): nothing is dropped.
+    pub preserve: bool,
+    /// Page and page tree objects of the input -> their output reference.
+    page_refs: HashMap<ObjectId, Ref>,
+    pages_ref: Option<Ref>,
+    /// The output `/Info` object, in preserve mode when the input has one.
+    pub info: Option<Ref>,
 }
 
 static NO_ENCODED: BTreeMap<ObjectId, Vec<u8>> = BTreeMap::new();
@@ -448,6 +477,10 @@ impl<'a> Walk<'a> {
             bytes: 0,
             layers_resolved: false,
             encoded: &NO_ENCODED,
+            preserve: false,
+            page_refs: HashMap::new(),
+            pages_ref: None,
+            info: None,
         }
     }
 
@@ -555,6 +588,18 @@ impl<'a> Walk<'a> {
 
     /// The output reference for `id` as `class`, queued for emission on first use.
     fn object(&mut self, id: ObjectId, class: Class) -> Result<Val, PdfError> {
+        let redirects = self.redirects;
+        if let Some(v) = redirects.superseded.get(&id) {
+            return self.resolve_new(v, 0);
+        }
+        let class = match (self.preserve, class) {
+            (false, _) | (_, C::Content | C::Form | C::Tiling) => class,
+            (true, C::Font | C::XObject | C::Pattern) => match self.kind(id)? {
+                Kind::Is(c) => c,
+                _ => C::Raw,
+            },
+            (true, _) => C::Raw,
+        };
         if let Some(r) = self.memo.get(&(id, class)) {
             return Ok(Val::Ref(*r));
         }
@@ -562,6 +607,49 @@ impl<'a> Walk<'a> {
         self.memo.insert((id, class), r);
         self.queue.push_back((id, class, r));
         Ok(Val::Ref(r))
+    }
+
+    /// Preserve mode: the output value for a reference to whatever `id` is. Pages and page tree
+    /// nodes name the rewritten page tree, objects the file lacks are null.
+    fn any(&mut self, id: ObjectId) -> Result<Val, PdfError> {
+        if let Some(r) = self.page_refs.get(&id) {
+            return Ok(Val::Ref(*r));
+        }
+        match self.kind(id)? {
+            Kind::Missing => Ok(Val::Null),
+            Kind::PageTree => self
+                .pages_ref
+                .map(Val::Ref)
+                .ok_or_else(|| err_obj(ErrorCode::Internal, "page tree before its root", id)),
+            Kind::Is(class) => self.object(id, class),
+        }
+    }
+
+    /// What preserve mode makes of `id`. Only what changes how an object is written has a
+    /// class of its own (content streams, fonts); every other object is `Raw`, so one object is
+    /// one output object whichever key reached it.
+    fn kind(&self, id: ObjectId) -> Result<Kind, PdfError> {
+        let source = self.redirects.aliases.get(&id).copied().unwrap_or(id);
+        let ident = ObjectIdentifier::new(source.num as i32, i32::from(source.generation));
+        let Some(obj) = self.doc.pdf().xref().get::<Object<'a>>(ident) else {
+            return Ok(Kind::Missing);
+        };
+        let stream = matches!(obj, Object::Stream(_));
+        let val = self.to_val(&obj, 0)?;
+        let Val::Dict(d) = &val else {
+            return Ok(Kind::Is(C::Raw));
+        };
+        let name = |k: &str| match get(d, k) {
+            Some(Val::Name(n)) => Some(n.as_slice()),
+            _ => None,
+        };
+        Ok(Kind::Is(match (stream, name("Type"), name("Subtype")) {
+            (true, _, Some(b"Form")) => C::Form,
+            (true, _, _) if matches!(get(d, "PatternType"), Some(Val::Int(1))) => C::Tiling,
+            (false, Some(b"Pages"), _) => return Ok(Kind::PageTree),
+            (false, Some(b"Font"), _) if refine(C::Font, &val, id).is_ok() => C::Font,
+            _ => C::Raw,
+        }))
     }
 
     fn inline(&self, id: ObjectId) -> Result<Val, PdfError> {
@@ -580,8 +668,23 @@ impl<'a> Walk<'a> {
             return Err(err(ErrorCode::MalformedPdf, "object nesting too deep"));
         }
         let d = depth + 1;
+        let spec = if self.preserve && matches!(spec, V::Plain) {
+            V::Any
+        } else {
+            spec
+        };
         Ok(match (spec, v) {
             (_, Val::New(i)) => self.extra(*i)?,
+            (V::Any, Val::Src(id)) => self.any(*id)?,
+            (V::Any, Val::Arr(a)) => Val::Arr(self.emit_all(a, V::Any, d)?),
+            (V::Any, Val::Dict(e)) => {
+                let mut out = Vec::new();
+                for (k, x) in e.iter().filter(|(_, x)| *x != Val::Null) {
+                    out.push((k.clone(), self.emit(x, V::Any, d)?));
+                }
+                Val::Dict(out)
+            }
+            (V::Any, other) => other.clone(),
             (One(C::ColorSpace), _) => self.color_space(v, d)?,
             (V::Plain, Val::Src(id)) => {
                 let inner = self.inline(*id)?;
@@ -700,6 +803,12 @@ impl<'a> Walk<'a> {
                 out.push((key.as_bytes().to_vec(), self.emit(v, *spec, depth)?));
             }
         }
+        if self.preserve {
+            let known = |k: &[u8]| class.keys().iter().any(|(n, _)| n.as_bytes() == k);
+            for (k, v) in entries.iter().filter(|(k, v)| *v != Val::Null && !known(k)) {
+                out.push((k.clone(), self.emit(v, V::Any, depth)?));
+            }
+        }
         Ok(out)
     }
 
@@ -721,7 +830,8 @@ impl<'a> Walk<'a> {
                     _ => &[],
                 };
                 // Separation/DeviceN: the attributes dictionary (5th item) is dropped.
-                let keep = if matches!(a.first(), Some(Val::Name(n)) if n == b"Separation" || n == b"DeviceN")
+                let keep = if !self.preserve
+                    && matches!(a.first(), Some(Val::Name(n)) if n == b"Separation" || n == b"DeviceN")
                 {
                     4
                 } else {
@@ -761,6 +871,26 @@ impl<'a> Walk<'a> {
                 None,
             ),
             None => self.load(source)?,
+        };
+        let val = match val {
+            // The stream's own framing is rewritten; a copied /Length or /Filter would lie.
+            Val::Dict(e) if self.preserve && repl.is_none() && stream.is_some() => Val::Dict(
+                e.into_iter()
+                    .filter(|(k, _)| {
+                        !matches!(
+                            k.as_slice(),
+                            b"Length"
+                                | b"Filter"
+                                | b"DecodeParms"
+                                | b"DL"
+                                | b"F"
+                                | b"FFilter"
+                                | b"FDecodeParms"
+                        )
+                    })
+                    .collect(),
+            ),
+            other => other,
         };
         let val = self.edit_form_resources(id, val)?;
         let class = refine(class, &val, id)?;
@@ -983,12 +1113,20 @@ impl<'a> Walk<'a> {
     ) -> Result<Vec<Ref>, PdfError> {
         self.alloc()?;
         let pages = self.alloc()?;
-        if !self.layers_resolved {
+        if !self.layers_resolved && !self.preserve {
             self.refuse_hidden_layers()?;
         }
         let refs = (0..self.doc.page_count())
             .map(|_| self.alloc())
             .collect::<Result<Vec<_>, _>>()?;
+        if self.preserve {
+            self.pages_ref = Some(pages);
+            for (i, r) in refs.iter().enumerate() {
+                if let Some(id) = self.doc.page(i)?.raw().obj_id() {
+                    self.page_refs.insert(object_id(id.into()), *r);
+                }
+            }
+        }
         let mut q: Option<Val> = None;
         for (i, &r) in refs.iter().enumerate() {
             let raw = self.doc.page(i)?.raw().clone();
@@ -1031,6 +1169,27 @@ impl<'a> Walk<'a> {
                 }
             }
             let mut parts = Vec::new();
+            if self.preserve {
+                for (k, m) in raw.entries() {
+                    let k = k.deref();
+                    let kept = matches!(
+                        k,
+                        b"Type"
+                            | b"Parent"
+                            | b"MediaBox"
+                            | b"CropBox"
+                            | b"Rotate"
+                            | b"Resources"
+                            | b"UserUnit"
+                            | b"Group"
+                            | b"Contents"
+                    );
+                    let v = self.maybe(m, 0)?;
+                    if !kept && v != Val::Null {
+                        e.push((k.to_vec(), self.emit(&v, V::Any, 0)?));
+                    }
+                }
+            }
             if let Some(m) = raw.get_raw::<Object<'a>>(b"Contents") {
                 for id in self.content_ids(m)? {
                     let id = self
@@ -1063,9 +1222,56 @@ impl<'a> Walk<'a> {
                 data: None,
             })?;
         }
+        if self.preserve {
+            self.preserve_roots(pages, &refs)?;
+        }
         self.drain()?;
         self.nodes.sort_by_key(|n| n.id.get());
         Ok(refs)
+    }
+
+    /// Preserve mode: the catalog with every entry of the input's (the page tree is ours), the
+    /// page tree root, and the trailer's `/Info`.
+    fn preserve_roots(&mut self, pages: Ref, refs: &[Ref]) -> Result<(), PdfError> {
+        let xref = self.doc.pdf().xref();
+        let root = object_id(xref.root_id().into());
+        let (Val::Dict(cat), _) = self.load(root)? else {
+            return Err(err_obj(
+                ErrorCode::MalformedPdf,
+                "catalog is not a dictionary",
+                root,
+            ));
+        };
+        let mut e: Entries = vec![
+            (b"Type".to_vec(), name_val(b"Catalog")),
+            (b"Pages".to_vec(), Val::Ref(pages)),
+        ];
+        for (k, v) in cat
+            .iter()
+            .filter(|(k, v)| *v != Val::Null && k != b"Type" && k != b"Pages")
+        {
+            e.push((k.clone(), self.emit(v, V::Any, 0)?));
+        }
+        let catalog = Val::Dict(e);
+        let kids = Val::Arr(refs.iter().map(|r| Val::Ref(*r)).collect());
+        let tree = Val::Dict(vec![
+            (b"Type".to_vec(), name_val(b"Pages")),
+            (b"Kids".to_vec(), kids),
+            (b"Count".to_vec(), Val::Int(refs.len() as i32)),
+        ]);
+        for (id, val) in [(Ref::new(1), catalog), (pages, tree)] {
+            self.push(Node {
+                id,
+                val,
+                data: None,
+            })?;
+        }
+        if let Some(info) = xref.info_id()
+            && let Val::Ref(r) = self.any(object_id(info.into()))?
+        {
+            self.info = Some(r);
+        }
+        Ok(())
     }
 
     /// `/Resources` with `added` put into its `category` dictionary (`/Font`, `/XObject`),

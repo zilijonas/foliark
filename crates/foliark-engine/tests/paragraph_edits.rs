@@ -3,11 +3,13 @@
 //! objects and fidelity oracles in tests/oracles), never by the engine that wrote them.
 mod common;
 use common::{Font, fidelity_oracle, fixture, objects_oracle, pdf_bytes, python, run, tmp};
-use foliark_engine::Engine;
+use foliark_engine::edit::ParagraphApplier;
+use foliark_engine::{Applied, Document, EditApplier, EditContext, Engine};
 use foliark_model::{
     ChangeResult, ChangeSet, ErrorCode, ExportMode, ExportPolicy, ExportReport, ExtractOptions,
-    FontSource, FontStyle, Limits, Rect, Redaction, RunSource, TextEdit,
+    FontSource, FontStyle, Limits, LossCode, Rect, Redaction, RejectedChange, RunSource, TextEdit,
 };
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 /// 300 x 400 page. Paragraph A: display baselines 100 and 114 (user 300, 286), x 20 to 145 on a
@@ -662,21 +664,253 @@ fn an_edit_on_a_page_with_images_keeps_them_and_a_font_program_keeps_reused_glyp
     );
 }
 
+// ---- preserve-mode working copies (spec 8.3, NEW-79) ----------------------------------------------
+
+/// 300 x 400 page whose one text line sits under a /Link annotation.
+fn link_page() -> Vec<u8> {
+    let objs = [
+        "<< /Type /Catalog /Pages 2 0 R >>".to_owned(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_owned(),
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> /Annots [6 0 R] >>".to_owned(),
+        {
+            let c = "BT /F1 12 Tf 20 370 Td (KEEP_PUBLIC) Tj ET";
+            format!("<< /Length {} >>\nstream\n{c}\nendstream", c.len())
+        },
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".to_owned(),
+        "<< /Type /Annot /Subtype /Link /Rect [10 10 100 50] /Border [0 0 0] /A << /S /URI /URI (https://example.com) >> >>".to_owned(),
+    ];
+    let mut out = b"%PDF-1.7\n".to_vec();
+    let mut at = Vec::new();
+    for (i, o) in objs.iter().enumerate() {
+        at.push(out.len());
+        out.extend(format!("{} 0 obj\n{o}\nendobj\n", i + 1).bytes());
+    }
+    let xref = out.len();
+    out.extend(format!("xref\n0 {}\n0000000000 65535 f \n", objs.len() + 1).bytes());
+    for a in at {
+        out.extend(format!("{a:010} 00000 n \n").bytes());
+    }
+    out.extend(
+        format!(
+            "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n",
+            objs.len() + 1
+        )
+        .bytes(),
+    );
+    out
+}
+
+/// An engine that keeps the bytes of the last working copy the paragraph applier wrote, so a
+/// test can look at what export never returns.
+struct Keep(Arc<Mutex<Vec<u8>>>);
+
+impl EditApplier for Keep {
+    fn apply(
+        &self,
+        source: &Document,
+        edits: &[TextEdit],
+        ctx: &EditContext<'_>,
+    ) -> Result<Applied, Vec<RejectedChange>> {
+        let applied = ParagraphApplier.apply(source, edits, ctx)?;
+        *self.0.lock().unwrap() = applied.bytes.clone();
+        Ok(applied)
+    }
+}
+
+fn keeping(bytes: Vec<u8>) -> (Engine, String, Arc<Mutex<Vec<u8>>>) {
+    let kept = Arc::new(Mutex::new(Vec::new()));
+    let mut e = Engine::new(Limits::default()).with_edit_applier(Box::new(Keep(kept.clone())));
+    e.register_fonts(vec![sans()]).unwrap();
+    let (doc, _) = e.open(bytes, None, false).unwrap();
+    (e, doc, kept)
+}
+
+/// What pikepdf finds in `bytes`: annotation subtypes and link targets of page 0, the catalog
+/// entries that carry forms and layers, and the number of registered (Liberation Sans) Type0
+/// font objects anywhere in the file.
+fn structure(name: &str, bytes: &[u8]) -> serde_json::Value {
+    let path = tmp("paragraph-edits", name);
+    std::fs::write(&path, bytes).unwrap();
+    let code = "import sys, json, pikepdf\n\
+        pdf = pikepdf.open(sys.argv[1])\n\
+        a = pdf.pages[0].obj.get('/Annots', [])\n\
+        fonts = sum(1 for o in pdf.objects if isinstance(o, pikepdf.Dictionary) and o.get('/Subtype') == '/Type0' and 'LiberationSans' in str(o.get('/BaseFont')))\n\
+        print(json.dumps({'annots': [str(x.get('/Subtype')) for x in a],\n\
+          'uri': [str(x['/A']['/URI']) for x in a if '/A' in x],\n\
+          'acroform': '/AcroForm' in pdf.Root, 'ocp': '/OCProperties' in pdf.Root,\n\
+          'fonts': fonts}))\n";
+    let (ok, log) = python(&["-c", code, path.to_str().unwrap()]);
+    assert!(ok, "{log}");
+    serde_json::from_str(log.lines().rfind(|l| l.starts_with('{')).expect(&log)).unwrap()
+}
+
+fn lost(r: &ExportReport, code: LossCode) -> u32 {
+    r.losses
+        .iter()
+        .find(|l| l.code == code)
+        .map_or(0, |l| l.count)
+}
+
+/// Text of every page of `bytes`, whitespace removed, as PyMuPDF reads it (annotation
+/// appearances included, hidden layers honoured).
+fn visible(name: &str, bytes: &[u8]) -> String {
+    flat(&probe(name, bytes, A, (0.0, 0.0)).fitz.concat())
+}
+
 #[test]
-fn a_file_the_allowlist_writer_would_strip_is_refused_not_edited_lossily() {
-    let (mut e, doc) = engine(fixture("hddn/acroform.pdf"), true);
+fn an_edit_keeps_the_link_in_the_working_copy_and_export_removes_it_with_a_loss() {
+    let input = link_page();
+    let (mut e, doc, kept) = keeping(input);
     let r = changes(
         &mut e,
         &doc,
-        Some(vec![edit("e", 0, &[rect(0.0, 0.0, 600.0, 800.0)], "x")]),
+        Some(vec![edit(
+            "e",
+            0,
+            &[rect(15.0, 15.0, 120.0, 20.0)],
+            "CHANGED",
+        )]),
+        None,
+    );
+    assert!(r.accepted, "{:?}", r.rejected);
+    let working = structure("link.work.pdf", &kept.lock().unwrap());
+    assert_eq!(working["annots"], serde_json::json!(["/Link"]));
+    assert_eq!(working["uri"], serde_json::json!(["https://example.com"]));
+    assert!(visible("link.work.vis.pdf", &kept.lock().unwrap()).contains("CHANGED"));
+
+    let (out, report) = export(&mut e, &doc);
+    let exported = structure("link.out.pdf", &out);
+    assert_eq!(exported["annots"], serde_json::json!([]));
+    assert_eq!(lost(&report, LossCode::LinksRemoved), 1);
+    assert!(visible("link.out.vis.pdf", &out).contains("CHANGED"));
+    let (ok, log) = objects_oracle(
+        "paragraph-edits",
+        "link.objects.pdf",
+        &out,
+        &["KEEP_PUBLIC"],
+    );
+    assert!(ok, "{log}");
+}
+
+#[test]
+fn an_edit_keeps_the_form_in_the_working_copy_and_export_flattens_it() {
+    let input = fixture("hddn/acroform.pdf");
+    let (mut e, doc, kept) = keeping(input);
+    let r = changes(
+        &mut e,
+        &doc,
+        Some(vec![edit(
+            "e",
+            0,
+            &[rect(70.0, 45.0, 165.0, 22.0)],
+            "EDITED_PUBLIC",
+        )]),
+        None,
+    );
+    assert!(r.accepted, "{:?}", r.rejected);
+    let working = structure("form.work.pdf", &kept.lock().unwrap());
+    assert_eq!(working["acroform"], true);
+    assert_eq!(working["annots"], serde_json::json!(["/Widget"]));
+
+    let (out, report) = export(&mut e, &doc);
+    let exported = structure("form.out.pdf", &out);
+    assert_eq!(
+        (exported["acroform"].clone(), exported["annots"].clone()),
+        (false.into(), serde_json::json!([]))
+    );
+    assert!(lost(&report, LossCode::FormsFlattened) > 0);
+    // The field value is still drawn, the edited text replaced the old one.
+    let all = visible("form.out.vis.pdf", &out);
+    assert!(
+        all.contains("SECRET_FORM_VALUE") && all.contains("EDITED_PUBLIC"),
+        "{all}"
+    );
+    assert!(!all.contains("KEEP_PUBLIC_ACROFORM"), "{all}");
+}
+
+#[test]
+fn an_edit_keeps_layers_in_the_working_copy_and_export_flattens_them() {
+    let input = fixture("hddn/optional-content-layer.pdf");
+    let (mut e, doc, kept) = keeping(input);
+    let r = changes(
+        &mut e,
+        &doc,
+        Some(vec![edit(
+            "e",
+            0,
+            &[rect(70.0, 45.0, 265.0, 22.0)],
+            "EDITED_PUBLIC",
+        )]),
+        None,
+    );
+    assert!(r.accepted, "{:?}", r.rejected);
+    assert_eq!(
+        structure("ocg.work.pdf", &kept.lock().unwrap())["ocp"],
+        true
+    );
+
+    let (out, report) = export(&mut e, &doc);
+    assert_eq!(structure("ocg.out.pdf", &out)["ocp"], false);
+    assert!(lost(&report, LossCode::LayersFlattened) > 0 || report.flattened.ocg_layers > 0);
+    assert!(visible("ocg.out.vis.pdf", &out).contains("EDITED_PUBLIC"));
+    let (ok, log) = objects_oracle(
+        "paragraph-edits",
+        "ocg.objects.pdf",
+        &out,
+        &["SECRET_LAYER_BODY", "SECRET_LAYER_NAME"],
+    );
+    assert!(ok, "{log}");
+}
+
+#[test]
+fn a_registered_font_is_one_object_across_edits_and_commits() {
+    let (mut e, doc, kept) = keeping(page());
+    let first = [
+        edit("a", 0, &[A], "ąčęėįšųūž testing"),
+        edit(
+            "n",
+            0,
+            &[rect(15.0, 188.0, 150.0, 16.0)],
+            "Žaliasis rašalas",
+        ),
+    ];
+    let r = changes(&mut e, &doc, Some(first.to_vec()), None);
+    assert!(r.accepted, "{:?}", r.rejected);
+    assert_eq!(structure("font1.pdf", &kept.lock().unwrap())["fonts"], 1);
+
+    // The list replays from the source, so a later commit repeats the first two edits and adds
+    // a third that needs new glyphs: the old ones keep their codes, the font stays one object.
+    let mut all = first.to_vec();
+    all.push(edit("a2", 0, &[A], "Ūžė ąčęėįšųūž testing"));
+    let r = changes(&mut e, &doc, Some(all), None);
+    assert!(r.accepted, "{:?}", r.rejected);
+    assert_eq!(structure("font2.pdf", &kept.lock().unwrap())["fonts"], 1);
+    let (out, _) = export(&mut e, &doc);
+    assert_eq!(structure("font2.out.pdf", &out)["fonts"], 1);
+    let p = probe("font2.out.probe.pdf", &out, A, (0.0, 0.0));
+    assert_text(&p, &["Ūžė ąčęėįšųūž testing", "Žaliasis rašalas"], &[]);
+}
+
+#[test]
+fn every_failing_edit_is_reported_and_nothing_is_applied() {
+    let (mut e, doc) = engine(page(), true);
+    let before = text(&mut e, &doc, 0);
+    let mut bad = edit("e3", 0, &[A], "x");
+    bad.font = Some("No Such Family".into());
+    let r = changes(
+        &mut e,
+        &doc,
+        Some(vec![
+            edit("e1", 0, &[A], "fine"),
+            edit("e2", 0, &[rect(0.0, 300.0, 50.0, 20.0)], "nothing there"),
+            bad,
+        ]),
         None,
     );
     assert!(!r.accepted);
-    let d = r.rejected[0].details.as_ref().unwrap();
-    assert_eq!(
-        (r.rejected[0].code, d.feature.as_deref()),
-        (ErrorCode::InvalidArgument, Some("editPreserveMode"))
-    );
+    let ids: Vec<_> = r.rejected.iter().map(|x| x.id.as_str()).collect();
+    assert_eq!(ids, ["e2", "e3"], "{:?}", r.rejected);
+    assert_eq!((r.revision, text(&mut e, &doc, 0)), (0, before));
 }
 
 #[test]

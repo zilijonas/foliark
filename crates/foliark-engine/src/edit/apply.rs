@@ -7,26 +7,34 @@
 //! the redaction writer path: images, vectors and backgrounds are never touched and nothing is
 //! filled), then draw the planned runs on top of the page in the paragraph's color.
 //!
-//! Source-font runs reuse the source font object by character code. Registered fonts are
-//! embedded as Identity-H subsets, one font object per (font id, edit file): each edit starts
-//! from a fresh writer, so a font used by several edits is embedded once per edit.
+//! Working copies are written in preserve mode (spec §8.3): annotations, forms, layers and the
+//! rest of the file stay as they were, so render and export read what the user edited. Export
+//! flattens or removes them on its own pass; a working copy is never returned.
 //!
-//! Any edit that cannot apply rejects the whole list; nothing is kept.
+//! Source-font runs reuse the source font object by character code. A registered font is one
+//! Identity-H subset object per (font id, document): the next edit finds it again by its
+//! resource name and its recorded glyph list, embeds the union (old glyphs keep their CIDs, so
+//! earlier content still reads right) and the new object replaces the old one wherever the file
+//! referred to it.
+//!
+//! Every edit is evaluated and every failure is reported; one failure rejects the whole list and
+//! nothing is kept.
 use super::preview::{Planned, plan_edit};
 use crate::document::{Applied, EditApplier, EditContext};
+use crate::reader::object_id;
 use crate::redaction::plan::RedactionPlan;
 use crate::redaction::text::redact_text;
-use crate::sanitize::interactive;
-use crate::writer::fonts::{EmbeddedFont, UsedGlyphs, embed_registered_font};
+use crate::writer::fonts::{
+    EmbeddedFont, UsedGlyphs, embed_registered_font, registered_resource, registered_state,
+};
 use crate::writer::text::{PlanFonts, SourceFonts, emit_plan};
 use crate::writer::{Val, Writer};
 use crate::{Binding, Committed, Document, StoredRedaction};
 use foliark_model::{
-    EditLayout, ErrorCode, ErrorDetails, ExportPolicy, PdfError, Rect, RejectedChange, RunSource,
-    TextEdit,
+    EditLayout, ErrorCode, ObjectId, PdfError, Rect, RejectedChange, RunSource, TextEdit,
 };
 use foliark_text::FontFace;
-use hayro::hayro_syntax::object::Dict;
+use hayro::hayro_syntax::object::{Dict, MaybeRef, Object};
 use std::collections::BTreeSet;
 
 /// Removal selects exactly the edit's clusters (a must-remove set), so its one region lies far
@@ -50,62 +58,88 @@ impl EditApplier for ParagraphApplier {
         let reject = |e: &TextEdit, err: PdfError| {
             let mut details = err.details.map(|d| *d).unwrap_or_default();
             details.edit_id = Some(e.id.clone());
-            vec![RejectedChange {
+            RejectedChange {
                 id: e.id.clone(),
                 code: err.code,
                 details: Some(details),
-            }]
+            }
         };
-        if let Some(pages) = preserve_gap(source) {
-            let err = PdfError::with(
-                ErrorCode::InvalidArgument,
-                ErrorDetails {
-                    feature: Some("editPreserveMode".into()),
-                    pages: (!pages.is_empty()).then_some(pages),
-                    ..Default::default()
-                },
-            );
-            return Err(edits
-                .iter()
-                .map(|e| reject(e, err.clone()).remove(0))
-                .collect());
-        }
         let mut layouts = Vec::new();
+        let mut rejected = Vec::new();
         let mut state: Option<Document> = None;
         let mut bytes = Vec::new();
         for (n, e) in edits.iter().enumerate() {
             let doc = state.as_ref().unwrap_or(source);
-            let (out, layout) = apply_one(doc, n, e, ctx).map_err(|err| reject(e, err))?;
+            // A failed edit is skipped so the ones after it are still judged; the result is
+            // then a rejection of the whole list anyway.
+            let (out, layout) = match apply_one(doc, n, e, ctx) {
+                Ok(done) => done,
+                Err(err) => {
+                    rejected.push(reject(e, err));
+                    continue;
+                }
+            };
             layouts.push(layout);
             if n + 1 < edits.len() {
-                let next = Document::open_with_limits(out.clone(), None, false, ctx.limits.clone())
-                    .map_err(|_| reject(e, PdfError::new(ErrorCode::Internal)))?;
-                state = Some(next.with_cancel(source.cancel_handle()));
+                match Document::open_with_limits(out.clone(), None, false, ctx.limits.clone()) {
+                    Ok(next) => state = Some(next.with_cancel(source.cancel_handle())),
+                    Err(_) => {
+                        rejected.push(reject(e, PdfError::new(ErrorCode::Internal)));
+                        continue;
+                    }
+                }
             }
             bytes = out;
         }
-        Ok(Applied { bytes, layouts })
+        if rejected.is_empty() {
+            Ok(Applied { bytes, layouts })
+        } else {
+            Err(rejected)
+        }
     }
 }
 
-/// The working copy is written by the allowlist writer (preserve mode, spec §8.3, is not built),
-/// which drops annotations, form fields and optional-content settings. Render and export read
-/// the working copy, so an edit on a file that has any of them is refused, never done lossily.
-/// `Some(pages)` names the pages with visible annotations or widgets.
-fn preserve_gap(doc: &Document) -> Option<Vec<u32>> {
+/// A registered font already in the file: its font object and the glyphs it holds.
+type Earlier = (ObjectId, Vec<(u16, String)>);
+
+/// Registered font `res` already in the file: its font object and the glyphs it holds, and
+/// whether `page` already names it in its font resources.
+fn find_registered(doc: &Document, res: &str, page: usize) -> (Option<Earlier>, bool) {
     let reader = doc.reader();
-    let (annots, widgets) = interactive::scan(reader, &ExportPolicy::default()).pages();
-    let x = reader.pdf().xref();
-    let cat = x.get::<Dict<'_>>(x.root_id());
-    let in_catalog =
-        cat.is_some_and(|c| c.contains_key("OCProperties") || c.contains_key("AcroForm"));
-    if annots.is_empty() && widgets.is_empty() && !in_catalog {
-        return None;
+    let mut found = None;
+    let mut on_page = false;
+    for i in 0..reader.page_count() {
+        let Ok(p) = reader.page(i) else { continue };
+        // /Resources is inheritable.
+        let mut node = p.raw().clone();
+        let fonts = loop {
+            if let Some(f) = node
+                .get::<Dict<'_>>("Resources")
+                .and_then(|r| r.get::<Dict<'_>>("Font"))
+            {
+                break Some(f);
+            }
+            match node.get::<Dict<'_>>("Parent") {
+                Some(parent) => node = parent,
+                None => break None,
+            }
+        };
+        let Some(MaybeRef::Ref(r)) = fonts.and_then(|f| f.get_raw::<Object<'_>>(res)) else {
+            continue;
+        };
+        on_page |= i == page;
+        let id = object_id(r);
+        if found.is_none()
+            && let Some(state) = reader
+                .pdf()
+                .xref()
+                .get::<Dict<'_>>(r.into())
+                .and_then(|d| registered_state(&d))
+        {
+            found = Some((id, state));
+        }
     }
-    let mut pages: Vec<u32> = annots.into_iter().chain(widgets).collect();
-    pages.sort_unstable();
-    pages.dedup();
-    Some(pages)
+    (found, on_page)
 }
 
 fn apply_one(
@@ -156,6 +190,7 @@ fn apply_one(
         }
     }
     let mut w = Writer::new(doc.reader(), ctx.limits.clone());
+    w.preserve();
     redact_text(doc, &removal, &mut w)?;
 
     if !plan.lines.is_empty() {
@@ -165,13 +200,22 @@ fn apply_one(
             .filter(|r| r.source == RunSource::Registered)
             .map(|r| r.font.as_str())
             .collect();
-        for (k, id) in ids.into_iter().enumerate() {
+        for id in ids {
             let face = ctx.fonts.get(id).ok_or_else(internal)?;
-            let mut used = UsedGlyphs::new();
+            let res = registered_resource(id);
+            let (earlier, on_page) = find_registered(doc, &res, page);
+            let mut used = match &earlier {
+                Some((_, glyphs)) => UsedGlyphs::from_prior(glyphs.clone()),
+                None => UsedGlyphs::new(),
+            };
             used.add_plan(&plan, id, &text);
             let font = embed_registered_font(&mut w, face, &used)?;
-            let res = format!("FkE{n}R{k}");
-            w.add_page_font(page, &res, font.font.clone())?;
+            if let Some((old, _)) = earlier {
+                w.supersede(old, font.font.clone());
+            }
+            if !on_page {
+                w.add_page_font(page, &res, font.font.clone())?;
+            }
             registered.push((id.to_owned(), font, res));
         }
         let source_res = format!("FkE{n}S");
