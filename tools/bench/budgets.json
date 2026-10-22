@@ -1,0 +1,838 @@
+{
+ "schema": 1,
+ "kind": "foliark-regression-budgets",
+ "rule": {
+  "timeMs": {
+   "factor": 1.5,
+   "floorMs": 3
+  },
+  "bytes": {
+   "factor": 1.05
+  },
+  "memory": {
+   "factor": 1.25
+  }
+ },
+ "measuredWith": {
+  "foliarkGitSha": "5dcc396 plus the NEW-65/74 working tree (EDIT_OVERLAP removal, type exports; no engine change)",
+  "machine": "Apple M4 24 GB, macOS, headless Playwright, localhost, identity encoding",
+  "browsers": [
+   "chromium 151.0.7922.34",
+   "webkit 26.5"
+  ],
+  "wasmSha256": "f0a808ae563f719f5bbf621831ebe585f26ea3cd0ca485193bf84cd4840faea6",
+  "runs": "chromium: 2 runs of tools/bench/sdk.mjs --extended (best median kept) + 1 run of scans-sdk.mjs; webkit: 1 run each"
+ },
+ "notes": [
+  "Frozen from the numbers above by: node tools/bench/check-budgets.mjs --derive <fresh files>. Rule (also in RULE in the script): timings max = ceil(measured x 1.5 + 3 ms); download and wasm bytes x 1.05; wasm linear memory x 1.25.",
+  "Observed run-to-run spread between the two chromium runs: at most 10% on medians above 5 ms, so 50% headroom catches a real slowdown (about 1.5x) and not a noisy neighbour; the check takes the best median of every fresh file passed.",
+  "Not budgeted: whole-browser RSS (process tree, noisy, WebKit value misses helper processes), p95, exported file sizes, HDDN numbers (comparison.json holds them), scanned-page numbers for any browser other than chromium and webkit.",
+  "image-heavy render/page and scan repeat budgets are cached-render numbers (second and later draw); the first draw is budgeted separately and is the number to quote for a cold page."
+ ],
+ "wasm": {
+  "gzipBytes": {
+   "measured": 2126019,
+   "max": 2232320
+  },
+  "rawBytes": {
+   "measured": 5567725,
+   "max": 5846112
+  }
+ },
+ "metrics": [
+  {
+   "browser": "chromium",
+   "id": "init cold",
+   "op": "init (worker + wasm instantiate)",
+   "input": "-",
+   "run": "cold",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 22,
+   "max": 36
+  },
+  {
+   "browser": "chromium",
+   "id": "init cold download bytes",
+   "op": "init (worker + wasm instantiate)",
+   "input": "-",
+   "run": "cold",
+   "field": "bytes",
+   "kind": "bytes",
+   "measured": 5615475,
+   "max": 5896249
+  },
+  {
+   "browser": "chromium",
+   "id": "init warm",
+   "op": "init (worker + wasm instantiate)",
+   "input": "-",
+   "run": "warm",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 12.9,
+   "max": 23
+  },
+  {
+   "browser": "chromium",
+   "id": "text 30p open",
+   "op": "open",
+   "input": "native-30p",
+   "run": "warm",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 5.1,
+   "max": 11
+  },
+  {
+   "browser": "chromium",
+   "id": "text 30p first render",
+   "op": "first renderPage@1.35 right after open (incl. one-time document scan)",
+   "input": "native-30p",
+   "run": "warm",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 4.7,
+   "max": 11
+  },
+  {
+   "browser": "chromium",
+   "id": "text 30p render/page",
+   "op": "renderPage@1.35",
+   "input": "native-30p",
+   "run": "warm",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 4.2,
+   "max": 10
+  },
+  {
+   "browser": "chromium",
+   "id": "text 30p extract all",
+   "op": "extractText all pages",
+   "input": "native-30p",
+   "run": "warm",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 32.5,
+   "max": 52
+  },
+  {
+   "browser": "chromium",
+   "id": "text 30p open+extract+render all",
+   "op": "open+extract+render@1.35 all pages (HDDN LOAD_PDF equivalent)",
+   "input": "native-30p",
+   "run": "warm",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 223.7,
+   "max": 339
+  },
+  {
+   "browser": "chromium",
+   "id": "text 30p search",
+   "op": "search 'alpha'",
+   "input": "native-30p",
+   "run": "warm",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 10.3,
+   "max": 19
+  },
+  {
+   "browser": "chromium",
+   "id": "text 30p paragraph prepare",
+   "op": "paragraph edit: prepareParagraph",
+   "input": "native-30p",
+   "run": "warm",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 5.6,
+   "max": 12
+  },
+  {
+   "browser": "chromium",
+   "id": "text 30p paragraph edit apply",
+   "op": "paragraph edit: applyChanges (1 edit)",
+   "input": "native-30p",
+   "run": "warm",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 65,
+   "max": 101
+  },
+  {
+   "browser": "chromium",
+   "id": "text 30p native export",
+   "op": "native export, N region redactions (apply+prepare+export)",
+   "input": "native-30p",
+   "run": "warm",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 233,
+   "max": 353
+  },
+  {
+   "browser": "chromium",
+   "id": "text 30p raster export",
+   "op": "raster export @2, N region redactions (apply+prepare+export)",
+   "input": "native-30p",
+   "run": "warm",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 1026.5,
+   "max": 1543
+  },
+  {
+   "browser": "chromium",
+   "id": "text 30p wasm memory",
+   "op": "memory after ops",
+   "input": "native-30p",
+   "run": "warm",
+   "field": "wasmMemoryBytes",
+   "kind": "memory",
+   "measured": 74711040,
+   "max": 93388800
+  },
+  {
+   "browser": "chromium",
+   "id": "image-heavy 6p first render",
+   "op": "first renderPage@1.35 right after open (incl. one-time document scan)",
+   "input": "image-heavy-6p",
+   "run": "warm",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 110.2,
+   "max": 169
+  },
+  {
+   "browser": "chromium",
+   "id": "image-heavy 6p render/page",
+   "op": "renderPage@1.35",
+   "input": "image-heavy-6p",
+   "run": "warm",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 2.2,
+   "max": 7
+  },
+  {
+   "browser": "chromium",
+   "id": "image-heavy 6p open+extract+render all",
+   "op": "open+extract+render@1.35 all pages (HDDN LOAD_PDF equivalent)",
+   "input": "image-heavy-6p",
+   "run": "warm",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 658.4,
+   "max": 991
+  },
+  {
+   "browser": "chromium",
+   "id": "scan jpeg-baseline-rgb first@1.35",
+   "op": "renderPage@1.35 first after open",
+   "input": "scan-jpeg-baseline-rgb",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 41.6,
+   "max": 66
+  },
+  {
+   "browser": "chromium",
+   "id": "scan jpeg-baseline-rgb repeat@1.35",
+   "op": "renderPage@1.35 repeat",
+   "input": "scan-jpeg-baseline-rgb",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 2,
+   "max": 6
+  },
+  {
+   "browser": "chromium",
+   "id": "scan jpeg-baseline-rgb first@3",
+   "op": "renderPage@3 first after open",
+   "input": "scan-jpeg-baseline-rgb",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 56.2,
+   "max": 88
+  },
+  {
+   "browser": "chromium",
+   "id": "scan jpeg-baseline-gray first@1.35",
+   "op": "renderPage@1.35 first after open",
+   "input": "scan-jpeg-baseline-gray",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 18.1,
+   "max": 31
+  },
+  {
+   "browser": "chromium",
+   "id": "scan jpeg-baseline-gray repeat@1.35",
+   "op": "renderPage@1.35 repeat",
+   "input": "scan-jpeg-baseline-gray",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 1.3,
+   "max": 5
+  },
+  {
+   "browser": "chromium",
+   "id": "scan jpeg-baseline-gray first@3",
+   "op": "renderPage@3 first after open",
+   "input": "scan-jpeg-baseline-gray",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 27.5,
+   "max": 45
+  },
+  {
+   "browser": "chromium",
+   "id": "scan jpeg-progressive-rgb first@1.35",
+   "op": "renderPage@1.35 first after open",
+   "input": "scan-jpeg-progressive-rgb",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 80.7,
+   "max": 125
+  },
+  {
+   "browser": "chromium",
+   "id": "scan jpeg-progressive-rgb repeat@1.35",
+   "op": "renderPage@1.35 repeat",
+   "input": "scan-jpeg-progressive-rgb",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 2,
+   "max": 6
+  },
+  {
+   "browser": "chromium",
+   "id": "scan jpeg-progressive-rgb first@3",
+   "op": "renderPage@3 first after open",
+   "input": "scan-jpeg-progressive-rgb",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 95.3,
+   "max": 146
+  },
+  {
+   "browser": "chromium",
+   "id": "scan jpeg-progressive-gray first@1.35",
+   "op": "renderPage@1.35 first after open",
+   "input": "scan-jpeg-progressive-gray",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 50.7,
+   "max": 80
+  },
+  {
+   "browser": "chromium",
+   "id": "scan jpeg-progressive-gray repeat@1.35",
+   "op": "renderPage@1.35 repeat",
+   "input": "scan-jpeg-progressive-gray",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 1.3,
+   "max": 5
+  },
+  {
+   "browser": "chromium",
+   "id": "scan jpeg-progressive-gray first@3",
+   "op": "renderPage@3 first after open",
+   "input": "scan-jpeg-progressive-gray",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 60,
+   "max": 93
+  },
+  {
+   "browser": "chromium",
+   "id": "scan jbig2 first@1.35",
+   "op": "renderPage@1.35 first after open",
+   "input": "scan-jbig2",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 21.3,
+   "max": 35
+  },
+  {
+   "browser": "chromium",
+   "id": "scan jbig2 repeat@1.35",
+   "op": "renderPage@1.35 repeat",
+   "input": "scan-jbig2",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 1.3,
+   "max": 5
+  },
+  {
+   "browser": "chromium",
+   "id": "scan jbig2 first@3",
+   "op": "renderPage@3 first after open",
+   "input": "scan-jbig2",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 30.7,
+   "max": 50
+  },
+  {
+   "browser": "chromium",
+   "id": "scan ccitt-g4 first@1.35",
+   "op": "renderPage@1.35 first after open",
+   "input": "scan-ccitt-g4",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 6.9,
+   "max": 14
+  },
+  {
+   "browser": "chromium",
+   "id": "scan ccitt-g4 repeat@1.35",
+   "op": "renderPage@1.35 repeat",
+   "input": "scan-ccitt-g4",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 1.2,
+   "max": 5
+  },
+  {
+   "browser": "chromium",
+   "id": "scan ccitt-g4 first@3",
+   "op": "renderPage@3 first after open",
+   "input": "scan-ccitt-g4",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 16.3,
+   "max": 28
+  },
+  {
+   "browser": "chromium",
+   "id": "scan flate-gray first@1.35",
+   "op": "renderPage@1.35 first after open",
+   "input": "scan-flate-gray",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 16.6,
+   "max": 28
+  },
+  {
+   "browser": "chromium",
+   "id": "scan flate-gray repeat@1.35",
+   "op": "renderPage@1.35 repeat",
+   "input": "scan-flate-gray",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 1.2,
+   "max": 5
+  },
+  {
+   "browser": "chromium",
+   "id": "scan flate-gray first@3",
+   "op": "renderPage@3 first after open",
+   "input": "scan-flate-gray",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 25.8,
+   "max": 42
+  },
+  {
+   "browser": "webkit",
+   "id": "init cold",
+   "op": "init (worker + wasm instantiate)",
+   "input": "-",
+   "run": "cold",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 26.7,
+   "max": 44
+  },
+  {
+   "browser": "webkit",
+   "id": "init cold download bytes",
+   "op": "init (worker + wasm instantiate)",
+   "input": "-",
+   "run": "cold",
+   "field": "bytes",
+   "kind": "bytes",
+   "measured": 5615475,
+   "max": 5896249
+  },
+  {
+   "browser": "webkit",
+   "id": "init warm",
+   "op": "init (worker + wasm instantiate)",
+   "input": "-",
+   "run": "warm",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 21.9,
+   "max": 36
+  },
+  {
+   "browser": "webkit",
+   "id": "text 30p open",
+   "op": "open",
+   "input": "native-30p",
+   "run": "warm",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 5.8,
+   "max": 12
+  },
+  {
+   "browser": "webkit",
+   "id": "text 30p first render",
+   "op": "first renderPage@1.35 right after open (incl. one-time document scan)",
+   "input": "native-30p",
+   "run": "warm",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 5.3,
+   "max": 11
+  },
+  {
+   "browser": "webkit",
+   "id": "text 30p render/page",
+   "op": "renderPage@1.35",
+   "input": "native-30p",
+   "run": "warm",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 4.8,
+   "max": 11
+  },
+  {
+   "browser": "webkit",
+   "id": "text 30p extract all",
+   "op": "extractText all pages",
+   "input": "native-30p",
+   "run": "warm",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 37.3,
+   "max": 59
+  },
+  {
+   "browser": "webkit",
+   "id": "text 30p open+extract+render all",
+   "op": "open+extract+render@1.35 all pages (HDDN LOAD_PDF equivalent)",
+   "input": "native-30p",
+   "run": "warm",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 235.9,
+   "max": 357
+  },
+  {
+   "browser": "webkit",
+   "id": "text 30p search",
+   "op": "search 'alpha'",
+   "input": "native-30p",
+   "run": "warm",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 13.8,
+   "max": 24
+  },
+  {
+   "browser": "webkit",
+   "id": "text 30p paragraph prepare",
+   "op": "paragraph edit: prepareParagraph",
+   "input": "native-30p",
+   "run": "warm",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 6.2,
+   "max": 13
+  },
+  {
+   "browser": "webkit",
+   "id": "text 30p paragraph edit apply",
+   "op": "paragraph edit: applyChanges (1 edit)",
+   "input": "native-30p",
+   "run": "warm",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 63.3,
+   "max": 98
+  },
+  {
+   "browser": "webkit",
+   "id": "text 30p native export",
+   "op": "native export, N region redactions (apply+prepare+export)",
+   "input": "native-30p",
+   "run": "warm",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 203.4,
+   "max": 309
+  },
+  {
+   "browser": "webkit",
+   "id": "text 30p raster export",
+   "op": "raster export @2, N region redactions (apply+prepare+export)",
+   "input": "native-30p",
+   "run": "warm",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 917.4,
+   "max": 1380
+  },
+  {
+   "browser": "webkit",
+   "id": "text 30p wasm memory",
+   "op": "memory after ops",
+   "input": "native-30p",
+   "run": "warm",
+   "field": "wasmMemoryBytes",
+   "kind": "memory",
+   "measured": 74711040,
+   "max": 93388800
+  },
+  {
+   "browser": "webkit",
+   "id": "image-heavy 6p first render",
+   "op": "first renderPage@1.35 right after open (incl. one-time document scan)",
+   "input": "image-heavy-6p",
+   "run": "warm",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 98.9,
+   "max": 152
+  },
+  {
+   "browser": "webkit",
+   "id": "image-heavy 6p render/page",
+   "op": "renderPage@1.35",
+   "input": "image-heavy-6p",
+   "run": "warm",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 2.7,
+   "max": 8
+  },
+  {
+   "browser": "webkit",
+   "id": "image-heavy 6p open+extract+render all",
+   "op": "open+extract+render@1.35 all pages (HDDN LOAD_PDF equivalent)",
+   "input": "image-heavy-6p",
+   "run": "warm",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 594.9,
+   "max": 896
+  },
+  {
+   "browser": "webkit",
+   "id": "scan jpeg-baseline-rgb first@1.35",
+   "op": "renderPage@1.35 first after open",
+   "input": "scan-jpeg-baseline-rgb",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 42.7,
+   "max": 68
+  },
+  {
+   "browser": "webkit",
+   "id": "scan jpeg-baseline-rgb repeat@1.35",
+   "op": "renderPage@1.35 repeat",
+   "input": "scan-jpeg-baseline-rgb",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 2.2,
+   "max": 7
+  },
+  {
+   "browser": "webkit",
+   "id": "scan jpeg-baseline-rgb first@3",
+   "op": "renderPage@3 first after open",
+   "input": "scan-jpeg-baseline-rgb",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 58.3,
+   "max": 91
+  },
+  {
+   "browser": "webkit",
+   "id": "scan jpeg-baseline-gray first@1.35",
+   "op": "renderPage@1.35 first after open",
+   "input": "scan-jpeg-baseline-gray",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 18.8,
+   "max": 32
+  },
+  {
+   "browser": "webkit",
+   "id": "scan jpeg-baseline-gray repeat@1.35",
+   "op": "renderPage@1.35 repeat",
+   "input": "scan-jpeg-baseline-gray",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 1.4,
+   "max": 6
+  },
+  {
+   "browser": "webkit",
+   "id": "scan jpeg-baseline-gray first@3",
+   "op": "renderPage@3 first after open",
+   "input": "scan-jpeg-baseline-gray",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 28.2,
+   "max": 46
+  },
+  {
+   "browser": "webkit",
+   "id": "scan jpeg-progressive-rgb first@1.35",
+   "op": "renderPage@1.35 first after open",
+   "input": "scan-jpeg-progressive-rgb",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 87,
+   "max": 134
+  },
+  {
+   "browser": "webkit",
+   "id": "scan jpeg-progressive-rgb repeat@1.35",
+   "op": "renderPage@1.35 repeat",
+   "input": "scan-jpeg-progressive-rgb",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 2.1,
+   "max": 7
+  },
+  {
+   "browser": "webkit",
+   "id": "scan jpeg-progressive-rgb first@3",
+   "op": "renderPage@3 first after open",
+   "input": "scan-jpeg-progressive-rgb",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 101.2,
+   "max": 155
+  },
+  {
+   "browser": "webkit",
+   "id": "scan jpeg-progressive-gray first@1.35",
+   "op": "renderPage@1.35 first after open",
+   "input": "scan-jpeg-progressive-gray",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 55.2,
+   "max": 86
+  },
+  {
+   "browser": "webkit",
+   "id": "scan jpeg-progressive-gray repeat@1.35",
+   "op": "renderPage@1.35 repeat",
+   "input": "scan-jpeg-progressive-gray",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 1.4,
+   "max": 6
+  },
+  {
+   "browser": "webkit",
+   "id": "scan jpeg-progressive-gray first@3",
+   "op": "renderPage@3 first after open",
+   "input": "scan-jpeg-progressive-gray",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 64.8,
+   "max": 101
+  },
+  {
+   "browser": "webkit",
+   "id": "scan jbig2 first@1.35",
+   "op": "renderPage@1.35 first after open",
+   "input": "scan-jbig2",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 24,
+   "max": 39
+  },
+  {
+   "browser": "webkit",
+   "id": "scan jbig2 repeat@1.35",
+   "op": "renderPage@1.35 repeat",
+   "input": "scan-jbig2",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 1.4,
+   "max": 6
+  },
+  {
+   "browser": "webkit",
+   "id": "scan jbig2 first@3",
+   "op": "renderPage@3 first after open",
+   "input": "scan-jbig2",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 33.1,
+   "max": 53
+  },
+  {
+   "browser": "webkit",
+   "id": "scan ccitt-g4 first@1.35",
+   "op": "renderPage@1.35 first after open",
+   "input": "scan-ccitt-g4",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 8.1,
+   "max": 16
+  },
+  {
+   "browser": "webkit",
+   "id": "scan ccitt-g4 repeat@1.35",
+   "op": "renderPage@1.35 repeat",
+   "input": "scan-ccitt-g4",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 1.3,
+   "max": 5
+  },
+  {
+   "browser": "webkit",
+   "id": "scan ccitt-g4 first@3",
+   "op": "renderPage@3 first after open",
+   "input": "scan-ccitt-g4",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 17.5,
+   "max": 30
+  },
+  {
+   "browser": "webkit",
+   "id": "scan flate-gray first@1.35",
+   "op": "renderPage@1.35 first after open",
+   "input": "scan-flate-gray",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 16.9,
+   "max": 29
+  },
+  {
+   "browser": "webkit",
+   "id": "scan flate-gray repeat@1.35",
+   "op": "renderPage@1.35 repeat",
+   "input": "scan-flate-gray",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 1.3,
+   "max": 5
+  },
+  {
+   "browser": "webkit",
+   "id": "scan flate-gray first@3",
+   "op": "renderPage@3 first after open",
+   "input": "scan-flate-gray",
+   "field": "ms",
+   "kind": "timeMs",
+   "measured": 26.6,
+   "max": 43
+  }
+ ]
+}

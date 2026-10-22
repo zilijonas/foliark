@@ -21,3 +21,5 @@ jobs:
       - run: pnpm exec playwright install chromium webkit
       - run: pnpm smoke chromium
       - run: pnpm smoke webkit
+      # the budget gate itself; timing budgets are frozen on the reference Apple M4 (docs/support-matrix.md), so the bench is run locally
+      - run: node --test tools/bench/check-budgets.test.mjs
