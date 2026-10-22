@@ -82,6 +82,9 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
+      # packing regenerates THIRD_PARTY_NOTICES.md from the crate sources in the cargo registry
+      - run: rustup show active-toolchain || rustup toolchain install
+      - run: cargo fetch --locked
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with: { node-version: 26, cache: pnpm }
