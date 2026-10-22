@@ -14,10 +14,10 @@ oracle must see each secret in the input), `occurrences` for the shared Form.
 
 | bucket | native | raster | total |
 |---|---|---|---|
-| SAFE (bytes exported, every oracle passes) | 242 | 143 | 385 |
+| SAFE (bytes exported, every oracle passes) | 245 | 143 | 388 |
 | REFUSED (typed code named by the case, 0 bytes) | 41 | 17 | 58 |
 | EXPLAINED n/a (reason recorded: no text secret, hidden data not in extracted text, no region) | 34 | 0 | 34 |
-| UNRESOLVED BLOCKER (filed, listed in `known_blockers.json`) | 3 | 0 | 3 |
+| UNRESOLVED BLOCKER (filed, listed in `known_blockers.json`) | 0 | 0 | 0 |
 
 Manifest: 31 fixtures supported, 8 refused (REPAIRED_PDF x2, LIMIT_EXCEEDED x4, DECODE_FAILED, MALFORMED_PDF), as in strict-native.md; raster of forms-deep-40 and some refused
 inputs exports (spec 7 is independent of native limits) and is judged like any raster. Raster RENDER_INCOMPLETE x3 (annotation-comment pinned by NEW-56).
@@ -27,7 +27,7 @@ inputs exports (spec 7 is independent of native limits) and is judged like any r
 |---|---|---|
 | D1 | `BDC`/`DP` inline property dictionaries kept every key except ActualText/Alt/E: `SECRET_BDC_INLINE`, `SECRET_ARTIFACT_PROP`, `SECRET_DP_PROP` survived sanitize, region and text exports (case marked-props) | FIXED `writer/content.rs`: keep MCID/Type/Subtype/BBox/Attached with no string/dict value; ADR 0006; unit test, `sanitize_semantics` expectation, case |
 | D2 | unknown operators (legal in `BX..EX`) kept with operands: `SECRET_BX_STRING`, `SECRET_BX_DICT` survived (case content-noise) | FIXED same change: instructions whose operator is not in PDF 32000 table 51 are dropped; same tests |
-| D3 | unused Form/Image XObject (and unused fonts) stay reachable from page Resources with their text, in every native mode (case unused-xobject: `SECRET_UNUSED_FORM`; unused-font keeps BaseFont/ToUnicode names) | UNRESOLVED BLOCKER NEW-80 (P1): needs per-page/Form use analysis plus an ADR; too large for a targeted fix here. Not high/critical: invisible to page text extraction, visible to a stream scan |
+| D3 | unused Form/Image XObject (and unused fonts) stay reachable from page Resources with their text, in every native mode (case unused-xobject: `SECRET_UNUSED_FORM`; unused-font keeps BaseFont/ToUnicode names) | RESOLVED by NEW-80 (ADR 0007): the last export stage drops every resource entry no surviving content uses; case unused-xobject now SAFE in S/R/T, `known_blockers.json` is empty |
 Spec drift, not privacy defects: the engine evaluates `/VE` (And/Not) correctly instead of refusing `OPTIONAL_CONTENT_UNSUPPORTED` (ocg-ve visible kept, ocg-ve-hidden removed; MuPDF itself ignores /VE, so
 fidelity pixels are skipped for that case and the secret must be absent); redaction over a soft-mask group is refused `INVALID_ARGUMENT feature=redactionSoftMaskGroup`, not supported as spec 5.3 says
 (safe, no bytes); `EDIT_OVERLAP` never produced (NEW-53). Untouched Type3 CharProcs (`SECRET_T3_UNUSED_PROC`) survive sanitize-only by spec 5.6 and are dropped once the font is touched (R, T pass).
@@ -66,7 +66,7 @@ inherited-rot270 E `EDIT_ROTATED_TEXT`; 8 refused manifest fixtures x all native
 | pattern-image-cell | e4430aacd7da | - | S+ Rx T~ r+ s+ E~ |
 | type3-glyphs | c6597c37e076 | fe6957146044 | S+ R+ T+ r+ s+ E+ |
 | unused-font | 231f647cfa73 | 695fc71fdb72 | S+ R+ T+ r+ s+ Ex |
-| unused-xobject | e2520faa04ae | 4963cf36180e | S! R! T! r+ s+ E+ |
+| unused-xobject | e2520faa04ae | 37aa205afc6a | S+ R+ T+ r+ s+ E+ |
 | marked-props | 28f105ca9332 | a894cfa208bc | S+ R+ T+ r+ s+ E+ |
 | actualtext-nested | ac9f03f73b1f | 7607422c83c8 | S+ R+ T~ r+ s+ E~ |
 | content-noise | 64e22764be2d | 871c48e87aa8 | S+ R+ T+ r+ s+ E+ |
@@ -107,5 +107,5 @@ extra stream, secret in a private catalog key, trailing orphan object, redrawn t
 ```sh
 ~/ai/bin/memory-queue run --owner <id> --label 'foliark acceptance' --need-gb 4 --restartable --wait 1800 -- tests/integration/acceptance/run.sh   # SKIP_BUILD=1 reuses dist/wasm
 tests/oracles/.venv/bin/python tests/integration/acceptance/generators/adversarial.py target/acceptance/adv   # fixtures only
-cargo test -p foliark-engine --lib writer::content ; cargo test --workspace   # 359 passed; sdk vitest 78 passed
+cargo test -p foliark-engine --lib writer::content ; cargo test --workspace   # 362 passed; sdk vitest 78 passed
 ```

@@ -110,6 +110,23 @@ fn find(doc: &reader::Document) -> Found {
     f
 }
 
+/// BaseFont of every font reachable in `doc` (a nameless one: its `N G R`), as
+/// `fontsWithGlyphInventory` lists fonts.
+pub fn font_names(doc: &Document) -> BTreeSet<String> {
+    let xref = doc.reader().pdf().xref();
+    find(doc.reader())
+        .fonts
+        .iter()
+        .filter_map(|(font, oid)| {
+            let d = xref.get::<Dict<'_>>(*oid)?;
+            Some(d.get::<Name<'_>>("BaseFont").map_or_else(
+                || format!("{} {} R", font.num, font.generation),
+                |n| n.as_str().to_owned(),
+            ))
+        })
+        .collect()
+}
+
 /// A single `DCTDecode` filter, by name or as a one-item array.
 fn is_dct(d: &Dict<'_>) -> bool {
     match d.get::<Object<'_>>("Filter") {

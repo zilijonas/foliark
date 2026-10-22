@@ -62,6 +62,14 @@ pub struct NewStream {
 /// XObject resources added (name, object) and dropped (name).
 pub(crate) type XObjectEdits = (Vec<(Vec<u8>, Val)>, Vec<Vec<u8>>);
 
+/// Whose `/Resources` a pruning drops entries from: a page, or an object of the input with a
+/// `/Resources` of its own (Form, tiling pattern, Type3 font).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Owner {
+    Page(usize),
+    Object(ObjectId),
+}
+
 /// Where a clone of a source object goes and what a Form's resources gain or lose. Clones get
 /// ids no input object has (generation 65535 is a free slot, never a live object).
 #[derive(Debug, Default)]
@@ -74,6 +82,8 @@ pub(crate) struct Redirects {
     pub page_streams: BTreeMap<(usize, ObjectId), ObjectId>,
     /// Per Form (source or clone id): XObject resources added and dropped.
     pub form_xobjects: BTreeMap<ObjectId, XObjectEdits>,
+    /// Resource entries dropped per owner: (category such as `Font`, name).
+    pub pruned: BTreeMap<Owner, Vec<(&'static str, Vec<u8>)>>,
 }
 
 pub struct Writer<'d> {
@@ -280,6 +290,23 @@ impl<'d> Writer<'d> {
     pub fn drop_form_xobject(&mut self, form: ObjectId, name: &str) -> &mut Self {
         let entry = self.redirects.form_xobjects.entry(form).or_default();
         entry.1.push(name.as_bytes().to_vec());
+        self
+    }
+
+    /// Drop `/name` from the `category` (`Font`, `ExtGState`, ...) of `owner`'s `/Resources`
+    /// (copied, never edited in place), so what only it names is not reachable. The owner must
+    /// have `/Resources` of its own.
+    pub fn prune_resource(
+        &mut self,
+        owner: Owner,
+        category: &'static str,
+        name: &[u8],
+    ) -> &mut Self {
+        self.redirects
+            .pruned
+            .entry(owner)
+            .or_default()
+            .push((category, name.to_vec()));
         self
     }
 

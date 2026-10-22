@@ -149,18 +149,18 @@ type3-glyphs	text	native	SAFE	c6597c37e076	c561863ce4c9
 type3-glyphs	raster	raster	SAFE	c6597c37e076	f5316c691e32	
 type3-glyphs	raster_sanitize	raster	SAFE	c6597c37e076	c8477c6db47d	
 type3-glyphs	edit	native	SAFE	c6597c37e076	8f41074acc88	
-unused-font	sanitize	native	SAFE	231f647cfa73	2a35c247e576	
-unused-font	region	native	SAFE	231f647cfa73	695fc71fdb72	
-unused-font	text	native	SAFE	231f647cfa73	eed7ed36b513	
+unused-font	sanitize	native	SAFE	231f647cfa73	d6941e08e089	
+unused-font	region	native	SAFE	231f647cfa73	bc39b500da49	
+unused-font	text	native	SAFE	231f647cfa73	86f42823c154	
 unused-font	raster	raster	SAFE	231f647cfa73	f702771409af	
 unused-font	raster_sanitize	raster	SAFE	231f647cfa73	853be65c5fae	
 unused-font	edit	native	REFUSED	231f647cfa73		typed EDIT_NO_FIT
-unused-xobject	sanitize	native	BLOCKER	e2520faa04ae	8f5333c9ed22	NEW-80: STREAM: 'SECRET_UNUSED_FORM' in decoded stream (5, 0)
-unused-xobject	region	native	BLOCKER	e2520faa04ae	4963cf36180e	NEW-80: STREAM: 'SECRET_UNUSED_FORM' in decoded stream (5, 0)
-unused-xobject	text	native	BLOCKER	e2520faa04ae	ce1028858044	NEW-80: STREAM: 'SECRET_UNUSED_FORM' in decoded stream (5, 0)
+unused-xobject	sanitize	native	SAFE	e2520faa04ae	c3123c3c9ab6	
+unused-xobject	region	native	SAFE	e2520faa04ae	37aa205afc6a	
+unused-xobject	text	native	SAFE	e2520faa04ae	d6cc397cc99e	
 unused-xobject	raster	raster	SAFE	e2520faa04ae	44b689df15fa	
 unused-xobject	raster_sanitize	raster	SAFE	e2520faa04ae	c29e7b4c15b6	
-unused-xobject	edit	native	SAFE	e2520faa04ae	b6b1081e9831	
+unused-xobject	edit	native	SAFE	e2520faa04ae	bb0f316770a2	
 marked-props	sanitize	native	SAFE	28f105ca9332	a44c7bcadaf7	
 marked-props	region	native	SAFE	28f105ca9332	a894cfa208bc	
 marked-props	text	native	SAFE	28f105ca9332	633a4143efab	

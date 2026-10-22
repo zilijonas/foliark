@@ -6,7 +6,7 @@
 //! that is neither Image nor Form, a font Subtype we do not know, a stream where a plain
 //! value belongs) is a typed `MALFORMED_PDF` refusal, never a silent skip. Direct values are
 //! copied; indirect values in plain positions are inlined; dangling references are errors.
-use super::{Extra, NewStream, PageFonts, Redirects, Spans, Val, content, err, err_obj};
+use super::{Extra, NewStream, Owner, PageFonts, Redirects, Spans, Val, content, err, err_obj};
 use crate::limits::{self, Budget};
 use crate::reader::{self, object_id};
 use foliark_model::{ErrorCode, Limits, ObjectId, PdfError};
@@ -934,9 +934,11 @@ impl<'a> Walk<'a> {
     /// A Form's dictionary with the XObject resources `Writer::add_form_xobject` and
     /// `drop_form_xobject` changed (copied, never edited in place).
     fn edit_form_resources(&self, id: ObjectId, val: Val) -> Result<Val, PdfError> {
-        let Some((add, drop)) = self.redirects.form_xobjects.get(&id) else {
+        let xobjects = self.redirects.form_xobjects.get(&id);
+        let pruned = self.redirects.pruned.get(&Owner::Object(id));
+        if xobjects.is_none() && pruned.is_none() {
             return Ok(val);
-        };
+        }
         let Val::Dict(mut entries) = val else {
             return Err(err_obj(ErrorCode::MalformedPdf, "Form is not a stream", id));
         };
@@ -947,9 +949,32 @@ impl<'a> Walk<'a> {
                 id,
             ));
         };
-        let res = entries[i].1.clone();
-        entries[i].1 = self.with_entries(Some(res), b"XObject", add, drop)?;
+        let mut res = entries[i].1.clone();
+        if let Some((add, drop)) = xobjects {
+            res = self.with_entries(Some(res), b"XObject", add, drop)?;
+        }
+        if let Some(p) = pruned {
+            res = self.prune(res, p)?;
+        }
+        entries[i].1 = res;
         Ok(Val::Dict(entries))
+    }
+
+    /// `res` without the (category, name) entries of `pruned`.
+    fn prune(&self, mut res: Val, pruned: &[(&'static str, Vec<u8>)]) -> Result<Val, PdfError> {
+        let mut seen: Vec<&str> = Vec::new();
+        for (category, _) in pruned {
+            if !seen.contains(category) {
+                seen.push(category);
+                let names: Vec<Vec<u8>> = pruned
+                    .iter()
+                    .filter(|(c, _)| c == category)
+                    .map(|(_, n)| n.clone())
+                    .collect();
+                res = self.with_entries(Some(res), category.as_bytes(), &[], &names)?;
+            }
+        }
+        Ok(res)
     }
 
     /// Encoded bytes and `/Filter`, `/DecodeParms` entries for a source stream. Content
@@ -1153,6 +1178,11 @@ impl<'a> Walk<'a> {
                             v = Some(self.with_entries(v, category, add, drop)?);
                         }
                     }
+                    if let Some(p) = self.redirects.pruned.get(&Owner::Page(i))
+                        && let Some(res) = v.take()
+                    {
+                        v = Some(self.prune(res, p)?);
+                    }
                 }
                 if let Some(v) = v {
                     e.push((key.as_bytes().to_vec(), self.emit(&v, spec, 0)?));
@@ -1301,7 +1331,9 @@ impl<'a> Walk<'a> {
             map.push((name.clone(), val.clone()));
         }
         res.retain(|(k, _)| k != category);
-        res.push((category.to_vec(), Val::Dict(map)));
+        if !map.is_empty() {
+            res.push((category.to_vec(), Val::Dict(map)));
+        }
         Ok(Val::Dict(res))
     }
 

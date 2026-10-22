@@ -775,6 +775,7 @@ pub enum SanitizedItem {
     OffPage,
     InvisibleText,
     OcgContent,
+    UnusedResources,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]

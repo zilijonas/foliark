@@ -8,6 +8,7 @@ use common::{bin_stream, fidelity_oracle, has, objects_oracle, python, run, tmp}
 use foliark_engine::{Document, Engine};
 use foliark_model::{
     ErrorCode, ExportMode, ExportPlan, ExportPolicy, ExtractOptions, Limits, PdfError,
+    SanitizedItem,
 };
 use skrifa::instance::{LocationRef, Size};
 use skrifa::outline::{DrawSettings, OutlinePen};
@@ -375,4 +376,141 @@ fn icc_bytes_past_the_profile_are_cut_and_a_stream_that_is_no_profile_refuses() 
     let fake = icc_page(&b"SECRET_NOT_ICC".repeat(20));
     let err = export(&fake).unwrap_err();
     assert_eq!(err.code, ErrorCode::MalformedPdf);
+}
+
+// ---- unused resources (ADR 0007, NEW-80) --------------------------------------------------------
+
+const FORM: &str = "/Type /XObject /Subtype /Form /BBox [0 0 300 400]";
+
+#[test]
+fn resources_no_content_draws_are_gone_and_the_used_ones_stay() {
+    let objs = [
+        HELVETICA.as_bytes().to_vec(), // 5
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /SECRETUNUSEDFONT >>".to_vec(), // 6
+        bin_stream(
+            &format!("{FORM} /Resources << /Font << /F1 5 0 R >> >>"),
+            b"BT /F1 12 Tf 20 100 Td (FORMWORDS) Tj ET",
+        ), // 7 used
+        bin_stream(
+            &format!("{FORM} /Resources << /Font << /F1 5 0 R >> >>"),
+            b"BT /F1 12 Tf 20 50 Td (SECRET_UNUSED_FORM) Tj ET",
+        ), // 8
+        bin_stream(
+            "/Type /XObject /Subtype /Image /Width 19 /Height 1 /ColorSpace /DeviceGray /BitsPerComponent 8",
+            b"SECRET_UNUSED_IMAGE",
+        ), // 9
+        bin_stream(
+            "/Type /Pattern /PatternType 1 /PaintType 1 /TilingType 1 /BBox [0 0 20 20] /XStep 20 /YStep 20 \
+             /Resources << /Font << /F1 5 0 R >> >>",
+            b"BT /F1 8 Tf (SECRET_UNUSED_PATTERN) Tj ET",
+        ), // 10
+        b"<< /ShadingType 2 /ColorSpace /DeviceGray /Coords [0 0 1 0] /Function 12 0 R >>".to_vec(), // 11
+        bin_stream(
+            "/FunctionType 0 /Domain [0 1] /Range [0 1] /Size [21] /BitsPerSample 8",
+            b"SECRET_UNUSED_SHADING",
+        ), // 12
+    ];
+    let input = page(
+        "/Font << /F1 5 0 R /F2 6 0 R >> /XObject << /Fm1 7 0 R /Dead 8 0 R /Img 9 0 R >> \
+         /Pattern << /P1 10 0 R >> /Shading << /Sh1 11 0 R >> \
+         /ColorSpace << /CsDead [/Indexed /DeviceGray 17 (SECRET_UNUSED_CS_X)] >> \
+         /ExtGState << /GSUsed << /CA 0.629 >> /GSDead << /CA 0.371 >> >>",
+        "/GSUsed gs BT /F1 20 Tf 20 300 Td (PAGEWORDS) Tj ET /Fm1 Do",
+        &objs,
+    );
+    let (plan, out) = export(&input).unwrap();
+    judge(
+        "unused-resources",
+        &input,
+        &out,
+        &[
+            "SECRET_UNUSED_FORM",
+            "SECRET_UNUSED_IMAGE",
+            "SECRET_UNUSED_PATTERN",
+            "SECRET_UNUSED_SHADING",
+            "SECRET_UNUSED_CS",
+            "SECRETUNUSEDFONT",
+        ],
+        &["PAGEWORDS", "FORMWORDS"],
+    );
+    assert!(
+        has(&out, "0.629") && !has(&out, "0.371"),
+        "ExtGState entries"
+    );
+    // F2, Dead, Img, P1, Sh1, CsDead, GSDead
+    assert_eq!(plan.report.removed[&SanitizedItem::UnusedResources], 7);
+}
+
+#[test]
+fn a_form_without_resources_keeps_what_it_uses_from_the_page() {
+    let objs = [
+        HELVETICA.as_bytes().to_vec(),
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /SECRETUNUSEDFONT >>".to_vec(),
+        bin_stream(
+            FORM,
+            b"/GS1 gs BT /F1 20 Tf 20 200 Td (INHERITED_WORDS) Tj ET",
+        ),
+    ];
+    let input = page(
+        "/Font << /F1 5 0 R /F9 6 0 R >> /XObject << /Fm1 7 0 R >> \
+         /ExtGState << /GS1 << /CA 0.629 >> >>",
+        "/Fm1 Do",
+        &objs,
+    );
+    let (_, out) = export(&input).unwrap();
+    judge(
+        "inherited-resources",
+        &input,
+        &out,
+        &["SECRETUNUSEDFONT"],
+        &[], // pypdf does not inherit page resources into a Form either: the render must match
+    );
+    assert!(words(&out).contains("INHERITED_WORDS"));
+    assert!(has(&out, "0.629"), "the inherited /GS1 stays");
+}
+
+#[test]
+fn only_the_inner_form_and_the_pattern_a_form_paints_survive_a_chain() {
+    let objs = [
+        HELVETICA.as_bytes().to_vec(), // 5
+        bin_stream(
+            &format!(
+                "{FORM} /Resources << /XObject << /Inner 7 0 R /Dead 8 0 R >> \
+                 /Font << /FX 9 0 R >> /Pattern << /P1 10 0 R /P2 11 0 R >> >>"
+            ),
+            b"/Pattern cs /P1 scn 20 20 100 100 re f /Inner Do",
+        ), // 6 outer
+        bin_stream(
+            &format!("{FORM} /Resources << /Font << /F1 5 0 R >> >>"),
+            b"BT /F1 12 Tf 20 300 Td (INNER_WORDS) Tj ET",
+        ), // 7
+        bin_stream(
+            &format!("{FORM} /Resources << /Font << /F1 5 0 R >> >>"),
+            b"BT /F1 12 Tf 20 250 Td (SECRET_DEAD_FORM) Tj ET",
+        ), // 8
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /SECRETUNUSEDFONT >>".to_vec(), // 9
+        bin_stream(
+            "/Type /Pattern /PatternType 1 /PaintType 1 /TilingType 1 /BBox [0 0 10 10] /XStep 10 /YStep 10 \
+             /Resources << >>",
+            b"1 0 0 rg 0 0 5 5 re f",
+        ), // 10 painted by the outer form
+        bin_stream(
+            "/Type /Pattern /PatternType 1 /PaintType 1 /TilingType 1 /BBox [0 0 20 20] /XStep 20 /YStep 20 \
+             /Resources << /Font << /F1 5 0 R >> >>",
+            b"BT /F1 8 Tf (SECRET_DEAD_PATTERN) Tj ET",
+        ), // 11
+    ];
+    let input = page("/XObject << /Outer 6 0 R >>", "/Outer Do", &objs);
+    let (_, out) = export(&input).unwrap();
+    judge(
+        "nested-forms",
+        &input,
+        &out,
+        &[
+            "SECRET_DEAD_FORM",
+            "SECRET_DEAD_PATTERN",
+            "SECRETUNUSEDFONT",
+        ],
+        &["INNER_WORDS"],
+    );
 }

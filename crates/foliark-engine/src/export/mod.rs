@@ -15,7 +15,8 @@
 //!    their masks, vectors), then the region fills painted last, outside every clip. Removal
 //!    never depends on a fill; `fill: null` paints nothing;
 //! 5. sanitization: the allowlist writer plus the counts of [`crate::sanitize::document`];
-//! 6. write; 7. verify (§5.7): strict reparse, page count, no cluster meeting rule 1, every
+//! 6. write, then drop the resources no surviving content uses ([`crate::sanitize::prune`]);
+//! 7. verify (§5.7): strict reparse, page count, no cluster meeting rule 1, every
 //!    image under a region erased, no vector geometry under a region (our own fills aside).
 //!
 //! Every requested redaction is applied (listed in [`Prepared::applied`] with its effective
@@ -26,7 +27,7 @@ use crate::document::{Binding, Committed, StoredRedaction};
 use crate::redaction::plan::{RedactionPlan, bounds_of, glyph_boxes, text_coverage};
 use crate::redaction::{Executed, execute, image};
 use crate::sanitize::document::scan;
-use crate::sanitize::{interactive, resources, text_semantics, visibility};
+use crate::sanitize::{interactive, prune, resources, text_semantics, visibility};
 use crate::writer::Writer;
 use foliark_model::{
     Capabilities, Capability, CapabilityReason, CapabilityStatus, EditsReport, ErrorCode,
@@ -305,6 +306,18 @@ fn remap(committed: &Committed, doc: &Document, staged: &Document) -> Result<Com
     Ok(out)
 }
 
+/// Stage 6: the written file without the resource entries no surviving content uses (ADR 0007),
+/// by a second write of the file read back. The count is the entries dropped.
+fn drop_unused(bytes: Vec<u8>, limits: &Limits) -> Result<(Vec<u8>, u32), PdfError> {
+    let out = Document::open_with_limits(bytes.clone(), None, false, limits.clone())?;
+    let mut w = Writer::new(out.reader(), limits.clone());
+    let n = prune::unused(out.reader(), &mut w)?;
+    if n == 0 {
+        return Ok((bytes, 0));
+    }
+    Ok((w.write()?, n))
+}
+
 /// Run the native pipeline for `doc`, the working copy at `binding`.
 pub fn prepare(
     doc: &Document,
@@ -370,7 +383,7 @@ pub fn prepare(
     for (page, ops) in fills(doc, committed)? {
         w.append_page_content(page as usize, ops.as_bytes())?;
     }
-    let bytes = w.write()?;
+    let (bytes, unused) = drop_unused(w.write()?, limits)?;
     let pages = doc.page_count();
     let invisible = verify(&bytes, pages, committed, limits)?;
     let applied = applied(&plan, committed)?;
@@ -382,6 +395,7 @@ pub fn prepare(
         (SanitizedItem::OcgContent, vis.hidden_ops + inter.oc_hidden),
         (SanitizedItem::OffPage, vis.off_page_ops),
         (SanitizedItem::InvisibleText, vis.invisible_glyphs),
+        (SanitizedItem::UnusedResources, unused),
     ] {
         if n > 0 {
             removed.insert(item, n);
@@ -420,6 +434,16 @@ pub fn prepare(
         .collect();
     inventory.sort_unstable();
     inventory.dedup();
+    if unused > 0 {
+        // Fonts dropped as unused are no longer in the file.
+        let present = resources::font_names(&Document::open_with_limits(
+            bytes.clone(),
+            None,
+            false,
+            limits.clone(),
+        )?);
+        inventory.retain(|n| present.contains(n) || n.ends_with(" R"));
+    }
     add(LossCode::FontGlyphInventoryRetained, inventory.len() as u32);
     let mut stage_loss = |code, count: u32, pages: Vec<u32>| {
         if count > 0 {
