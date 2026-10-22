@@ -41,7 +41,7 @@ def decode(s, cap):
     if bad:
         raise ValueError("UNSUPPORTED: filter %s" % bad)
     raw = s.read_raw_bytes()
-    if not names:
+    if not names or all(n in CODECS for n in names):  # an image codec stream: its bytes are the payload (pixels are judged via MuPDF)
         return raw
     plain_flate = names == ["/FlateDecode"] and "/Predictor" not in str(s.get("/DecodeParms", ""))
     if plain_flate:

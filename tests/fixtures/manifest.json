@@ -7,9 +7,9 @@
   "python": "3.9"
  },
  "counts": {
-  "total": 35,
+  "total": 39,
   "hddn": 20,
-  "generated": 15,
+  "generated": 19,
   "byFeature": {
    "actualtext": 1,
    "additional-actions": 1,
@@ -23,16 +23,20 @@
    "deep-form": 1,
    "dimension-bomb": 1,
    "embedded-file": 2,
-   "embedded-font": 1,
+   "embedded-font": 2,
    "encrypted": 5,
    "flate-bomb": 1,
+   "font-payload": 1,
    "form": 2,
-   "form-xobject": 3,
+   "form-xobject": 4,
    "hidden-ocg-text": 1,
-   "image": 4,
+   "icc-profile": 1,
+   "image": 6,
+   "image-payload": 1,
    "incremental-update": 2,
    "invisible-text": 2,
    "javascript": 2,
+   "jpeg": 1,
    "ligature": 1,
    "link": 1,
    "malformed": 2,
@@ -40,7 +44,7 @@
    "many-pages": 1,
    "metadata": 2,
    "multi-page": 3,
-   "non-bmp": 1,
+   "non-bmp": 2,
    "ocg": 2,
    "ocr-layer": 1,
    "openaction": 1,
@@ -55,9 +59,11 @@
    "shared-image": 1,
    "shared-vector": 1,
    "structure-alt": 1,
+   "text": 1,
    "thumbnail": 1,
    "truncated": 1,
    "uri-action": 1,
+   "vector": 2,
    "widget": 1,
    "xmp": 2,
    "xref-repair": 1
@@ -1825,6 +1831,235 @@
       ],
       "text": "KEEP_PUBLIC_ANNOT"
      }
+    ]
+   }
+  },
+  {
+   "id": "mixed-regions",
+   "path": "generated/mixed-regions.pdf",
+   "sha256": "7285493d981b1c9ef32c6544e0cba9b1d5f7bc6fbb9d11305cb8a260f28883cf",
+   "bytes": 1213,
+   "pages": 1,
+   "features": [
+    "text",
+    "image",
+    "vector",
+    "form-xobject"
+   ],
+   "origin": "tests/fixtures/generators/generate.py",
+   "license": "synthetic, generated (original)",
+   "deterministic": true,
+   "expected": {
+    "behavior": "text, image pixels, a vector rectangle and Form text each under a region; public text and the gray image bar stay",
+    "mustRemove": [
+     "SECRET_MIXED_TEXT",
+     "SECRET_MIXED_FORM"
+    ],
+    "mustKeepText": [
+     "KEEP_PUBLIC_MIXED"
+    ],
+    "regions": [
+     {
+      "kind": "sensitive",
+      "page": 0,
+      "rectTopLeft": [
+       20,
+       58.8,
+       150.9,
+       73.5
+      ],
+      "text": "SECRET_MIXED_TEXT"
+     },
+     {
+      "kind": "sensitive",
+      "page": 0,
+      "rectTopLeft": [
+       20,
+       350.4,
+       132.2,
+       363.0
+      ],
+      "text": "SECRET_MIXED_FORM"
+     },
+     {
+      "kind": "sensitive-image",
+      "page": 0,
+      "rectTopLeft": [
+       45,
+       125,
+       145,
+       150
+      ],
+      "text": "red-brown bar pixels (180,20,20)"
+     },
+     {
+      "kind": "public-image",
+      "page": 0,
+      "rectTopLeft": [
+       157.5,
+       125,
+       195,
+       150
+      ],
+      "text": "gray bar stays"
+     },
+     {
+      "kind": "sensitive-vector",
+      "page": 0,
+      "rectTopLeft": [
+       219,
+       279,
+       281,
+       341
+      ],
+      "text": "red square"
+     },
+     {
+      "kind": "public",
+      "page": 0,
+      "rectTopLeft": [
+       20,
+       18.8,
+       150.9,
+       33.5
+      ],
+      "text": "KEEP_PUBLIC_MIXED"
+     }
+    ]
+   }
+  },
+  {
+   "id": "icc-tail-secret",
+   "path": "generated/icc-tail-secret.pdf",
+   "sha256": "9238336c2aae6b0f5e6cda1117559bb9320708282e5ca422502d6f4b48f0a97c",
+   "bytes": 944,
+   "pages": 1,
+   "features": [
+    "icc-profile",
+    "vector"
+   ],
+   "origin": "tests/fixtures/generators/generate.py",
+   "license": "synthetic, generated (original)",
+   "deterministic": true,
+   "expected": {
+    "behavior": "ICCBased stream with bytes after the declared profile size",
+    "mustRemove": [
+     "SECRET_ICC_TEXT",
+     "SECRET_ICC_TAIL"
+    ],
+    "mustKeepText": [
+     "KEEP_PUBLIC_ICC"
+    ],
+    "regions": [
+     {
+      "kind": "sensitive",
+      "page": 0,
+      "rectTopLeft": [
+       20,
+       88.8,
+       135.5,
+       103.5
+      ],
+      "text": "SECRET_ICC_TEXT"
+     },
+     {
+      "kind": "public",
+      "page": 0,
+      "rectTopLeft": [
+       20,
+       18.8,
+       135.5,
+       33.5
+      ],
+      "text": "KEEP_PUBLIC_ICC"
+     }
+    ]
+   }
+  },
+  {
+   "id": "jpeg-payload-secret",
+   "path": "generated/jpeg-payload-secret.pdf",
+   "sha256": "b916b36e8f84c5b7b5d2daf24881927c6ed5c3c66b13ed3fe9627a97db55f3e4",
+   "bytes": 3401,
+   "pages": 1,
+   "features": [
+    "jpeg",
+    "image",
+    "image-payload"
+   ],
+   "origin": "tests/fixtures/generators/generate.py",
+   "license": "synthetic, generated (original)",
+   "deterministic": false,
+   "expected": {
+    "behavior": "DCT image with COM, APP2 and bytes after EOI",
+    "mustRemove": [
+     "SECRET_JPEG_TEXT",
+     "SECRET_JPEG_COM",
+     "SECRET_JPEG_APP2",
+     "SECRET_JPEG_TAIL"
+    ],
+    "mustKeepText": [
+     "KEEP_PUBLIC_JPEG"
+    ],
+    "regions": [
+     {
+      "kind": "sensitive",
+      "page": 0,
+      "rectTopLeft": [
+       20,
+       88.8,
+       143.2,
+       103.5
+      ],
+      "text": "SECRET_JPEG_TEXT"
+     },
+     {
+      "kind": "public",
+      "page": 0,
+      "rectTopLeft": [
+       20,
+       18.8,
+       143.2,
+       33.5
+      ],
+      "text": "KEEP_PUBLIC_JPEG"
+     },
+     {
+      "kind": "sensitive-image",
+      "page": 0,
+      "rectTopLeft": [
+       45,
+       125,
+       145,
+       150
+      ],
+      "text": "JPEG pixels"
+     }
+    ]
+   }
+  },
+  {
+   "id": "font-payload-secret",
+   "path": "generated/font-payload-secret.pdf",
+   "sha256": "0aaca1026697c5920877f30e2ed01cf670ff829bea082d0d6b1208218212f630",
+   "bytes": 24023,
+   "pages": 1,
+   "features": [
+    "font-payload",
+    "embedded-font",
+    "non-bmp"
+   ],
+   "origin": "tests/fixtures/generators/generate.py",
+   "license": "synthetic, generated (original)",
+   "deterministic": true,
+   "expected": {
+    "behavior": "TrueType program whose name table carries a marker; SECRET_UNICODE is drawn text",
+    "mustRemove": [
+     "SECRET_UNICODE",
+     "SECRET_FONT_NAME_TABLE"
+    ],
+    "mustKeepText": [
+     "KEEP_PUBLIC_UNICODE_GLYPH_WIDTHS"
     ]
    }
   },

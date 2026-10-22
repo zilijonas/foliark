@@ -131,7 +131,7 @@ def check(out_path, spec):
         for side, a, b in (("lost", wa, wb), ("appeared", wb, wa)):
             miss = match_words(a, b, regs, tol)
             if miss:
-                F.append("WORDS_FITZ: page %d %d words %s outside changed regions (tol %.1f pt): %s" % (i, len(miss), side, tol, miss[:4]))
+                F.append("WORDS_FITZ: page %d %d words %s outside changed regions (tol %.1f pt): %s" % (i, len(miss), side, tol, miss[:20]))
         # text mapping, pypdf: chunk start points of lines that do not touch a region
         # pypdf cannot place text drawn inside Forms (it reports it at the origin, merged): `pypdf_chunks: false`
         # leaves Form pages to PyMuPDF words, pixels and the structural oracles.
@@ -150,7 +150,7 @@ def check(out_path, spec):
             else:
                 cb.pop(j)
         if miss:
-            F.append("WORDS_PYPDF: page %d %d text chunks missing or moved outside changed lines (tol %.1f pt): %s" % (i, len(miss), tol, miss[:4]))
+            F.append("WORDS_PYPDF: page %d %d text chunks missing or moved outside changed lines (tol %.1f pt): %s" % (i, len(miss), tol, miss[:20]))
     if not raster:
         sq = lambda x: re.sub(r"\s+", "", x)
         tf = sq("".join(p.get_text("text", flags=0) for p in db))

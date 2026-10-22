@@ -77,11 +77,11 @@ def ocg_hidden():
     return simple(c, ex, cat_extra=cat, resources_extra="/Properties << /oc1 6 0 R /oc2 7 0 R >>")
 
 
-def _bar_image():  # 64x32 RGB white; secret black bar cols 8..40 rows 8..16; public gray bar cols 44..60 rows 8..16
+def _bar_image(secret=b"\0\0\0"):  # 64x32 RGB white; secret black bar cols 8..40 rows 8..16; public gray bar cols 44..60 rows 8..16
     px = bytearray(b"\xff" * (64 * 32 * 3))
     for y in range(8, 16):
         for x in range(8, 40):
-            px[(y * 64 + x) * 3:(y * 64 + x) * 3 + 3] = b"\0\0\0"
+            px[(y * 64 + x) * 3:(y * 64 + x) * 3 + 3] = secret
         for x in range(44, 60):
             px[(y * 64 + x) * 3:(y * 64 + x) * 3 + 3] = b"\x80\x80\x80"
     return bytes(px)
@@ -129,6 +129,58 @@ def annot_appearance():
            "/T (SECRET_ANNOT_AUTHOR) /DA (/F1 12 Tf 0 g) /F 4 /AP << /N 7 0 R >> >>")
     link = "<< /Type /Annot /Subtype /Link /Rect [20 200 100 220] /Border [0 0 0] /A << /S /URI /URI (https://example.invalid/SECRET_LINK_URI) >> >>"
     return simple(text(20, 360, "KEEP_PUBLIC_ANNOT"), {6: ann, 7: ap, 8: link}, page_extra="/Annots [6 0 R 8 0 R]")
+
+
+def mixed_regions():
+    """Text, image, vector and Form secrets on one page, each under its own region; public text and a public image bar stay."""
+    img = stream("/Type /XObject /Subtype /Image /Width 64 /Height 32 /ColorSpace /DeviceRGB /BitsPerComponent 8", _bar_image(b"\xb4\x14\x14"), True)
+    form = _form(text(0, 0, "SECRET_MIXED_FORM", 12), res="/Font << /F1 5 0 R >>", bbox="0 -5 200 20")
+    c = (b"q 200 0 0 100 20 200 cm /Im1 Do Q\n" + b"q 0.9 0.1 0.1 rg 220 60 60 60 re f Q\n" + b"q 1 0 0 1 20 40 cm /Fm1 Do Q\n"
+         + text(20, 330, "SECRET_MIXED_TEXT") + text(20, 370, "KEEP_PUBLIC_MIXED"))
+    return simple(c, {6: img, 7: form}, resources_extra="/XObject << /Im1 6 0 R /Fm1 7 0 R >>")
+
+
+def _icc(tail):
+    p = bytearray(132)
+    p[0:4] = (132).to_bytes(4, "big")
+    p[16:20], p[36:40] = b"RGB ", b"acsp"
+    return bytes(p) + tail
+
+
+def icc_tail_secret():
+    c = b"/CS1 cs 0.2 0.4 0.6 sc 20 20 200 100 re f\n" + text(20, 300, "SECRET_ICC_TEXT") + text(20, 370, "KEEP_PUBLIC_ICC")
+    return simple(c, {6: stream("/N 3", _icc(b"SECRET_ICC_TAIL"))}, resources_extra="/ColorSpace << /CS1 [/ICCBased 6 0 R] >>")
+
+
+def jpeg_payload_secret():
+    import fitz  # dev-only: only to encode one small JPEG
+    px = bytes((x * 4 + y * 3 + c * 60) % 256 for y in range(32) for x in range(64) for c in range(3))
+    j = fitz.Pixmap(fitz.csRGB, 64, 32, px, False).tobytes("jpeg")
+    com, app = b"SECRET_JPEG_COM", b"SECRET_JPEG_APP2"
+    j = j[:2] + b"\xff\xfe" + (len(com) + 2).to_bytes(2, "big") + com + b"\xff\xe2" + (len(app) + 2).to_bytes(2, "big") + app + j[2:] + b"SECRET_JPEG_TAIL"
+    img = stream("/Type /XObject /Subtype /Image /Width 64 /Height 32 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode", j)
+    c = b"q 200 0 0 100 20 200 cm /Im1 Do Q\n" + text(20, 300, "SECRET_JPEG_TEXT") + text(20, 370, "KEEP_PUBLIC_JPEG")
+    return simple(c, {6: img}, resources_extra="/XObject << /Im1 6 0 R >>", flate=False)
+
+
+def font_payload_secret():
+    """HDDN's embedded-font fixture with a marker written into the TrueType name table (dev-only: pikepdf rewrites one stream)."""
+    import io
+    import struct
+    import pikepdf
+    p = pikepdf.open(OUT.parent / "hddn" / "unicode-glyph-widths.pdf")
+    for o in p.objects:
+        if o is not None and o._type_code == pikepdf.ObjectType.stream and "/Length1" in o:
+            d = bytearray(o.read_bytes())
+            for i in range(struct.unpack(">H", d[4:6])[0]):
+                tag, _, off, ln = struct.unpack(">4sIII", d[12 + 16 * i:28 + 16 * i])
+                if tag == b"name":
+                    m = b"SECRET_FONT_NAME_TABLE"
+                    d[off + ln - 100:off + ln - 100 + len(m)] = m
+            o.write(zlib.compress(bytes(d), 9), filter=pikepdf.Name.FlateDecode)
+    out = io.BytesIO()
+    p.save(out, static_id=True, compress_streams=False, object_stream_mode=pikepdf.ObjectStreamMode.disable)
+    return out.getvalue()
 
 
 def _encrypted(mode):
@@ -186,6 +238,24 @@ FIXTURES = {
                          {"behavior": "FreeText with /AP /N plus URI link; flatten drops /Contents /NM /T and the link",
                           "mustRemove": ["SECRET_ANNOT_CONTENTS", "SECRET_ANNOT_NAME", "SECRET_ANNOT_AUTHOR", "SECRET_ANNOT_TEXT", "SECRET_LINK_URI"], "mustKeepText": ["KEEP_PUBLIC_ANNOT"],
                          "regions": [{"kind": "sensitive", "page": 0, "rectTopLeft": [20, 80, 200, 120], "text": "annot rect"}, R(20, 360, "KEEP_PUBLIC_ANNOT", kind="public")]}, {}),
+    "mixed-regions": (mixed_regions, ["text", "image", "vector", "form-xobject"],
+                      {"behavior": "text, image pixels, a vector rectangle and Form text each under a region; public text and the gray image bar stay",
+                       "mustRemove": ["SECRET_MIXED_TEXT", "SECRET_MIXED_FORM"], "mustKeepText": ["KEEP_PUBLIC_MIXED"],
+                       "regions": [R(20, 330, "SECRET_MIXED_TEXT"), R(20, 40, "SECRET_MIXED_FORM", 12),
+                                   {"kind": "sensitive-image", "page": 0, "rectTopLeft": [45, 125, 145, 150], "text": "red-brown bar pixels (180,20,20)"},
+                                   {"kind": "public-image", "page": 0, "rectTopLeft": [157.5, 125, 195, 150], "text": "gray bar stays"},
+                                   {"kind": "sensitive-vector", "page": 0, "rectTopLeft": [219, 279, 281, 341], "text": "red square"},
+                                   R(20, 370, "KEEP_PUBLIC_MIXED", kind="public")]}, {}),
+    "icc-tail-secret": (icc_tail_secret, ["icc-profile", "vector"],
+                        {"behavior": "ICCBased stream with bytes after the declared profile size", "mustRemove": ["SECRET_ICC_TEXT", "SECRET_ICC_TAIL"], "mustKeepText": ["KEEP_PUBLIC_ICC"],
+                         "regions": [R(20, 300, "SECRET_ICC_TEXT"), R(20, 370, "KEEP_PUBLIC_ICC", kind="public")]}, {}),
+    "jpeg-payload-secret": (jpeg_payload_secret, ["jpeg", "image", "image-payload"],
+                            {"behavior": "DCT image with COM, APP2 and bytes after EOI", "mustRemove": ["SECRET_JPEG_TEXT", "SECRET_JPEG_COM", "SECRET_JPEG_APP2", "SECRET_JPEG_TAIL"],
+                             "mustKeepText": ["KEEP_PUBLIC_JPEG"], "regions": [R(20, 300, "SECRET_JPEG_TEXT"), R(20, 370, "KEEP_PUBLIC_JPEG", kind="public"),
+                                                                                                  {"kind": "sensitive-image", "page": 0, "rectTopLeft": [45, 125, 145, 150], "text": "JPEG pixels"}]}, {"deterministic": False}),
+    "font-payload-secret": (font_payload_secret, ["font-payload", "embedded-font", "non-bmp"],
+                            {"behavior": "TrueType program whose name table carries a marker; SECRET_UNICODE is drawn text", "mustRemove": ["SECRET_UNICODE", "SECRET_FONT_NAME_TABLE"],
+                             "mustKeepText": ["KEEP_PUBLIC_UNICODE_GLYPH_WIDTHS"]}, {}),
 }
 for _id, _mode, _alg in (("encrypted-rc4-40", "RC4_40", "RC4-40"), ("encrypted-rc4-128", "RC4_128", "RC4-128"),
                          ("encrypted-aes-128", "AES_128", "AES-128"), ("encrypted-aes-256", "AES_256", "AES-256")):
