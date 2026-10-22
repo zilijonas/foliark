@@ -92,5 +92,5 @@ typed code, or not established, with the evidence behind it. Real iPhone, iPad a
 - Repaired or truncated files are refused (`REPAIRED_PDF`) unless you pass `allowRepaired`; native export always rewrites the file from scratch and
   drops metadata, attachments, scripts, outlines and similar items, reporting each in `plan.report`.
 - Paragraph editing is horizontal, unrotated, left-to-right text only, and needs a registered font when the document's own font cannot be reused.
-- `cmapsUrl` (default: the package's `cmaps/` folder) is where the predefined CMap pack is fetched from at `open`; a missing or corrupt file rejects `ASSET_LOAD_FAILED`. See `docs/deployment.md`.
+- `cmapsUrl` (default: the package's `cmaps/` folder) is where the predefined CMap pack is fetched from at `open`; a missing or corrupt file rejects `ASSET_LOAD_FAILED`. See `docs/deployment.md`. `createInlineFoliark` also takes `fetchCMap(url)` for hosts whose `fetch` cannot read the default `file:` URL (Node).
 - Redaction is verified inside the engine and by independent oracles on 80 test documents; it is not a certificate for arbitrary real-world files.

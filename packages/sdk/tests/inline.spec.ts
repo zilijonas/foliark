@@ -31,3 +31,21 @@ it("opens, extracts, searches and renders without a worker, and refuses with typ
   expect(err).toBeInstanceOf(FoliarkError);
   expect(err.code).toBe("MALFORMED_PDF");
 });
+
+it("finds the shipped CMap pack with no cmapsUrl (Node reads its file: URLs through fetchCMap)", async () => {
+  const requests: string[] = [];
+  const f = await createInlineFoliark({
+    wasm,
+    fetchCMap: async (url) => (requests.push(url), new Uint8Array(readFileSync(new URL(url)))),
+  });
+  clients.push(f);
+  const cjk = readFileSync(new URL("../../../tests/fixtures/generated/cjk-predefined-cmaps.pdf", import.meta.url));
+  const doc = await f.open(new Uint8Array(cjk));
+  expect(requests[0]).toBe(new URL("../cmaps/Adobe-GB1-UCS2.cmap", new URL("../src/inline.ts", import.meta.url)).href);
+  expect((await doc.extractText(0)).text).toContain("中文测试");
+
+  // without a reader Node's fetch refuses file: and open fails typed, naming the file
+  const bare = await createInlineFoliark({ wasm });
+  clients.push(bare);
+  await expect(bare.open(new Uint8Array(cjk))).rejects.toMatchObject({ code: "ASSET_LOAD_FAILED", details: { feature: "cmap:Adobe-GB1-UCS2" } });
+});

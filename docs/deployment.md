@@ -23,6 +23,7 @@ They are plain PostScript CMaps rather than hayro's `.bcmap` blob because that f
 
 - **Default**: with `cmapsUrl` omitted the worker resolves `../cmaps/` from its own URL, i.e. the package's `cmaps/` next to `dist/` (the no-bundler layout above works unchanged).
   A bundler does not see that URL: copy the folder and set `cmapsUrl` (see the bundler list above). `cmapsUrl` is a folder, absolute or relative to the page.
+- **Node**: the default is a `file:` URL there and Node's `fetch` cannot read it, so `@foliark/sdk/inline` takes `fetchCMap: (url) => Promise<Uint8Array>` (for example `async (u) => new Uint8Array(readFileSync(new URL(u)))`); without it `open` rejects `ASSET_LOAD_FAILED`. The worker entry is browser-only and needs no option.
 - **When**: `open` reads `DocumentInfo.requiredAssets` (`cmap:<name>`, plus `cmap:Adobe-<Collection>-UCS2` for a CID font the file does not embed), fetches those files
   (and any CMap they `usecmap`, base first) with `credentials: "omit"`, same origin by default, GET only, and registers them before the first page is read. Only file
   names leave the device; a name taken from a PDF becomes a URL only if it is one of the predefined names. Each file is fetched once per worker.
