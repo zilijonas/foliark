@@ -162,34 +162,63 @@ fn normalize(src: &[u8], out: &mut Vec<u8>) {
 const ACCESSIBILITY_KEYS: [&[u8]; 3] = [b"ActualText", b"Alt", b"E"];
 
 /// `ins` is one normalized `/Tag << ... >> BDC` instruction: the same instruction without the
-/// accessibility entries of its inline dictionary. Anything else is returned unchanged.
+/// accessibility entries of its inline dictionary, at any depth. Anything else is returned
+/// unchanged.
 fn strip_marked_props(ins: &[u8]) -> Vec<u8> {
     let Some(open) = ins.windows(2).position(|w| w == b"<<") else {
         return ins.to_vec();
     };
-    let mut out = ins[..open + 2].to_vec();
-    let mut i = open + 2;
+    let end = value_end(ins, open);
+    [&ins[..open], &strip_value(&ins[open..end], 0), &ins[end..]].concat()
+}
+
+/// Nesting past this is replaced by `null`: nothing deeper is kept.
+const MAX_NEST: usize = 32;
+
+/// One value (`<< >>`, `[ ]` or a scalar) without accessibility entries anywhere inside.
+fn strip_value(v: &[u8], depth: usize) -> Vec<u8> {
+    let dict = v.starts_with(b"<<");
+    if !dict && !v.starts_with(b"[") {
+        return v.to_vec();
+    }
+    if depth >= MAX_NEST {
+        return b"null".to_vec();
+    }
+    let (mut out, close) = if dict {
+        (b"<<".to_vec(), &b" >>"[..])
+    } else {
+        (b"[".to_vec(), &b"]"[..])
+    };
+    let mut i = if dict { 2 } else { 1 };
     loop {
-        while ins.get(i).is_some_and(|b| WS.contains(b)) {
+        while v.get(i).is_some_and(|b| WS.contains(b)) {
             i += 1;
         }
-        if i >= ins.len() || ins[i..].starts_with(b">>") {
+        if i >= v.len() || v[i..].starts_with(b">>") || v[i] == b']' {
             break;
         }
-        let key_end = value_end(ins, i);
-        let mut v = key_end;
-        while ins.get(v).is_some_and(|b| WS.contains(b)) {
-            v += 1;
+        let end = value_end(v, i);
+        if dict {
+            let mut at = end;
+            while v.get(at).is_some_and(|b| WS.contains(b)) {
+                at += 1;
+            }
+            let val_end = value_end(v, at);
+            if !ACCESSIBILITY_KEYS.contains(&&v[i + 1..end]) {
+                out.push(b' ');
+                out.extend_from_slice(&v[i..at]);
+                out.extend(strip_value(&v[at..val_end], depth + 1));
+            }
+            i = val_end;
+        } else {
+            if out.len() > 1 {
+                out.push(b' ');
+            }
+            out.extend(strip_value(&v[i..end], depth + 1));
+            i = end;
         }
-        let end = value_end(ins, v);
-        if !ACCESSIBILITY_KEYS.contains(&&ins[i + 1..key_end]) {
-            out.push(b' ');
-            out.extend_from_slice(&ins[i..end]);
-        }
-        i = end;
     }
-    out.push(b' ');
-    out.extend_from_slice(&ins[i.min(ins.len())..]);
+    out.extend_from_slice(close);
     out
 }
 
@@ -300,11 +329,12 @@ mod tests {
     #[test]
     fn marked_content_keeps_tag_and_layer_but_not_accessibility_text() {
         let data = b"/Span << /MCID 3 /ActualText <FEFF0053> /Alt (a (b) c) /E (x) /K [1 2] /Lang (en) >> BDC\n\
-/Span << /ActualText (only) >> BDC /P /MC0 BDC /OC /Ly BDC EMC EMC EMC EMC";
+/Span << /ActualText (only) >> BDC /P /MC0 BDC /OC /Ly BDC EMC EMC EMC EMC\n\
+/Span << /K [<< /Alt (n1) /Keep 1 >> [<< /ActualText (n2) >>]] /X << /Y << /E (n3) /Z (ok) >> >> >> BDC EMC";
         let out = String::from_utf8(reemit(data, ID, &[]).unwrap()).unwrap();
         assert_eq!(
             out,
-            "/Span << /MCID 3 /K [1 2] /Lang (en) >> BDC\n/Span << >> BDC\n/P /MC0 BDC\n/OC /Ly BDC\nEMC\nEMC\nEMC\nEMC\n"
+            "/Span << /MCID 3 /K [1 2] /Lang (en) >> BDC\n/Span << >> BDC\n/P /MC0 BDC\n/OC /Ly BDC\nEMC\nEMC\nEMC\nEMC\n/Span << /K [<< /Keep 1 >> [<< >>]] /X << /Y << /Z (ok) >> >> >> BDC\nEMC\n"
         );
     }
 }

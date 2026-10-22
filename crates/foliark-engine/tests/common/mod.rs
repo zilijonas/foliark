@@ -194,3 +194,50 @@ pub fn fidelity_oracle(
     }
     python(&args)
 }
+
+/// `<< dict /Length n >> stream ... endstream`.
+pub fn stream(dict: &str, data: &str) -> String {
+    format!(
+        "<< {dict} /Length {} >>\nstream\n{data}\nendstream",
+        data.len()
+    )
+}
+
+/// A one-page 300 x 400 PDF from objects written in order: 1 catalog (`catalog` entries), 2 pages,
+/// 3 the page (`page_extra` entries), 4 its content, 5 Helvetica `/F1` (add `/Resources` through
+/// `page_extra`), then `objs` as objects 6.. (`null` for a gap).
+pub fn tiny_pdf(catalog: &str, page_extra: &str, content: &str, objs: &[String]) -> Vec<u8> {
+    let mut all = vec![
+        format!("<< /Type /Catalog /Pages 2 0 R {catalog} >>"),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_owned(),
+        format!(
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Contents 4 0 R {page_extra} >>"
+        ),
+        stream("", content),
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".to_owned(),
+    ];
+    all.extend(objs.iter().cloned());
+    let mut out = b"%PDF-1.7\n".to_vec();
+    let mut at = Vec::new();
+    for (i, o) in all.iter().enumerate() {
+        at.push(out.len());
+        out.extend(format!("{} 0 obj\n{o}\nendobj\n", i + 1).bytes());
+    }
+    let xref = out.len();
+    out.extend(format!("xref\n0 {}\n0000000000 65535 f \n", all.len() + 1).bytes());
+    for a in at {
+        out.extend(format!("{a:010} 00000 n \n").bytes());
+    }
+    out.extend(
+        format!(
+            "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n",
+            all.len() + 1
+        )
+        .bytes(),
+    );
+    out
+}
+
+pub fn has(bytes: &[u8], needle: &str) -> bool {
+    bytes.windows(needle.len()).any(|w| w == needle.as_bytes())
+}

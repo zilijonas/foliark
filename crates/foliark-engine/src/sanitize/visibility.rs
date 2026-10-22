@@ -18,6 +18,7 @@
 //! text keep their programs and ToUnicode; an OFF object used by a pattern cell or Type3 glyph
 //! procedure (not descended) refuses; a redaction that rewrites an operator this stage also
 //! rewrites is refused by the writer (overlapping spans).
+use super::text_semantics;
 use crate::export::preflight::Blocker;
 use crate::interpret::{DiagnosticKind, ItemKind};
 use crate::limits::{self, Budget};
@@ -236,6 +237,8 @@ type Loc = (ObjectId, u32, u32);
 struct Site {
     /// All occurrences are outside the CropBox or their clip.
     out: bool,
+    /// Every glyph drawn here is invisible text (render mode 3 or 7).
+    invisible: bool,
     /// Advance in em per code index of a show operator.
     adv: BTreeMap<u32, f64>,
 }
@@ -271,7 +274,11 @@ fn sites(doc: &Document) -> Result<(HashMap<Loc, Site>, bool), PdfError> {
                     let r = g.quad_user.bounds();
                     (
                         [r.x, r.y, r.x + r.width, r.y + r.height],
-                        Some((g.op_glyph_index, g.advance_em)),
+                        Some((
+                            g.op_glyph_index,
+                            g.advance_em,
+                            matches!(g.render_mode, 3 | 7),
+                        )),
                     )
                 }
                 ItemKind::Image(im) => {
@@ -306,11 +313,13 @@ fn sites(doc: &Document) -> Result<(HashMap<Loc, Site>, bool), PdfError> {
                 .entry((it.loc.stream, it.loc.start, it.loc.end))
                 .or_insert_with(|| Site {
                     out: true,
+                    invisible: true,
                     adv: BTreeMap::new(),
                 });
             site.out &= gone(b, crop) || it.clip.is_some_and(|c| gone(b, c));
-            if let Some((index, adv)) = code {
+            if let Some((index, adv, invisible)) = code {
                 site.adv.insert(index, adv);
+                site.invisible &= invisible;
             }
         }
     }
@@ -387,6 +396,11 @@ pub struct Scan {
     pub hidden_ops: u32,
     /// Operators removed because they lie outside the page or their clip.
     pub off_page_ops: u32,
+    /// Glyphs of invisible text (render mode 3 or 7) removed under `invisibleText: remove`.
+    pub invisible_glyphs: u32,
+    /// `ActualText`, `Alt` and `E` entries of marked-content property lists (nested ones too);
+    /// the writer never copies them.
+    pub accessibility: u32,
     /// Refusals this input raises.
     pub blockers: Vec<Blocker>,
 }
@@ -412,6 +426,7 @@ impl Scan {
 
 struct Walk<'a> {
     doc: &'a Document,
+    remove_invisible: bool,
     layers: Layers<'a>,
     sites: HashMap<Loc, Site>,
     budget: Budget,
@@ -480,13 +495,16 @@ impl<'a> Walk<'a> {
             self.budget.charge(1)?;
             let op: &[u8] = ins.operator;
             let hidden = mc.contains(&Some(false));
-            let (off, adv) = self
+            let site = self
                 .sites
-                .get(&(stream, span.start as u32, span.end as u32))
-                .map_or((false, 0.0), |s| (s.out, s.adv.values().sum::<f64>()));
+                .get(&(stream, span.start as u32, span.end as u32));
+            let (off, adv) = site.map_or((false, 0.0), |s| (s.out, s.adv.values().sum::<f64>()));
+            let ghost = self.remove_invisible && site.is_some_and(|s| s.invisible);
+            let ghosts = site.map_or(0, |s| s.adv.len() as u32);
             let gone = hidden || off;
             match op {
                 b"BDC" => {
+                    self.out.accessibility += text_semantics::accessibility_entries(&ins, res);
                     let oc = self.oc_of(&ins, res);
                     mc.push(oc);
                     if oc.is_some() {
@@ -507,9 +525,14 @@ impl<'a> Walk<'a> {
                             .push((span, Vec::new()));
                     }
                 }
-                b"Tj" | b"TJ" | b"'" | b"\"" if gone => {
+                b"Tj" | b"TJ" | b"'" | b"\"" if gone || ghost => {
                     let ops = advance_only(&ins, adv);
-                    self.put(stream, span, ops, hidden);
+                    if gone {
+                        self.put(stream, span, ops, hidden);
+                    } else {
+                        self.out.spans.entry(stream).or_default().push((span, ops));
+                        self.out.invisible_glyphs += ghosts;
+                    }
                 }
                 b"S" | b"s" | b"f" | b"F" | b"f*" | b"B" | b"B*" | b"b" | b"b*" if gone => {
                     self.put(stream, span, b"n".to_vec(), hidden);
@@ -615,9 +638,16 @@ impl<'a> Walk<'a> {
 /// Decide the whole stage for `doc`. `Err` only for what the reader and the budgets refuse;
 /// what this stage cannot evaluate comes back as [`Scan::blockers`].
 pub fn scan(doc: &Document) -> Result<Scan, PdfError> {
+    scan_with(doc, false)
+}
+
+/// [`scan`], and with `remove_invisible` also the text shows whose every glyph is invisible
+/// (render mode 3 or 7): replaced like hidden text, advances kept.
+pub fn scan_with(doc: &Document, remove_invisible: bool) -> Result<Scan, PdfError> {
     let (sites, blind) = sites(doc)?;
     let mut w = Walk {
         doc,
+        remove_invisible,
         layers: Layers::read(doc.pdf().xref()),
         sites,
         budget: Budget::new(doc.limits()),

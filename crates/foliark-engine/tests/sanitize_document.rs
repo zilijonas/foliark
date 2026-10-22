@@ -86,11 +86,11 @@ const CASES: &[Case] = &[
             LossCode::ScriptsRemoved,
         ],
     },
-    // StructTreeRoot + MarkInfo (the inline ActualText is checked separately).
+    // StructTreeRoot + MarkInfo + the one inline ActualText (its removal is checked separately).
     Case {
         id: "actualtext",
         path: "hddn/actualtext.pdf",
-        removed: &[(Metadata, 1), (Structure, 2)],
+        removed: &[(Metadata, 1), (Structure, 3)],
         losses: &[LossCode::MetadataRemoved, LossCode::AccessibilityRemoved],
     },
     // Info + XMP, the attachment, and OpenAction + named JS + the AA action.

@@ -26,12 +26,12 @@ use crate::document::{Binding, Committed, StoredRedaction};
 use crate::redaction::plan::{RedactionPlan, bounds_of, glyph_boxes, text_coverage};
 use crate::redaction::{Executed, execute, image};
 use crate::sanitize::document::scan;
-use crate::sanitize::{interactive, visibility};
+use crate::sanitize::{interactive, text_semantics, visibility};
 use crate::writer::Writer;
 use foliark_model::{
     Capabilities, Capability, CapabilityReason, CapabilityStatus, EditsReport, ErrorCode,
-    ExportMode, ExportPolicy, ExportReport, ExtractOptions, Flattened, KeptReport, Limits, Loss,
-    LossCode, PdfError, Point, Rect, RedactionReport, SanitizedItem,
+    ExportMode, ExportPolicy, ExportReport, ExtractOptions, Flattened, InvisibleTextPolicy,
+    KeptReport, Limits, Loss, LossCode, PdfError, Point, Rect, RedactionReport, SanitizedItem,
 };
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -320,7 +320,7 @@ pub fn prepare(
     let reader = doc.reader();
     let removals = scan(reader)?;
     let inter = interactive::scan(reader, policy);
-    let vis = visibility::scan(reader)?;
+    let vis = visibility::scan_with(reader, policy.invisible_text == InvisibleTextPolicy::Remove)?;
     if let Some(b) = preflight::document_blockers(policy, &inter, &vis, removals.signatures).first()
     {
         return Err(b.error());
@@ -352,7 +352,9 @@ pub fn prepare(
         None => (doc, committed),
     };
     let plan = RedactionPlan::build(doc, committed, binding)?;
-    if let Some(b) = preflight::plan_blockers(&plan).first() {
+    let mut blockers = preflight::plan_blockers(&plan);
+    blockers.extend(text_semantics::mapping_blockers(doc, &plan)?);
+    if let Some(b) = blockers.first() {
         return Err(b.error());
     }
 
@@ -377,10 +379,14 @@ pub fn prepare(
         (SanitizedItem::Widgets, inter.widgets),
         (SanitizedItem::OcgContent, vis.hidden_ops + inter.oc_hidden),
         (SanitizedItem::OffPage, vis.off_page_ops),
+        (SanitizedItem::InvisibleText, vis.invisible_glyphs),
     ] {
         if n > 0 {
             removed.insert(item, n);
         }
+    }
+    if vis.accessibility > 0 {
+        *removed.entry(SanitizedItem::Structure).or_default() += vis.accessibility;
     }
     let (flat_annots, flat_widgets) = inter.flattened();
     let mut losses = removals.losses;
@@ -401,6 +407,8 @@ pub fn prepare(
     add(LossCode::AnnotationsRemoved, inter.removed_visible);
     add(LossCode::FormsFlattened, flat_widgets);
     add(LossCode::LayersFlattened, vis.layers);
+    add(LossCode::AccessibilityRemoved, vis.accessibility);
+    add(LossCode::TextSearchLost, vis.invisible_glyphs);
     let mut inventory: Vec<String> = done
         .text
         .fonts_with_glyph_inventory
@@ -523,7 +531,9 @@ pub(crate) fn capabilities(
     let redact = if committed.redactions.is_empty() {
         capability(Unknown, &[])
     } else {
-        let b = preflight::plan_blockers(&RedactionPlan::build(doc, committed, binding)?);
+        let plan = RedactionPlan::build(doc, committed, binding)?;
+        let mut b = preflight::plan_blockers(&plan);
+        b.extend(text_semantics::mapping_blockers(doc, &plan)?);
         let c = capability(if b.is_empty() { Supported } else { Unsupported }, &b);
         blockers.extend(b);
         c

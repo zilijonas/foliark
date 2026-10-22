@@ -9,8 +9,7 @@
 use crate::redaction::plan::{PagePlan, RedactionPlan};
 use crate::sanitize::{interactive, visibility};
 use foliark_model::{
-    ErrorCode, ErrorDetails, ExportMode, ExportPolicy, InvisibleTextPolicy, PdfError,
-    SignedInputPolicy,
+    ErrorCode, ErrorDetails, ExportMode, ExportPolicy, PdfError, SignedInputPolicy,
 };
 
 /// One reason a stage cannot run. `InvalidArgument` + `feature` is the engine's convention for
@@ -27,16 +26,6 @@ pub struct Blocker {
 }
 
 impl Blocker {
-    fn not_built(feature: &'static str, pages: Vec<u32>) -> Self {
-        Self {
-            code: ErrorCode::InvalidArgument,
-            feature,
-            pages,
-            ids: Vec::new(),
-            fields: Vec::new(),
-        }
-    }
-
     pub fn error(&self) -> PdfError {
         PdfError::with(
             self.code,
@@ -71,9 +60,6 @@ pub fn document_blockers(
     }
     out.extend(interactive.blockers.iter().cloned());
     out.extend(layers.blockers.iter().cloned());
-    if policy.invisible_text == InvisibleTextPolicy::Remove {
-        out.push(Blocker::not_built("invisibleTextRemove", Vec::new()));
-    }
     out
 }
 

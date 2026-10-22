@@ -238,14 +238,11 @@ describe("applyChanges", () => {
   });
 });
 
-describe("ops that are not built yet", () => {
-  it("refuse with a typed error naming the feature, and leave the document usable", async () => {
+describe("export policy", () => {
+  it("invisibleText remove is built: the export succeeds and the document stays usable", async () => {
     const doc = await open();
-    const refused = async (p: Promise<unknown>, feature: string) => {
-      const e = await rejects(p);
-      expect([e.code, e.details?.feature]).toEqual(["INVALID_ARGUMENT", feature]);
-    };
-    await refused(doc.prepareExport({ mode: "native", policy: { invisibleText: "remove" } }), "invisibleTextRemove");
+    const plan = await doc.prepareExport({ mode: "native", policy: { invisibleText: "remove" } });
+    expect(plan.report.kept.invisibleTextClusters).toBe(0);
     expect(doc.revision).toBe(0);
     expect((await doc.extractText(0)).pageIndex).toBe(0);
   });

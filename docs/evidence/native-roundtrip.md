@@ -71,7 +71,7 @@ The four encrypted outputs share one hash: same plaintext page, deterministic wr
   MALFORMED_PDF for the cyclic Form). No fixture here is refused by a native export stage.
 - Native export stages that still refuse by name, outside this gate (no manifest fixture hits them): optional content a
   layer expression cannot decide (OPTIONAL_CONTENT_UNSUPPORTED, `flattenOptionalContent`), widgets with a value but no or a
-  stale appearance (FORM_APPEARANCE_MISSING), XFA (XFA_UNSUPPORTED), `invisibleText: remove` (`invisibleTextRemove`), and
+  stale appearance (FORM_APPEARANCE_MISSING), XFA (XFA_UNSUPPORTED), and
   redaction over tiling-pattern paint or soft-mask groups. Raster mode is independent of all of them.
 - capability-unknown, no fixture in this gate: CFF/Type1 font program retention, inline images in the image oracle, Type3
   fonts, shadings/patterns in the vector oracle. Redaction and edits are gated in their own test targets.

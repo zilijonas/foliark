@@ -261,14 +261,6 @@ fn stages_this_build_cannot_run_refuse_by_name_with_no_bytes() {
     );
     assert_eq!(caps.export_raster.status, CapabilityStatus::Unknown);
     assert!(caps.export_raster.reasons.is_empty());
-
-    let refuse_signed = ExportPolicy {
-        signed_input: foliark_model::SignedInputPolicy::Refuse,
-        invisible_text: foliark_model::InvisibleTextPolicy::Remove,
-        ..ExportPolicy::default()
-    };
-    let (err, _) = refuse(fixture("generated/ocr-over-image.pdf"), refuse_signed);
-    assert_eq!(feature(&err), Some("invisibleTextRemove"));
 }
 
 #[test]

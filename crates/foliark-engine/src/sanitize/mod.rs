@@ -3,4 +3,5 @@
 //! removal took out, so the export report is exact.
 pub mod document;
 pub mod interactive;
+pub mod text_semantics;
 pub mod visibility;
