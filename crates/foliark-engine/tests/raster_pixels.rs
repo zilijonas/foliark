@@ -202,7 +202,7 @@ fn burned_pixels_follow_display_space_on_rotated_cropped_and_scaled_pages() {
             width: m.width + 2.0,
             height: m.height + 2.0,
         };
-        check_burn(&src, region.clone(), None, name);
+        check_burn(&src, region, None, name);
         if name == "r90-crop" {
             // A colour fill burns that colour, not white.
             check_burn(&src, region, Some([0.0, 1.0, 0.0]), "r90-crop-green");
