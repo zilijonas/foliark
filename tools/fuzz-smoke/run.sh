@@ -3,11 +3,11 @@
 # seed, 2 s per-input timeout, 2 GB RSS cap. Exits non-zero if any target crashes, hangs or
 # runs out of memory (the first artifact of each failing target is printed).
 #   tools/fuzz-smoke/run.sh [target...]        FUZZ_SECS=120  FUZZ_RUNS=200000 (exec-exact)
-# Whole run goes through the memory queue (4 GB). Needs `rustup toolchain install nightly`
+# On the owner's Mac mini the whole run goes through the memory queue (4 GB); without ~/ai/bin/memory-queue it runs directly. Needs `rustup toolchain install nightly`
 # and `cargo install cargo-fuzz --locked`.
 set -uo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
-if [ -z "${FOLIARK_FUZZ_QUEUED:-}" ]; then
+if [ -z "${FOLIARK_FUZZ_QUEUED:-}" ] && [ -x ~/ai/bin/memory-queue ]; then
   export FOLIARK_FUZZ_QUEUED=1
   exec ~/ai/bin/memory-queue run --owner "${MEMORY_QUEUE_OWNER:-foliark-fuzz-smoke}" \
     --label 'foliark fuzz-smoke' --need-gb 4 --restartable --wait 1800 -- "$0" "$@"

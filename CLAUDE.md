@@ -1,19 +1,19 @@
 # Foliark — agent rules
 
-Headless Rust/WASM PDF SDK. First consumer: HDDN (`~/ai/repos/hddn`), replacing Pyodide + PyMuPDF. Board: Workbench project `NEW` (see AGENTS.md). The lead agent assigns tasks; you execute only the task(s) you were given.
+Headless Rust/WASM PDF SDK. First consumer: HDDN (the owner's private app, a separate repo), replacing Pyodide + PyMuPDF. Board: Workbench project `NEW` (see AGENTS.md). The lead agent assigns tasks; you execute only the task(s) you were given.
 
 ## Hard rules
-- Local git only. Never push, never add remotes, never publish packages.
-- No Codex. No C/C++ PDF engines (PDFium, MuPDF, Poppler, qpdf) in the shipped graph; they may be used only as dev-only oracles in `tests/oracles` (PyMuPDF via `python3 -c "import fitz"` is available).
-- Coding follows Ponytail (`~/.claude/skills/ponytail/SKILL.md`): smallest complete change, reuse before adding, no speculative abstraction. Keep validation, error handling and security.
+- Push to the existing `origin` only when the lead or owner asks, as normal fast-forward pushes. Never force-push, change repository visibility, create tags or releases, add other remotes, or publish packages.
+- No Codex. No C/C++ PDF engines (PDFium, MuPDF, Poppler, qpdf) in the shipped graph; they may be used only as dev-only oracles in `tests/oracles` (PyMuPDF is installed into `tests/oracles/.venv` from `tests/oracles/requirements.txt`).
+- Coding follows the Ponytail rule if that skill is installed (`~/.claude/skills/ponytail/SKILL.md`): smallest complete change, reuse before adding, no speculative abstraction. Keep validation, error handling and security.
 - Tests prove behavior that could break. No tests that mirror the implementation, no trivial getter tests.
-- Every `cargo build/test/clippy`, `wasm-bindgen`, browser or Playwright run goes through the memory queue:
-  `~/ai/bin/memory-queue run --owner 807494d7-f0ff-4dfb-a3f4-ac700f52c9ef --label 'foliark <what>' --need-gb 4 --restartable --wait 1800 -- <cmd>`
+- On the owner's Mac mini, every `cargo build/test/clippy`, `wasm-bindgen`, browser or Playwright run goes through the memory queue, if `~/ai/bin/memory-queue` is available on the machine (plain runs elsewhere):
+  `~/ai/bin/memory-queue run --owner <your session id> --label 'foliark <what>' --need-gb 4 --restartable --wait 1800 -- <cmd>`
   Exit 75 means deferred: wait and retry, do not treat as failure. Long runs go in the background; do not poll.
   Never nest reservations: scripts that already call memory-queue themselves (`tools/fuzz-smoke/run.sh`) run unwrapped; wrapping them deadlocks the queue.
 - `source ~/.cargo/env` if `cargo` is not on PATH.
 - Workbench artifacts: pass Markdown inline via `content`. Never pass `sourcePath`.
-- Do not modify `~/ai/repos/hddn` unless your task is an HDDN integration task; then work only in the worktree you are given.
+- Do not modify the HDDN checkout unless your task is an HDDN integration task; then work only in the worktree you are given.
 - Commit your work on the branch you are given with a normal conventional-commit message ending with
   `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>` (or your actual model).
 

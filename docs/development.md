@@ -8,8 +8,8 @@ Contract: [docs/spec/v1.md](spec/v1.md) (frozen; changes need an ADR in `docs/ad
 - Node 26 and pnpm 11. Playwright (npm devDependency, 1.62.1) uses browsers already in `~/Library/Caches/ms-playwright`; otherwise `pnpm exec playwright install chromium webkit`.
 - No Python or C/C++ PDF engine in the shipped graph. PyMuPDF is allowed only as a dev oracle under `tests/oracles`.
 
-## Memory queue (mandatory)
-Every `cargo build/test/clippy`, `wasm-bindgen` and browser run goes through the queue; `$OWNER` is your session id:
+## Memory queue (owner's Mac mini; skip elsewhere)
+Where `~/ai/bin/memory-queue` exists, every `cargo build/test/clippy`, `wasm-bindgen` and browser run goes through the queue; `$OWNER` is your session id; on any other machine run the commands directly:
 ```sh
 ~/ai/bin/memory-queue run --owner $OWNER --label 'foliark <what>' --need-gb 4 --restartable --wait 1800 -- <cmd>
 ```
@@ -33,7 +33,7 @@ Run from the repo root, each wrapped as above.
 | Regenerate smoke fixture | `cargo run -q -p foliark-engine --example smoke_pdf > tests/smoke/one-page.pdf` |
 | Oracles | placeholder: `tests/oracles` is owned by the independent-checker tasks (NEW-7, NEW-20, NEW-21); no command yet |
 
-Order for a full local check: fmt, clippy, test, `scripts/build-wasm.sh`, SDK build, smoke. CI (`.github/workflows/ci.yml`) mirrors it and has never run (local git only).
+Order for a full local check: fmt, clippy, test, `scripts/build-wasm.sh`, SDK build, smoke. CI (`.github/workflows/ci.yml`) mirrors it on Linux.
 
 ts-rs writes TypeScript DTOs to `packages/sdk/src/generated/` during `cargo test`; commit the result, never hand-edit it.
 
@@ -43,7 +43,7 @@ Pins are exact (`=`) in the root `Cargo.toml`; `Cargo.lock` is committed, always
 ## Receipts and handoff
 - Attach one Markdown receipt per task via `attach_artifact` with inline `content` (never `sourcePath`), at most about 1500 chars: commit hash, files touched, exact commands with exit codes, counts, limitations, next step. Check each Done-when line explicitly; never claim an unrun check.
 - Set the task to `review` after attaching; the lead approves. Do not leave a task in `doing`: hand it back as `todo` with a note or set `blocked` with a reason.
-- Local git only: commit on the given branch, never push or add remotes. Commit messages are conventional and end with the Co-Authored-By line.
+- Commit on the given branch; push only when asked, never force-push or publish. Commit messages are conventional and end with the Co-Authored-By line.
 - Findings that change a later task go in `update_task` plus `add_note`.
 
 ## Module to owner task (spec 14)
