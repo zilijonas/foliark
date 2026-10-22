@@ -3,4 +3,4 @@
 /**
  * `search` options (spec §1.2). Defaults: case-insensitive, diacritic-sensitive, 1000 hits.
  */
-export type SearchOptions = { pages?: Array<number>, caseSensitive: boolean, diacriticSensitive: boolean, wholeWord: boolean, maxHits: number, };
+export type SearchOptions = { pages?: Array<number>, caseSensitive?: boolean, diacriticSensitive?: boolean, wholeWord?: boolean, maxHits?: number, };

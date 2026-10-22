@@ -27,13 +27,15 @@ Run from the repo root, each wrapped as above.
 | Wasm build + JS glue | `scripts/build-wasm.sh` (output `packages/sdk/wasm/`, gitignored; prints raw and gzip size) |
 | Wasm compile check only | `cargo build --locked --target wasm32-unknown-unknown -p foliark-wasm` |
 | SDK build | `pnpm install && pnpm --filter @foliark/sdk build` (needs the wasm glue first for its types) |
-| SDK tests | `pnpm --filter @foliark/sdk test` (vitest; protocol only: `-- protocol.spec.ts`) |
+| SDK tests | `pnpm --filter @foliark/sdk test` (vitest; needs the wasm build first; `-- protocol.spec.ts` is protocol only, `-- document.spec.ts` runs the worker in-process over a MessageChannel against the real wasm) |
 | Rust/TS parity | `scripts/check-ts-parity.sh` (regenerates ts-rs into a temp dir, diffs `packages/sdk/src/generated`; non-zero on drift) |
-| Browser smoke | `pnpm smoke chromium` and `pnpm smoke webkit` (needs wasm and SDK built) |
+| Browser smoke | `pnpm smoke chromium` and `pnpm smoke webkit` (needs wasm and SDK built; opens `tests/smoke/one-page.pdf` and `tests/fixtures/hddn/rotation-crop.pdf` through the public API) |
 | Regenerate smoke fixture | `cargo run -q -p foliark-engine --example smoke_pdf > tests/smoke/one-page.pdf` |
 | Oracles | placeholder: `tests/oracles` is owned by the independent-checker tasks (NEW-7, NEW-20, NEW-21); no command yet |
 
 Order for a full local check: fmt, clippy, test, `scripts/build-wasm.sh`, SDK build, smoke. CI (`.github/workflows/ci.yml`) mirrors it and has never run (local git only).
+
+Ops the spec defines but this build does not implement yet (`capabilities`, `prepareParagraph`, `applyChanges`, `prepareExport`, `export`) reject with `INVALID_ARGUMENT` and `details.feature` set to the op name (the spec has no dedicated code; `INTERNAL` would reset the worker). The owning task replaces the stub in `crates/foliark-engine/src/engine.rs`; the wasm facade and SDK need no change.
 
 ts-rs writes TypeScript DTOs to `packages/sdk/src/generated/` during `cargo test`; commit the result, never hand-edit it.
 

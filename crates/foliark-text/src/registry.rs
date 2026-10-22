@@ -102,6 +102,11 @@ impl Registry {
         self.version
     }
 
+    /// Bytes of every registered face (`maxRegisteredFontBytes` counts them).
+    pub fn total_bytes(&self) -> u64 {
+        self.faces.iter().map(|f| f.bytes.len() as u64).sum()
+    }
+
     pub fn get(&self, id: &str) -> Option<&RegisteredFace> {
         self.faces.iter().find(|f| f.info.id == id)
     }

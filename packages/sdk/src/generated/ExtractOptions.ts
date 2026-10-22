@@ -3,4 +3,4 @@
 /**
  * `extractText` options (spec §1): `chars` adds `TextPage::clusters`.
  */
-export type ExtractOptions = { chars: boolean, includeOcgHidden: boolean, };
+export type ExtractOptions = { chars?: boolean, includeOcgHidden?: boolean, };

@@ -30,7 +30,9 @@ pub const GROUPING: Grouping = Grouping {
 #[serde(rename_all = "camelCase", default)]
 #[ts(export, optional_fields)]
 pub struct ExtractOptions {
+    #[ts(type = "boolean", optional)]
     pub chars: bool,
+    #[ts(type = "boolean", optional)]
     pub include_ocg_hidden: bool,
 }
 
@@ -40,9 +42,13 @@ pub struct ExtractOptions {
 #[ts(export, optional_fields)]
 pub struct SearchOptions {
     pub pages: Option<Vec<u32>>,
+    #[ts(type = "boolean", optional)]
     pub case_sensitive: bool,
+    #[ts(type = "boolean", optional)]
     pub diacritic_sensitive: bool,
+    #[ts(type = "boolean", optional)]
     pub whole_word: bool,
+    #[ts(type = "number", optional)]
     pub max_hits: u32,
 }
 

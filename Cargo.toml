@@ -15,6 +15,7 @@ publish = false
 hayro = { version = "=0.8.0", default-features = false, features = ["embed-fonts"] }
 hayro-syntax = "=0.8.0"
 hayro-interpret = { version = "=0.8.0", default-features = false, features = ["embed-fonts"] }
+js-sys = "=0.3.106"
 pdf-writer = "=0.15.0"
 serde = { version = "1", features = ["derive"] }
 serde-wasm-bindgen = "=0.6.5"

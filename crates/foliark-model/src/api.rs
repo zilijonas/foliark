@@ -626,6 +626,61 @@ pub enum ExportMode {
     Raster,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum AnnotationPolicy {
+    #[default]
+    Flatten,
+    Remove,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum SignedInputPolicy {
+    #[default]
+    Strip,
+    Refuse,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum InvisibleTextPolicy {
+    #[default]
+    Keep,
+    Remove,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", default)]
+#[ts(export)]
+pub struct RasterPolicy {
+    pub acknowledge_losses: bool,
+    pub scale: f64,
+}
+
+impl Default for RasterPolicy {
+    fn default() -> Self {
+        Self {
+            acknowledge_losses: false,
+            scale: 2.0,
+        }
+    }
+}
+
+/// Spec §1.6 policy. The SDK sends `Partial<ExportPolicy>`: missing fields take these defaults.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", default)]
+#[ts(export)]
+pub struct ExportPolicy {
+    pub annotations: AnnotationPolicy,
+    pub signed_input: SignedInputPolicy,
+    pub invisible_text: InvisibleTextPolicy,
+    pub raster: RasterPolicy,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
