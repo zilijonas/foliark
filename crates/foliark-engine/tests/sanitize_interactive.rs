@@ -279,6 +279,52 @@ fn a_no_rotate_note_keeps_its_upper_left_corner_and_stands_upright_on_a_rotated_
 }
 
 #[test]
+fn identical_notes_on_two_pages_stay_separate_objects_when_one_is_redacted() {
+    // HDDN public-cropped-rotated (NEW-94): flattening draws each note's appearance as its own
+    // Form. Two pages whose appearances are byte-equal must not merge into one object in the
+    // staged copy, or a redaction on one page would count as a shared survivor on the other and
+    // refuse the native export.
+    let note = form("0 0 80 20", ID, "SAME_NOTE");
+    let objs = vec![
+        "<< /Type /Catalog /Pages 2 0 R >>".to_owned(),
+        "<< /Type /Pages /Kids [3 0 R 8 0 R] /Count 2 >>".to_owned(),
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> /Annots [7 0 R] >>".to_owned(),
+        stream("", "BT /F1 12 Tf 20 370 Td (KEEP_PUBLIC) Tj ET"),
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".to_owned(),
+        note.clone(),
+        "<< /Type /Annot /Subtype /FreeText /Rect [20 300 100 320] /F 4 /AP << /N 6 0 R >> >>".to_owned(),
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> /Annots [10 0 R] >>".to_owned(),
+        note,
+        "<< /Type /Annot /Subtype /FreeText /Rect [20 300 100 320] /F 4 /AP << /N 9 0 R >> >>".to_owned(),
+    ];
+    let mut input = b"%PDF-1.7\n".to_vec();
+    let mut at = Vec::new();
+    for (i, o) in objs.iter().enumerate() {
+        at.push(input.len());
+        input.extend(format!("{} 0 obj\n{o}\nendobj\n", i + 1).bytes());
+    }
+    let xref = input.len();
+    input.extend(format!("xref\n0 {}\n0000000000 65535 f \n", objs.len() + 1).bytes());
+    for a in at {
+        input.extend(format!("{a:010} 00000 n \n").bytes());
+    }
+    input.extend(
+        format!(
+            "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n",
+            objs.len() + 1
+        )
+        .bytes(),
+    );
+    let (plan, _) = export(
+        &input,
+        vec![region("r1", 20.0, 80.0, 80.0, 20.0)],
+        ExportPolicy::default(),
+    )
+    .unwrap();
+    assert!(plan.report.redaction.shared_survivors.is_empty());
+}
+
+#[test]
 fn field_values_stay_visible_and_the_form_is_gone() {
     let input = fixture("generated/acroform-values.pdf");
     let (plan, out) = export(&input, vec![], ExportPolicy::default()).unwrap();

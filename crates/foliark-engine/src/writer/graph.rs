@@ -432,6 +432,8 @@ pub(crate) struct Walk<'a> {
     pub encoded: &'a BTreeMap<ObjectId, Vec<u8>>,
     /// Preserve mode (spec 8.3, `Writer::preserve`): nothing is dropped.
     pub preserve: bool,
+    /// Store identical objects once (`Writer::keep_duplicates` turns it off).
+    pub dedupe: bool,
     /// Page and page tree objects of the input -> their output reference.
     page_refs: HashMap<ObjectId, Ref>,
     pages_ref: Option<Ref>,
@@ -478,6 +480,7 @@ impl<'a> Walk<'a> {
             layers_resolved: false,
             encoded: &NO_ENCODED,
             preserve: false,
+            dedupe: true,
             page_refs: HashMap::new(),
             pages_ref: None,
             info: None,
@@ -1257,7 +1260,7 @@ impl<'a> Walk<'a> {
         self.nodes.sort_by_key(|n| n.id.get());
         let mut refs = refs;
         if !self.preserve {
-            super::shrink::shrink(&mut self.nodes, &mut refs)?;
+            super::shrink::shrink(&mut self.nodes, &mut refs, self.dedupe)?;
         }
         Ok(refs)
     }

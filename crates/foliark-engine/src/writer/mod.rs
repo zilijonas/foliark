@@ -90,6 +90,8 @@ pub(crate) struct Redirects {
 
 pub struct Writer<'d> {
     doc: &'d reader::Document,
+    /// Identical objects are stored once (default); off for the staged copy of an export.
+    dedupe: bool,
     limits: Limits,
     spans: Spans,
     repl: BTreeMap<ObjectId, NewStream>,
@@ -114,6 +116,7 @@ impl<'d> Writer<'d> {
     pub fn new(doc: &'d reader::Document, limits: Limits) -> Self {
         Self {
             doc,
+            dedupe: true,
             limits,
             spans: BTreeMap::new(),
             repl: BTreeMap::new(),
@@ -136,6 +139,13 @@ impl<'d> Writer<'d> {
     /// Names, Outlines, ...) is kept with its keys verbatim; content streams are still
     /// re-emitted from tokens and the file is still unencrypted. Only for working copies that
     /// export reads back through the allowlist writer, never for a file that leaves the engine.
+    /// Keep identical objects apart: the staged copy of an export, where a flattened appearance
+    /// that equals another page's must stay that page's own object (shared-content rule).
+    pub fn keep_duplicates(&mut self) -> &mut Self {
+        self.dedupe = false;
+        self
+    }
+
     pub fn preserve(&mut self) -> &mut Self {
         self.preserve = true;
         self
@@ -341,6 +351,7 @@ impl<'d> Writer<'d> {
         walk.layers_resolved = self.layers_resolved;
         walk.encoded = &self.encoded;
         walk.preserve = self.preserve;
+        walk.dedupe = self.dedupe;
         let pages = walk.build(
             &self.appended,
             [&self.page_fonts, &self.page_xobjects],

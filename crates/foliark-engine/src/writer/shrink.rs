@@ -44,9 +44,15 @@ fn inflate(data: &[u8]) -> Result<Vec<u8>, PdfError> {
 }
 
 /// `nodes` sorted by id, ids from 3 on; `pages` their page objects.
-pub(crate) fn shrink(nodes: &mut Vec<Node>, pages: &mut [Ref]) -> Result<(), PdfError> {
+pub(crate) fn shrink(
+    nodes: &mut Vec<Node>,
+    pages: &mut [Ref],
+    dedupe_objects: bool,
+) -> Result<(), PdfError> {
     merge_contents(nodes, pages)?;
-    dedupe(nodes, pages);
+    if dedupe_objects {
+        dedupe(nodes, pages);
+    }
     nodes.sort_by_key(|n| n.id.get());
     let to: HashMap<i32, i32> = nodes
         .iter()
