@@ -1,16 +1,49 @@
+# --- Rust -------------------------------------------------------------------
 target/
-node_modules/
-dist/
+# cargo-fuzz: keep the targets, dictionary and lockfile; drop generated corpora and crash artifacts
+fuzz/target/
+fuzz/corpus/
+fuzz/artifacts/
+fuzz/coverage/
+
+# --- WebAssembly build outputs ---------------------------------------------
 pkg/
 *.wasm
+# test fixtures may ship a .wasm on purpose
 !tests/fixtures/**/*.wasm
-.DS_Store
+
+# --- Node / TypeScript ------------------------------------------------------
+node_modules/
+dist/
+*.tsbuildinfo
+.pnpm-store/
+.vite/
+
+# --- Generated SDK package assets (scripts/build-wasm.sh, npm prepack) -----
 packages/sdk/wasm/
-test-results/
+packages/sdk/LICENSE_FOXIT
+packages/sdk/SUPPORT_MATRIX.md
+# packed tarballs (tests/package-consumers/pack.sh dist-pkg)
+dist-pkg/
+*.tgz
+
+# --- Python (dev-only PDF oracles) -----------------------------------------
 .venv/
 __pycache__/
 *.pyc
+
+# --- Test, bench and acceptance outputs ------------------------------------
+test-results/
+playwright-report/
+tools/bench/.cache/
+*.log
+
+# --- Local machine and editors ---------------------------------------------
 .worktrees/
-packages/sdk/LICENSE_FOXIT
-packages/sdk/SUPPORT_MATRIX.md
-dist-pkg/
+.DS_Store
+.env
+.env.*
+!.env.example
+.idea/
+.vscode/
+*.swp

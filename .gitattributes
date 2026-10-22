@@ -1,0 +1,20 @@
+* text=auto eol=lf
+
+# Binary files: never diff, never normalise line endings
+*.pdf binary
+*.ttf binary
+*.otf binary
+*.pfb binary
+*.icc binary
+*.png binary
+*.jpg binary
+*.wasm binary
+*.tgz binary
+*.bin binary
+
+# GitHub language statistics and diffs
+vendor/** linguist-vendored
+packages/sdk/src/generated/** linguist-generated
+Cargo.lock linguist-generated
+pnpm-lock.yaml linguist-generated
+docs/** linguist-documentation
