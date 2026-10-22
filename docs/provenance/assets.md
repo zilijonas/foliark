@@ -59,3 +59,6 @@ ICC profiles (unconditional `include_bytes!`, not fonts):
 
 ## Lead decision (2026-10-22)
 Foxit Base-14 `.pfb` files are font data under the PDFium BSD-style notice, not C/C++ engine code: allowed in the shipped wasm. `LICENSE_FOXIT` must ship in the npm package notices (NEW-74).
+
+## (f) Test-only fonts (NEW-49, never shipped)
+`crates/foliark-text/tests/data/`: LiberationSans-Regular/Bold, LiberationSerif-Regular, LiberationMono-Regular (SIL OFL 1.1, `LICENSE-Liberation.txt`) and Carlito-Regular (SIL OFL 1.1, `OFL-Carlito.txt`), copied unmodified from HDDN `public/fonts/pdf/`. Used only by `cargo test -p foliark-text`; not in the production graph.
