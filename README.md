@@ -7,7 +7,7 @@
 
 <p align="center"><b>A headless PDF engine in Rust and WebAssembly. Extract, search, render, edit, redact and sanitize PDFs in the browser. The document never leaves the device.</b></p>
 
-> **Status:** [`@zilijonas/foliark`](https://www.npmjs.com/package/@zilijonas/foliark) 0.1.1 on npm (0.1.0 was the first public release; 0.1.1 changes the package page and metadata only, the engine is byte-identical). Licensed AGPL-3.0-only plus separate commercial licensing (see [License](#license)). Exact bytes and checks: [docs/release/candidate.md](docs/release/candidate.md). Real phones and tablets are not yet tested (see the support matrix).
+> **Status:** [`@zilijonas/foliark`](https://www.npmjs.com/package/@zilijonas/foliark) 0.1.1 on npm (0.1.0 was the first public release; 0.1.1 imports large scans with far less memory, keeps flattened notes per page and upright, and adds the package page). Licensed AGPL-3.0-only plus separate commercial licensing (see [License](#license)). Exact bytes and checks: [docs/release/candidate.md](docs/release/candidate.md). Real phones and tablets are not yet tested (see the support matrix).
 
 Foliark is a TypeScript SDK (`@zilijonas/foliark`) over a Rust engine compiled to WebAssembly. It runs in a worker, fetches only its own
 `.wasm` and worker script, and refuses what it cannot do safely with a typed `FoliarkError` instead of degrading quietly.
