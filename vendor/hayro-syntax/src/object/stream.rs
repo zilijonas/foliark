@@ -116,6 +116,11 @@ impl<'a> Stream<'a> {
         self.raw_data_impl(false).unwrap_or_default()
     }
 
+    /// Like [`Self::raw_data`], but a decryption failure is `Err` instead of empty data.
+    pub fn raw_data_strict(&self) -> Result<Cow<'a, [u8]>, DecodeFailure> {
+        self.raw_data_impl(true)
+    }
+
     fn raw_data_impl(&self, strict: bool) -> Result<Cow<'a, [u8]>, DecodeFailure> {
         let ctx = self.dict.ctx();
 

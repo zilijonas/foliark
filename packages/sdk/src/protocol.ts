@@ -150,7 +150,10 @@ export const argsGuards = (maxBytes = DEFAULT_MAX_BUFFER_BYTES): Partial<Record<
   init: shape({ wasmUrl: isStr }),
   open: shape({ bytes: (x) => isBuffer(x, maxBytes, 1), password: opt(isStr), allowRepaired: opt((x) => typeof x === "boolean") }),
   pages: isEmptyArgs,
-  renderPage: shape({ page: isU32, scale: opt((x) => isNum(x) && x > 0) }),
+  renderPage: shape({
+    page: isU32, scale: opt((x) => isNum(x) && x > 0), clip: opt(isRect), annotations: opt((x) => typeof x === "boolean"),
+    background: opt(tuple(4)),
+  }),
   close: isEmptyArgs,
 });
 
