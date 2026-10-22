@@ -348,6 +348,7 @@ impl XRef {
                 let td = TrailerData {
                     pages_ref: pages_ref.into(),
                     root_ref: root_ref.into(),
+                    info_ref: trailer_dict.get_ref(INFO).map(Into::into),
                     version,
                 };
 
@@ -360,6 +361,7 @@ impl XRef {
                 let td = TrailerData {
                     pages_ref: pages_ref.into(),
                     root_ref,
+                    info_ref: None,
                     version: None,
                 };
 
@@ -409,6 +411,11 @@ impl XRef {
     /// Return the object ID of the root dictionary.
     pub fn root_id(&self) -> ObjectIdentifier {
         self.trailer_data().root_ref
+    }
+
+    /// The object ID of the trailer's `/Info` dictionary, if it names one.
+    pub fn info_id(&self) -> Option<ObjectIdentifier> {
+        self.trailer_data().info_ref
     }
 
     /// Whether the file is encrypted (its trailer has an `/Encrypt` entry that was applied).
@@ -667,6 +674,7 @@ struct MapRepr {
 pub(crate) struct TrailerData {
     pub(crate) pages_ref: ObjectIdentifier,
     pub(crate) root_ref: ObjectIdentifier,
+    pub(crate) info_ref: Option<ObjectIdentifier>,
     pub(crate) version: Option<PdfVersion>,
 }
 
@@ -675,6 +683,7 @@ impl TrailerData {
         Self {
             pages_ref: ObjectIdentifier::new(0, 0),
             root_ref: ObjectIdentifier::new(0, 0),
+            info_ref: None,
             version: None,
         }
     }

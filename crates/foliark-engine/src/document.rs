@@ -72,7 +72,7 @@ pub struct EditContext<'a> {
 
 /// The seam [`crate::edit::ParagraphApplier`] fills: replay `edits` from `source` in array order
 /// (each edit's rects are evaluated on the state after the previous ones) and return the new
-/// working copy, or the rejection of the edit that cannot apply. Called only with a non-empty
+/// working copy, or the rejection of every edit that cannot apply. Called only with a non-empty
 /// list whose edits passed structural validation. It must not keep state: a rejection or a
 /// later failure discards whatever it produced.
 pub trait EditApplier {
