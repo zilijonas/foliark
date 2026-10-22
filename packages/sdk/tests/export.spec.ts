@@ -103,12 +103,14 @@ describe("text redaction and sanitized native export", () => {
 
   it("a raster export succeeds where native refuses, keeps the page geometry and has no text layer", async () => {
     const f = await client();
-    const doc = await f.open(fixture("hddn/acroform.pdf"));
-    expect(await code(doc.prepareExport({ mode: "native" }))).toBe("INVALID_ARGUMENT");
+    const bytes0 = fixture("generated/ocg-hidden-text.pdf");
+    bytes0[Buffer.from(bytes0).indexOf("/oc2 7 0 R") + 3] = 0x58; // a layer native cannot decide
+    const doc = await f.open(bytes0);
+    expect(await code(doc.prepareExport({ mode: "native" }))).toBe("OPTIONAL_CONTENT_UNSUPPORTED");
     const plan = await doc.prepareExport({ mode: "raster", policy: { raster: { acknowledgeLosses: true, scale: 1 } } });
     expect(plan.mode).toBe("raster");
     const lost = plan.report.losses.map((l) => l.code);
-    expect(lost).toEqual(expect.arrayContaining(["TEXT_SEARCH_LOST", "VECTOR_RASTERIZED", "FORMS_FLATTENED"]));
+    expect(lost).toEqual(expect.arrayContaining(["TEXT_SEARCH_LOST", "VECTOR_RASTERIZED", "LAYERS_FLATTENED"]));
     expect((await doc.capabilities()).exportRaster.status).toBe("supported");
     const bytes = await doc.export(plan);
     expect(bytes.byteLength).toBe(plan.report.outputBytes);
