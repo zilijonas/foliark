@@ -2,14 +2,14 @@
 // costs no wasm or worker request. Shared by the vanilla page and the bundler consumers in tests/package-consumers.
 import { redactAndExport, show } from "./flow.js";
 
-/** @param {() => Promise<import("@foliark/sdk").Foliark>} start */
+/** @param {() => Promise<import("@zilijonas/foliark").Foliark>} start */
 export function mount(start) {
   const $ = (/** @type {string} */ id) => /** @type {any} */ (document.getElementById(id));
   const status = (/** @type {string} */ s) => ($("status").textContent = s);
   const fail = (/** @type {any} */ e) => status(`${e.code ?? "ERROR"}: ${e.message}`);
-  /** @type {Promise<import("@foliark/sdk").Foliark> | undefined} */
+  /** @type {Promise<import("@zilijonas/foliark").Foliark> | undefined} */
   let engine;
-  /** @type {import("@foliark/sdk").DocumentHandle | undefined} */
+  /** @type {import("@zilijonas/foliark").DocumentHandle | undefined} */
   let doc;
 
   $("file").onchange = async () => {

@@ -117,7 +117,7 @@ export function createWorkerCore(host: WorkerHost, stepBudget = STEP_BUDGET) {
       try {
         e.registerCMap(name, bytes);
       } catch {
-        throw failed(name, "is corrupt or incomplete; reinstall the pack from the same @foliark/sdk version");
+        throw failed(name, "is corrupt or incomplete; reinstall the pack from the same @zilijonas/foliark version");
       }
       cmaps.add(name);
     };

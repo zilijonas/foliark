@@ -3,7 +3,7 @@ import { cp, mkdir } from "node:fs/promises";
 
 const out = process.env.OUT;
 await build({
-  entryPoints: { main: "src/main.ts", worker: "node_modules/@foliark/sdk/dist/worker.js" },
+  entryPoints: { main: "src/main.ts", worker: "node_modules/@zilijonas/foliark/dist/worker.js" },
   bundle: true,
   format: "esm",
   target: "es2022",

@@ -61,7 +61,7 @@ Run from the repo root. `source ~/.cargo/env` if `cargo` is missing. Toolchain p
 | Wasm build + glue | `scripts/build-wasm.sh` (output `packages/sdk/wasm/`, gitignored) |
 | Wasm compile check | `cargo build --locked --target wasm32-unknown-unknown -p foliark-wasm` |
 | SDK build | `pnpm install && pnpm build:sdk` (needs the wasm glue first) |
-| SDK tests | `pnpm --filter @foliark/sdk test` (needs wasm build) |
+| SDK tests | `pnpm --filter @zilijonas/foliark test` (needs wasm build) |
 | Rust/TS parity | `scripts/check-ts-parity.sh` (ts-rs output must match `packages/sdk/src/generated`; commit regenerated files) |
 | Browser smoke | `pnpm smoke chromium`, `pnpm smoke webkit` |
 | Browser specs | `tests/browser/run.sh` (chromium, firefox, webkit: CSP, offline) |

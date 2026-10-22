@@ -63,7 +63,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: scripts/build-wasm.sh
       - run: pnpm build:sdk
-      - run: pnpm --filter @foliark/sdk test
+      - run: pnpm --filter @zilijonas/foliark test
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm smoke chromium
       # the budget gate's own self-test; the timing budgets are frozen on an Apple M4, so the bench itself runs locally

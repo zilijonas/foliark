@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The installed-tarball consumer matrix (NEW-60): pack @foliark/sdk, install the TARBALL (no workspace link, no source
+# The installed-tarball consumer matrix (NEW-60): pack @zilijonas/foliark, install the TARBALL (no workspace link, no source
 # alias) into isolated projects, build each under base / and /app/, type-check, then run every build in chromium.
 # Needs wasm + sdk built first and network for npm (vite, esbuild, typescript). Wrap in memory-queue (--need-gb 4);
 # do not nest it. Exit 0 = the whole matrix passed.
@@ -25,8 +25,8 @@ for name in vanilla vite esbuild; do
   fi
   (cd "$proj" && npm_i "$tgz" $(node -p 'Object.entries(require("./package.json").devDependencies ?? {}).map(([k,v])=>k+"@"+v).join(" ")'))
   # the installed package must not be a symlink into the monorepo
-  [ ! -L "$proj/node_modules/@foliark/sdk" ] || { echo "$name: @foliark/sdk is a link" >&2; exit 1; }
-  sdk=$proj/node_modules/@foliark/sdk
+  [ ! -L "$proj/node_modules/@zilijonas/foliark" ] || { echo "$name: @zilijonas/foliark is a link" >&2; exit 1; }
+  sdk=$proj/node_modules/@zilijonas/foliark
   case $name in
     vanilla)
       # no build: the page is examples/vanilla plus the installed dist/ and wasm/ hosted as sdk/

@@ -1,6 +1,11 @@
-# Release candidate pipeline. Written, never executed.
-# Manual only: never runs on push or pull_request. Real publication needs NEW-78 (owner), the `npm-release` environment's
-# manual approval and an NPM_TOKEN secret held by that environment only. docs/release/process.md is the checklist.
+# Release pipeline for @zilijonas/foliark. Written, never executed.
+# Manual only: never runs on push or pull_request. No long-lived npm token exists anywhere: publication from here uses npm
+# trusted publishing (OIDC, `id-token: write`), which also attaches the provenance statement.
+# Version 0.1.0 is NOT published by this workflow: the owner publishes it from the owner's logged-in machine (NEW-91),
+# because trusted publishing can only be configured on npmjs.com for a package that already exists. After 0.1.0 exists, configure on
+# npmjs.com (package settings, Trusted Publisher): GitHub Actions, repository zilijonas/foliark, workflow `release.yml`, environment
+# `npm-release`. Later releases (dry_run false) must be dispatched from the tag `vX.Y.Z` and need that environment's manual approval.
+# docs/release/process.md is the checklist.
 name: release
 on:
   workflow_dispatch:
@@ -35,6 +40,10 @@ jobs:
         run: |
           [ "$VERSION" = "$(node -p 'require("./packages/sdk/package.json").version')" ] || { echo "version input != package.json"; exit 1; }
           grep -q "^## \[$VERSION\]" CHANGELOG.md || { echo "no CHANGELOG.md entry for $VERSION"; exit 1; }
+      - name: A real release runs from its source tag (AGPL source correspondence)
+        if: ${{ !inputs.dry_run }}
+        env: { VERSION: "${{ inputs.version }}" }
+        run: '[ "$GITHUB_REF" = "refs/tags/v$VERSION" ] || { echo "dispatch from tag v$VERSION, not $GITHUB_REF"; exit 1; }'
       - uses: pnpm/action-setup@v4          # version from "packageManager" (pnpm 11.9.0)
       - uses: actions/setup-node@v4
         with: { node-version: 26.8.1 }
@@ -51,7 +60,7 @@ jobs:
       - run: scripts/build-wasm.sh
       - run: pnpm build:sdk
       - run: scripts/check-ts-parity.sh
-      - run: pnpm --filter @foliark/sdk test
+      - run: pnpm --filter @zilijonas/foliark test
       - run: pnpm exec playwright install chromium webkit firefox
       - run: pnpm smoke chromium
       - run: pnpm smoke webkit
@@ -69,12 +78,12 @@ jobs:
         with:
           name: release-${{ inputs.version }}
           path: |
-            dist-pkg/foliark-sdk-${{ inputs.version }}.tgz
-            dist-pkg/foliark-sdk-${{ inputs.version }}.cdx.json
+            dist-pkg/zilijonas-foliark-${{ inputs.version }}.tgz
+            dist-pkg/zilijonas-foliark-${{ inputs.version }}.cdx.json
             dist-pkg/SHA256SUMS
           if-no-files-found: error
 
-  # Dry run: no environment, no secrets. id-token is only for npm to build the provenance statement.
+  # Dry run: no environment, no secrets. id-token is only for npm to build the provenance statement (a dry run publishes nothing).
   publish-dry-run:
     if: ${{ inputs.dry_run }}
     needs: build
@@ -90,9 +99,10 @@ jobs:
       - run: cd dist && shasum -a 256 -c SHA256SUMS
       - name: npm publish --dry-run
         working-directory: dist
-        run: npm publish "./foliark-sdk-${{ inputs.version }}.tgz" --provenance --access public --dry-run
+        run: npm publish "./zilijonas-foliark-${{ inputs.version }}.tgz" --provenance --access public --dry-run
 
-  # Real publication. Requires NEW-78 and manual approval of the `npm-release` environment (required reviewers).
+  # Real publication of a release AFTER 0.1.0: trusted publishing must be configured on npmjs.com first (see the header).
+  # Requires manual approval of the `npm-release` environment (required reviewers). No token or secret is used.
   publish:
     if: ${{ !inputs.dry_run }}
     needs: build
@@ -107,13 +117,14 @@ jobs:
       - uses: actions/download-artifact@v4
         with: { name: "release-${{ inputs.version }}", path: dist }
       - run: cd dist && shasum -a 256 -c SHA256SUMS
-      - name: Refuse placeholders (owner gates NEW-73, NEW-78)
+      - name: Refuse a wrong package identity or license
         working-directory: dist
         run: |
-          tar xzf "foliark-sdk-${{ inputs.version }}.tgz" package/package.json package/LICENSE
-          node -e 'const m=require("./package/package.json"); if(m.private||m.license==="UNLICENSED") {console.error("package.json is still private or UNLICENSED"); process.exit(1)}'
-          ! grep -qi 'PLACEHOLDER' package/LICENSE || { echo "LICENSE is still a placeholder"; exit 1; }
+          tar xzf "zilijonas-foliark-${{ inputs.version }}.tgz" package/package.json package/LICENSE
+          node -e 'const m=require("./package/package.json"); if(m.name!=="@zilijonas/foliark"||m.private||m.license!=="AGPL-3.0-only"||m.version!==process.argv[1]) {console.error("wrong name, private, license or version"); process.exit(1)}' "${{ inputs.version }}"
+          head -1 package/LICENSE | grep -q 'GNU AFFERO GENERAL PUBLIC LICENSE' || { echo "LICENSE is not the AGPL text"; exit 1; }
+      - name: npm supports trusted publishing (11.5.1 or newer)
+        run: node -e 'const v=process.argv[1].split(".").map(Number); if(v[0]<11||(v[0]===11&&(v[1]<5||(v[1]===5&&v[2]<1)))) {console.error("npm "+process.argv[1]+" too old"); process.exit(1)}' "$(npm --version)"
       - name: npm publish
         working-directory: dist
-        env: { NODE_AUTH_TOKEN: "${{ secrets.NPM_TOKEN }}" }
-        run: npm publish "./foliark-sdk-${{ inputs.version }}.tgz" --provenance --access public
+        run: npm publish "./zilijonas-foliark-${{ inputs.version }}.tgz" --provenance --access public

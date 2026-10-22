@@ -1,20 +1,20 @@
-# Deploying @foliark/sdk
+# Deploying @zilijonas/foliark
 
 Static files only: no server code, no COOP/COEP, no SharedArrayBuffer, no GPU, no OffscreenCanvas. Everything below is
 exercised against the packed tarball by `tests/package-consumers/run.sh` (vanilla, Vite, esbuild under `/` and `/app/`) and
-`tests/browser/run.sh` (CSP and offline specs in chromium, firefox, webkit). Version 0.1.0 is private: nothing is published.
+`tests/browser/run.sh` (CSP and offline specs in chromium, firefox, webkit). Version 0.1.0 is AGPL-3.0-only (`LICENSING.md`); its source is tag `v0.1.0` of https://github.com/zilijonas/foliark.
 
 ## What ships
-`pnpm pack` (from `packages/sdk`, after `scripts/build-wasm.sh` and `pnpm build:sdk`) makes `foliark-sdk-0.1.0.tgz`:
+`pnpm pack` (from `packages/sdk`, after `scripts/build-wasm.sh` and `pnpm build:sdk`) makes `zilijonas-foliark-0.1.0.tgz`:
 
 | Path in the package | Role |
 |---|---|
-| `dist/index.js`, `dist/*.d.ts` | ESM API and declarations (`import { createFoliark } from "@foliark/sdk"`) |
-| `dist/worker.js` | module worker entry (`@foliark/sdk/worker`); imports `../wasm/foliark_wasm.js` |
-| `dist/inline.js` | in-worker entry (`@foliark/sdk/inline`): `createInlineFoliark`, the same client with the engine in the calling thread |
-| `wasm/foliark_wasm_bg.wasm` | the engine (`@foliark/sdk/wasm`), 5.57 MB raw, 2.13 MB gzip (budget in `tools/bench/budgets.json`) |
+| `dist/index.js`, `dist/*.d.ts` | ESM API and declarations (`import { createFoliark } from "@zilijonas/foliark"`) |
+| `dist/worker.js` | module worker entry (`@zilijonas/foliark/worker`); imports `../wasm/foliark_wasm.js` |
+| `dist/inline.js` | in-worker entry (`@zilijonas/foliark/inline`): `createInlineFoliark`, the same client with the engine in the calling thread |
+| `wasm/foliark_wasm_bg.wasm` | the engine (`@zilijonas/foliark/wasm`), 5.57 MB raw, 2.13 MB gzip (budget in `tools/bench/budgets.json`) |
 | `wasm/foliark_wasm.js` | wasm-bindgen glue, used by the worker only |
-| `cmaps/<name>.cmap`, `cmaps/LICENSE.txt`, `cmaps/MANIFEST.json` | the predefined CMap pack (`@foliark/sdk/cmaps/*`): 63 Adobe CMap resources, verbatim, BSD-3-Clause, 3190880 B in all; see `## cmapsUrl
+| `cmaps/<name>.cmap`, `cmaps/LICENSE.txt`, `cmaps/MANIFEST.json` | the predefined CMap pack (`@zilijonas/foliark/cmaps/*`): 63 Adobe CMap resources, verbatim, BSD-3-Clause, 3190880 B in all; see `## cmapsUrl
 Predefined CMaps (legacy CJK encodings such as `UniGB-UCS2-H`, `90ms-RKSJ-H`; spec 10.3) ship in the package as `cmaps/<name>.cmap`: 63 Adobe CMap resources
 (63 files, 3,190,880 B raw, about 1.1 MB inside the tarball), copied byte for byte from adobe-type-tools/cmap-resources and mapping-resources-pdf (BSD-3-Clause, notice in
 `cmaps/LICENSE.txt` and `THIRD_PARTY_NOTICES.md`; pinned commits and sha256 per file in `cmaps/MANIFEST.json`, rebuilt by `tools/cmaps/build-pack.mjs`). The wasm does
@@ -23,7 +23,7 @@ They are plain PostScript CMaps rather than hayro's `.bcmap` blob because that f
 
 - **Default**: with `cmapsUrl` omitted the worker resolves `../cmaps/` from its own URL, i.e. the package's `cmaps/` next to `dist/` (the no-bundler layout above works unchanged).
   A bundler does not see that URL: copy the folder and set `cmapsUrl` (see the bundler list above). `cmapsUrl` is a folder, absolute or relative to the page.
-- **Node**: the default is a `file:` URL there and Node's `fetch` cannot read it, so `@foliark/sdk/inline` takes `fetchCMap: (url) => Promise<Uint8Array>` (for example `async (u) => new Uint8Array(readFileSync(new URL(u)))`); without it `open` rejects `ASSET_LOAD_FAILED`. The worker entry is browser-only and needs no option.
+- **Node**: the default is a `file:` URL there and Node's `fetch` cannot read it, so `@zilijonas/foliark/inline` takes `fetchCMap: (url) => Promise<Uint8Array>` (for example `async (u) => new Uint8Array(readFileSync(new URL(u)))`); without it `open` rejects `ASSET_LOAD_FAILED`. The worker entry is browser-only and needs no option.
 - **When**: `open` reads `DocumentInfo.requiredAssets` (`cmap:<name>`, plus `cmap:Adobe-<Collection>-UCS2` for a CID font the file does not embed), fetches those files
   (and any CMap they `usecmap`, base first) with `credentials: "omit"`, same origin by default, GET only, and registers them before the first page is read. Only file
   names leave the device; a name taken from a PDF becomes a URL only if it is one of the predefined names. Each file is fetched once per worker.

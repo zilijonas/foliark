@@ -1,6 +1,6 @@
 # Foliark support matrix and regression budgets (NEW-65)
 
-Frozen 2026-10-22 for `@foliark/sdk` 0.1.0 (private, unreleased) from receipts already in this repository. Nothing here is a new claim: each row names the
+Frozen 2026-10-22 for `@zilijonas/foliark` 0.1.0 (public release candidate, AGPL-3.0-only) from receipts already in this repository. Nothing here is a new claim: each row names the
 document or test that produced it. Machine-readable budgets: `tools/bench/budgets.json`, checked by `tools/bench/check-budgets.mjs`.
 
 Words used with one meaning:

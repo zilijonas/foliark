@@ -21,7 +21,7 @@ Not wired: `search`, `quadsFor`, `select` (nothing in HDDN's UI would use them),
 ## Decision: in-worker entry, not a nested worker
 HDDN already runs one dedicated worker (`redactor.worker.ts`) whose router serializes whole requests and whose `documentFaulted` / generation
 recovery (HDDN-23) replaces the worker on a fatal error. A second Foliark worker underneath would give two supervisors, two generations, a
-`postMessage` hop per call and a recovery story that must keep both in step. So the SDK gained `@foliark/sdk/inline`
+`postMessage` hop per call and a recovery story that must keep both in step. So the SDK gained `@zilijonas/foliark/inline`
 (`createInlineFoliark`, `packages/sdk/src/inline.ts`, ~25 lines): the same `Foliark` client and worker core over a `MessageChannel` inside the
 calling thread. Same DTOs, same `FoliarkError` codes, buffers still transfer, no `worker.js` asset. Consequences, documented in `docs/deployment.md`:
 the hang watchdog is off (the host supervises); after any `onReset` the host replaces its whole worker (the adapter sets `documentFaulted`, which
@@ -30,7 +30,7 @@ feeds HDDN's existing recovery path); `wasm` option (bytes or module) lets tests
 ## What the adapter maps
 | HDDN | Foliark | Notes |
 |---|---|---|
-| INIT / PRELOAD | `createInlineFoliark({wasmUrl, limits:{maxInputBytes:25 MiB, maxPages:30, maxOpenDocuments:2}})` | wasm URL from `@foliark/sdk/wasm?url` (hashed, same file in the page build and the worker build) |
+| INIT / PRELOAD | `createInlineFoliark({wasmUrl, limits:{maxInputBytes:25 MiB, maxPages:30, maxOpenDocuments:2}})` | wasm URL from `@zilijonas/foliark/wasm?url` (hashed, same file in the page build and the worker build) |
 | LOAD_PDF | `open(bytes,{password,allowRepaired:false})`, `pages()`, `extractText(i)` per page in order | HDDN's `%PDF-` / `%%EOF` precheck kept; password cleared by the router as before |
 | failure codes | `MALFORMED_PDF`, `REPAIRED_PDF`, `DECODE_FAILED`, `ENCRYPTION_UNSUPPORTED` -> `malformed-pdf`; `PASSWORD_REQUIRED/INCORRECT`; `LIMIT_EXCEEDED{limit:~page}` -> `too-many-pages`; other `LIMIT_EXCEEDED`, `OUT_OF_MEMORY` -> `resource-exhausted` | thrown as `LocalizedError` with the keys the Pyodide path used |
 | stage / activate / suspend / commit / discard | handle bookkeeping: one committed handle, one pending handle per import id, an `active` pointer previews render from | same transition names `document-import.ts` already used; commit closes the old handle |

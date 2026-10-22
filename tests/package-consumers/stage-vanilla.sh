@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# stage-vanilla.sh <installed @foliark/sdk dir> <site dir>: the vanilla example plus the package's dist/, wasm/ and cmaps/ as sdk/
+# stage-vanilla.sh <installed @zilijonas/foliark dir> <site dir>: the vanilla example plus the package's dist/, wasm/ and cmaps/ as sdk/
 # (the SDK finds its CMap pack at ../cmaps/ from dist/worker.js).
 set -euo pipefail
 root=$(cd "$(dirname "$0")/../.." && pwd)

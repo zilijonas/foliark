@@ -1,4 +1,4 @@
-// In-worker entry (`@foliark/sdk/inline`): the same `Foliark` client and DTOs, but the engine runs in the CALLING
+// In-worker entry (`@zilijonas/foliark/inline`): the same `Foliark` client and DTOs, but the engine runs in the CALLING
 // thread instead of a nested worker. For hosts that already own a dedicated worker with its own generation and
 // recovery (HDDN): they keep their protocol and state machine and import this inside that worker. Same worker
 // core and the same validated envelope as the module worker, over a real MessageChannel, so buffers still transfer.
@@ -7,7 +7,7 @@ import { createFoliark, type Foliark, type FoliarkOptions } from "./client.js";
 import { createWorkerCore } from "./worker-core.js";
 
 export interface InlineOptions extends Omit<FoliarkOptions, "wasmUrl" | "workerUrl" | "worker" | "hangTimeoutMs"> {
-  /** Where to fetch the wasm (the `@foliark/sdk/wasm` URL). Not needed when `wasm` is given. */
+  /** Where to fetch the wasm (the `@zilijonas/foliark/wasm` URL). Not needed when `wasm` is given. */
   wasmUrl?: string | URL;
   /** Already-fetched bytes or a compiled module (tests, prefetched or cached assets): nothing is fetched. */
   wasm?: BufferSource | WebAssembly.Module;

@@ -5,7 +5,7 @@
   "packageManager": "pnpm@11.9.0",
   "scripts": {
     "build:wasm": "scripts/build-wasm.sh",
-    "build:sdk": "pnpm --filter @foliark/sdk build",
+    "build:sdk": "pnpm --filter @zilijonas/foliark build",
     "smoke": "node tests/smoke/run.mjs"
   },
   "devDependencies": {

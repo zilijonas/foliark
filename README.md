@@ -7,9 +7,9 @@
 
 <p align="center"><b>A headless PDF engine in Rust and WebAssembly. Extract, search, render, edit, redact and sanitize PDFs in the browser. The document never leaves the device.</b></p>
 
-> **Status:** unreleased 0.1.0 candidate. The owner selected AGPL-3.0-only plus separate commercial licensing on 2026-10-22; see [License](#license). Public npm release and the account-scoped package-name migration are tracked in NEW-90/NEW-91. The recorded rc2 tarball predates this license change and must be rebuilt before publication.
+> **Status:** 0.1.0 release candidate, to be published to npm as `@zilijonas/foliark` by the owner (NEW-91; until the registry lists it, build from source). Licensed AGPL-3.0-only plus separate commercial licensing (see [License](#license)). Exact candidate bytes and checks: [docs/release/candidate.md](docs/release/candidate.md). Real phones and tablets are not yet tested (see the support matrix).
 
-Foliark is a TypeScript SDK (`@foliark/sdk`) over a Rust engine compiled to WebAssembly. It runs in a worker, fetches only its own
+Foliark is a TypeScript SDK (`@zilijonas/foliark`) over a Rust engine compiled to WebAssembly. It runs in a worker, fetches only its own
 `.wasm` and worker script, and refuses what it cannot do safely with a typed `FoliarkError` instead of degrading quietly.
 Its first consumer is HDDN, a private PDF redaction app that used PyMuPDF inside Pyodide.
 
@@ -53,19 +53,21 @@ The full matrix, each row with its evidence, is [docs/support-matrix.md](docs/su
 
 ## Quick start
 
-Nothing is on npm. Build the tarball and install it into your project ([docs/deployment.md](docs/deployment.md) covers hosting, CSP and offline use):
+Install the exact version from npm once NEW-91 has published it, or build the tarball from the matching source tag `v0.1.0` ([docs/deployment.md](docs/deployment.md) covers hosting, CSP and offline use):
 
 ```sh
+npm install @zilijonas/foliark@0.1.0 --save-exact
+# or from source:
 scripts/build-wasm.sh && pnpm build:sdk && tests/package-consumers/pack.sh dist-pkg
-npm install ./dist-pkg/foliark-sdk-0.1.0.tgz
+npm install ./dist-pkg/zilijonas-foliark-0.1.0.tgz
 ```
 
 Start the engine in its own worker (both URLs are explicit, nothing is fetched until you call it):
 
 ```ts
-import { createFoliark } from "@foliark/sdk";
-import wasmUrl from "@foliark/sdk/wasm?url";                 // Vite; any bundler that yields the final URLs works
-import workerUrl from "@foliark/sdk/worker?worker&url";
+import { createFoliark } from "@zilijonas/foliark";
+import wasmUrl from "@zilijonas/foliark/wasm?url";                 // Vite; any bundler that yields the final URLs works
+import workerUrl from "@zilijonas/foliark/worker?worker&url";
 
 const foliark = await createFoliark({ wasmUrl, workerUrl, limits: { maxPages: 200 } });
 const doc = await foliark.open(await file.arrayBuffer());   // the buffer is transferred
@@ -85,7 +87,7 @@ const pdf = await doc.export(plan);                         // Uint8Array, singl
 If your app already runs its own dedicated worker, use the in-worker entry. Same API and errors, no second worker:
 
 ```ts
-import { createInlineFoliark } from "@foliark/sdk/inline";
+import { createInlineFoliark } from "@zilijonas/foliark/inline";
 const foliark = await createInlineFoliark({ wasmUrl });     // or { wasm: bytesOrModule } to fetch nothing
 ```
 
@@ -119,7 +121,7 @@ No C or C++ PDF engine is in the shipped graph.
 | `crates/foliark-text` | Font registry, paragraph shaping and layout |
 | `crates/foliark-wasm` | wasm-bindgen facade |
 | `vendor/hayro-syntax`, `vendor/hayro-interpret` | Forked parser and interpreter, additive patches listed in [patches/hayro](patches/hayro/README.md) |
-| `packages/sdk` | `@foliark/sdk`: worker protocol, supervisor, public ESM API, vitest specs |
+| `packages/sdk` | `@zilijonas/foliark`: worker protocol, supervisor, public ESM API, vitest specs |
 | `tests/` | Fixtures, independent Python oracles, acceptance matrix, browser specs, smoke, package consumers |
 | `fuzz/`, `tools/` | cargo-fuzz targets; benchmarks, budgets, fuzz smoke, HDDN acceptance and release tooling |
 | `examples/vanilla` | Plain HTML and JS demo of the public API |
@@ -134,7 +136,7 @@ cargo fmt --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --locked          # needs tests/oracles/.venv, see tests/oracles/README.md
 scripts/build-wasm.sh && pnpm build:sdk  # wasm glue into packages/sdk/wasm, then the SDK
-pnpm --filter @foliark/sdk test && pnpm smoke chromium
+pnpm --filter @zilijonas/foliark test && pnpm smoke chromium
 ```
 
 CI runs the same on Linux for every push and pull request. `CLAUDE.md` and `AGENTS.md` are rules for local AI coding agents.

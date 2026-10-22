@@ -1,4 +1,4 @@
-// `@foliark/sdk/inline`: the engine inside the calling thread, no nested worker, same DTOs and typed errors.
+// `@zilijonas/foliark/inline`: the engine inside the calling thread, no nested worker, same DTOs and typed errors.
 import { readFileSync } from "node:fs";
 import { afterEach, expect, it } from "vitest";
 import { FoliarkError, type Foliark } from "../src/index.js";
