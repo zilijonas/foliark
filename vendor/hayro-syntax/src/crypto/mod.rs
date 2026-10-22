@@ -162,18 +162,26 @@ pub(crate) fn get(
     };
 
     let mut decryption_key = if revision <= 4 {
-        let key = decryption_key_rev1234(
-            password,
-            encrypt_metadata,
-            revision,
-            byte_length,
-            &owner_string,
-            permissions,
-            id,
-        )?;
-        authenticate_user_password_rev234(revision, &key, id, &user_string)?;
-
-        key
+        let try_user = |password: &[u8]| {
+            let key = decryption_key_rev1234(
+                password,
+                encrypt_metadata,
+                revision,
+                byte_length,
+                &owner_string,
+                permissions,
+                id,
+            )?;
+            authenticate_user_password_rev234(revision, &key, id, &user_string)?;
+            Ok(key)
+        };
+        match try_user(password) {
+            Err(DecryptionError::PasswordProtected) => {
+                let user_password = user_password_from_owner(password, revision, byte_length, &owner_string);
+                try_user(&user_password)?
+            }
+            other => other?,
+        }
     } else {
         decryption_key_rev56(dict, revision, password, &owner_string, &user_string)?
     };
@@ -509,6 +517,37 @@ fn decryption_key_rev1234(
 
     let decryption_key = hash[..byte_length as usize].to_vec();
     Ok(decryption_key)
+}
+
+/// Algorithm 7: Authenticating the owner password (revision 4 and earlier). The owner password
+/// decrypts the `/O` entry to the (padded) user password, which is then authenticated as usual.
+fn user_password_from_owner(
+    password: &[u8],
+    revision: u8,
+    byte_length: u16,
+    owner_string: &object::String<'_>,
+) -> Vec<u8> {
+    let mut padded = [0_u8; 32];
+    let copy_len = password.len().min(32);
+    padded[..copy_len].copy_from_slice(&password[..copy_len]);
+    padded[copy_len..].copy_from_slice(&PASSWORD_PADDING[..(32 - copy_len)]);
+    let mut hash = md5::calculate(&padded);
+    let key_len = if revision == 2 { 5 } else { (byte_length as usize).min(16) };
+    if revision >= 3 {
+        for _ in 0..50 {
+            hash = md5::calculate(&hash);
+        }
+    }
+    let key = &hash[..key_len];
+    let mut data = owner_string.as_ref().to_vec();
+    if revision == 2 {
+        return Rc4::new(key).decrypt(&data);
+    }
+    for i in (0..20_u8).rev() {
+        let round_key: Vec<u8> = key.iter().map(|b| b ^ i).collect();
+        data = Rc4::new(&round_key).decrypt(&data);
+    }
+    data
 }
 
 /// Algorithm 6: Authenticating the user password

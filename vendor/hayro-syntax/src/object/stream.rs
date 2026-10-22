@@ -176,7 +176,15 @@ impl<'a> Stream<'a> {
     /// Like [`Self::decoded`], but a decryption failure, a corrupt filter or a truncated
     /// Flate stream is an `Err` instead of empty or partial data.
     pub fn decoded_strict(&self) -> Result<Cow<'a, [u8]>, DecodeFailure> {
-        self.decoded_image_impl(&ImageDecodeParams::default(), true)
+        self.decoded_image_impl(&ImageDecodeParams::default(), true, usize::MAX)
+            .map(|r| r.data)
+    }
+
+    /// Like [`Self::decoded_strict`], but a stream that decodes to more than `max` bytes is
+    /// `Err(DecodeFailure::TooLarge)`. Flate, LZW and run-length decoding stop at `max + 1`
+    /// bytes, so a decompression bomb is never fully built.
+    pub fn decoded_capped(&self, max: usize) -> Result<Cow<'a, [u8]>, DecodeFailure> {
+        self.decoded_image_impl(&ImageDecodeParams::default(), true, max)
             .map(|r| r.data)
     }
 
@@ -186,13 +194,14 @@ impl<'a> Stream<'a> {
         &self,
         image_params: &ImageDecodeParams,
     ) -> Result<FilterResult<'a>, DecodeFailure> {
-        self.decoded_image_impl(image_params, false)
+        self.decoded_image_impl(image_params, false, usize::MAX)
     }
 
     fn decoded_image_impl(
         &self,
         image_params: &ImageDecodeParams,
         strict: bool,
+        max_output: usize,
     ) -> Result<FilterResult<'a>, DecodeFailure> {
         let data = self.raw_data_impl(strict)?;
         let filters_and_params = self.filters_and_params();
@@ -209,7 +218,11 @@ impl<'a> Stream<'a> {
                 params,
                 image_params,
                 strict,
+                max_output,
             )?;
+            if new.data.len() > max_output {
+                return Err(DecodeFailure::TooLarge);
+            }
             current = Some(new);
         }
 
@@ -272,6 +285,8 @@ pub enum DecodeFailure {
     StreamDecode,
     /// A failure occurred while decrypting a file.
     Decryption,
+    /// The decoded data is longer than the cap given to [`Stream::decoded_capped`].
+    TooLarge,
     /// An unknown failure occurred.
     Unknown,
 }

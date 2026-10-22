@@ -87,6 +87,7 @@ impl Filter {
         params: &Dict<'_>,
         #[cfg_attr(not(feature = "images"), allow(unused))] image_params: &ImageDecodeParams,
         strict: bool,
+        max_output: usize,
     ) -> Result<FilterResult<'static>, DecodeFailure> {
         let res = match self {
             Self::AsciiHexDecode => ascii_hex::decode(data)
@@ -95,13 +96,13 @@ impl Filter {
             Self::Ascii85Decode => ascii_85::decode(data)
                 .map(FilterResult::from_data)
                 .ok_or(DecodeFailure::StreamDecode),
-            Self::RunLengthDecode => run_length::decode(data)
+            Self::RunLengthDecode => run_length::decode(data, max_output)
                 .map(FilterResult::from_data)
                 .ok_or(DecodeFailure::StreamDecode),
-            Self::LzwDecode => lzw_flate::lzw::decode(data, params)
+            Self::LzwDecode => lzw_flate::lzw::decode(data, params, max_output)
                 .map(FilterResult::from_data)
                 .ok_or(DecodeFailure::StreamDecode),
-            Self::FlateDecode => lzw_flate::flate::decode(data, params, strict)
+            Self::FlateDecode => lzw_flate::flate::decode(data, params, strict, max_output)
                 .map(FilterResult::from_data)
                 .ok_or(DecodeFailure::StreamDecode),
             #[cfg(feature = "images")]

@@ -106,6 +106,11 @@ impl Pdf {
         self.xref.was_repaired()
     }
 
+    /// Whether the file is encrypted (see [`XRef::is_encrypted`]).
+    pub fn is_encrypted(&self) -> bool {
+        self.xref.is_encrypted()
+    }
+
     /// Return the metadata in the document information dictionary of the document.
     pub fn metadata(&self) -> &Metadata {
         self.xref.metadata()

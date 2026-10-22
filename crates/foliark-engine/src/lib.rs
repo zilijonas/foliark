@@ -7,6 +7,7 @@ use hayro::vello_cpu::peniko::ImageAlphaType;
 use hayro::{PixmapSettings, RenderCache, RenderSettings, render};
 use std::fmt;
 
+pub mod limits;
 pub mod reader;
 use reader::ReaderError;
 

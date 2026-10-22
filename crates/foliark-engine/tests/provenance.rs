@@ -186,8 +186,10 @@ fn form_cycles_and_runaway_nesting_are_errors() {
     });
     assert_eq!(
         items(pdf, 0),
-        Err(ReaderError::NestingLimit {
-            limit: foliark_engine::reader::MAX_NESTING
+        Err(ReaderError::LimitExceeded {
+            limit: "maxNesting",
+            actual: 33,
+            max: 32
         })
     );
 }

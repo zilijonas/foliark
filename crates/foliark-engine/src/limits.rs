@@ -1,0 +1,90 @@
+//! Resource budgets (spec §9). Every check uses checked arithmetic and runs before the
+//! allocation or work it guards; `LIMIT_EXCEEDED` carries which limit, the value and the max.
+use crate::reader::ReaderError;
+use foliark_model::{Limits, ObjectId};
+use hayro::hayro_syntax::object::Stream;
+use hayro::hayro_syntax::object::stream::DecodeFailure;
+use std::borrow::Cow;
+
+const MIB: u64 = 1 << 20;
+
+pub(crate) fn exceeded(limit: &'static str, actual: u64, max: u64) -> ReaderError {
+    ReaderError::LimitExceeded { limit, actual, max }
+}
+
+pub(crate) fn check(limit: &'static str, actual: u64, max: u64) -> Result<(), ReaderError> {
+    if actual > max {
+        return Err(exceeded(limit, actual, max));
+    }
+    Ok(())
+}
+
+/// Work units of one operation (spec §9): one interpreted operator, 1 KiB decoded or encoded,
+/// 1,000 pixels, or one shaped cluster. Decoded bytes of all streams add up here, so there is
+/// no separate total-decoded limit.
+pub struct Budget {
+    used: u64,
+    max: u64,
+}
+
+impl Budget {
+    pub fn new(limits: &Limits) -> Self {
+        Self {
+            used: 0,
+            max: limits.max_work_units,
+        }
+    }
+
+    pub fn charge(&mut self, units: u64) -> Result<(), ReaderError> {
+        self.used = self.used.saturating_add(units);
+        check("maxWorkUnits", self.used, self.max)
+    }
+
+    pub fn charge_bytes(&mut self, bytes: usize) -> Result<(), ReaderError> {
+        self.charge((bytes as u64).div_ceil(1024))
+    }
+
+    pub fn charge_pixels(&mut self, pixels: u64) -> Result<(), ReaderError> {
+        self.charge(pixels.div_ceil(1000))
+    }
+}
+
+/// An image of `width` x `height` (dimension bomb check). Returns the pixel count.
+pub(crate) fn image_pixels(limits: &Limits, width: u32, height: u32) -> Result<u64, ReaderError> {
+    let pixels = u64::from(width)
+        .checked_mul(u64::from(height))
+        .unwrap_or(u64::MAX);
+    check("maxImagePixels", pixels, limits.max_image_pixels.into())?;
+    Ok(pixels)
+}
+
+/// Strict decode of one stream under `maxStreamDecodedBytes` and `maxDecodeRatio` (the ratio
+/// only applies once the output passes 1 MiB). The decoder stops at the cap, so a bomb is
+/// never built. `actual` is a lower bound: decoding stops at the first byte over the cap.
+pub(crate) fn decode_stream<'a>(
+    stream: &Stream<'a>,
+    obj: ObjectId,
+    limits: &Limits,
+    budget: &mut Budget,
+) -> Result<Cow<'a, [u8]>, ReaderError> {
+    let max = u64::from(limits.max_stream_decoded_bytes);
+    let ratio = u64::from(limits.max_decode_ratio);
+    let allowed = (stream.raw_data().len() as u64)
+        .saturating_mul(ratio)
+        .max(MIB);
+    let by_ratio = allowed < max;
+    let cap = if by_ratio { allowed } else { max };
+    let cap_usize = usize::try_from(cap).unwrap_or(usize::MAX);
+    match stream.decoded_capped(cap_usize) {
+        Ok(data) => {
+            budget.charge_bytes(data.len())?;
+            Ok(data)
+        }
+        Err(DecodeFailure::TooLarge) if by_ratio => {
+            let raw = stream.raw_data().len().max(1) as u64;
+            Err(exceeded("maxDecodeRatio", (cap + 1).div_ceil(raw), ratio))
+        }
+        Err(DecodeFailure::TooLarge) => Err(exceeded("maxStreamDecodedBytes", cap + 1, max)),
+        Err(_) => Err(ReaderError::DecodeFailed { obj }),
+    }
+}

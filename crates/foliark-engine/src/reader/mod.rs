@@ -1,6 +1,7 @@
 //! Strict, fallible reader (spec §0.1): every failure is a typed error with the object it
 //! happened in. Nothing is silently skipped, emptied or repaired.
-use foliark_model::ObjectId;
+use crate::limits::{self, Budget};
+use foliark_model::{ErrorCode, ErrorDetails, FoliarkError, Limits, ObjectId};
 use hayro::hayro_syntax::content::TypedIter;
 use hayro::hayro_syntax::object::dict::keys::{CONTENTS, FILTER};
 use hayro::hayro_syntax::object::{Array, Name, ObjRef, Object, Stream};
@@ -8,11 +9,12 @@ use hayro::hayro_syntax::page::Page;
 use hayro::hayro_syntax::{DecryptionError, LoadPdfError, Pdf};
 use std::fmt;
 
+mod preflight;
 mod provenance;
-pub use provenance::{Item, ItemKind, MAX_NESTING};
+pub use provenance::{Item, ItemKind};
 
-/// Why a read failed. [`ReaderError::code`] is the spec §12 error code; `foliark-model` gets the
-/// shared `PdfError` with the `ErrorCode` enum in a later task.
+/// Why a read failed. [`ReaderError::code`] is the spec §12 error code and
+/// `FoliarkError::from` adds the details (object, limit).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ReaderError {
     /// Unparsable, no `%PDF-` header in the first 1024 bytes.
@@ -47,37 +49,71 @@ pub enum ReaderError {
     FormCycle {
         obj: ObjectId,
     },
-    /// Forms nest deeper than [`MAX_NESTING`].
-    NestingLimit {
-        limit: u32,
+    /// A spec §9 limit was exceeded. `limit` is the `Limits` field name; `actual` is a lower
+    /// bound when the check stops at the first byte over the cap.
+    LimitExceeded {
+        limit: &'static str,
+        actual: u64,
+        max: u64,
     },
 }
 
 impl ReaderError {
-    pub fn code(&self) -> &'static str {
+    pub fn code(&self) -> ErrorCode {
         match self {
             Self::MalformedPdf
             | Self::ContentUnreadable { .. }
             | Self::ContentSyntax { .. }
-            | Self::FormCycle { .. }
-            | Self::PageOutOfRange { .. } => "MALFORMED_PDF",
-            Self::RepairedPdf => "REPAIRED_PDF",
-            Self::PasswordRequired => "PASSWORD_REQUIRED",
-            Self::PasswordIncorrect => "PASSWORD_INCORRECT",
-            Self::EncryptionUnsupported => "ENCRYPTION_UNSUPPORTED",
-            Self::DecodeFailed { .. } | Self::UnsupportedFilter { .. } => "DECODE_FAILED",
-            Self::NestingLimit { .. } => "LIMIT_EXCEEDED",
+            | Self::FormCycle { .. } => ErrorCode::MalformedPdf,
+            Self::PageOutOfRange { .. } => ErrorCode::InvalidArgument,
+            Self::RepairedPdf => ErrorCode::RepairedPdf,
+            Self::PasswordRequired => ErrorCode::PasswordRequired,
+            Self::PasswordIncorrect => ErrorCode::PasswordIncorrect,
+            Self::EncryptionUnsupported => ErrorCode::EncryptionUnsupported,
+            Self::DecodeFailed { .. } | Self::UnsupportedFilter { .. } => ErrorCode::DecodeFailed,
+            Self::LimitExceeded { .. } => ErrorCode::LimitExceeded,
+        }
+    }
+
+    fn details(&self) -> Option<ErrorDetails> {
+        let obj_ref = |o: &ObjectId| Some(format!("{} {} R", o.num, o.generation));
+        match self {
+            Self::DecodeFailed { obj }
+            | Self::UnsupportedFilter { obj }
+            | Self::ContentUnreadable { obj }
+            | Self::ContentSyntax { obj, .. }
+            | Self::FormCycle { obj } => Some(ErrorDetails {
+                obj_ref: obj_ref(obj),
+                ..Default::default()
+            }),
+            Self::LimitExceeded { limit, actual, max } => Some(ErrorDetails {
+                limit: Some((*limit).into()),
+                actual: Some(*actual as f64),
+                max: Some(*max as f64),
+                ..Default::default()
+            }),
+            _ => None,
         }
     }
 }
 
 impl fmt::Display for ReaderError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}: {self:?}", self.code())
+        write!(f, "{:?}: {self:?}", self.code())
     }
 }
 
 impl std::error::Error for ReaderError {}
+
+impl From<&ReaderError> for FoliarkError {
+    fn from(e: &ReaderError) -> Self {
+        FoliarkError {
+            code: e.code(),
+            message: e.to_string(),
+            details: e.details(),
+        }
+    }
+}
 
 pub(crate) fn object_id(r: ObjRef) -> ObjectId {
     ObjectId {
@@ -96,14 +132,34 @@ pub struct ContentStream {
 pub struct Document {
     pdf: Pdf,
     allow_repaired: bool,
+    limits: Limits,
 }
 
 impl Document {
+    /// Open with the default [`Limits`].
     pub fn open(
         bytes: Vec<u8>,
         password: Option<&str>,
         allow_repaired: bool,
     ) -> Result<Self, ReaderError> {
+        Self::open_with_limits(bytes, password, allow_repaired, Limits::default())
+    }
+
+    /// Open a file. Nothing is mutated and no output is produced. Input size is checked before
+    /// parsing, object and page counts (the actual ones) right after. A missing password is
+    /// `PasswordRequired`, a wrong one `PasswordIncorrect`; the user and the owner password
+    /// both open the file.
+    pub fn open_with_limits(
+        bytes: Vec<u8>,
+        password: Option<&str>,
+        allow_repaired: bool,
+        limits: Limits,
+    ) -> Result<Self, ReaderError> {
+        limits::check(
+            "maxInputBytes",
+            bytes.len() as u64,
+            limits.max_input_bytes.into(),
+        )?;
         let password = password.unwrap_or("");
         if !bytes[..bytes.len().min(1024)]
             .windows(5)
@@ -123,9 +179,16 @@ impl Document {
             }
             _ => ReaderError::MalformedPdf,
         })?;
+        limits::check("maxObjects", pdf.len() as u64, limits.max_objects.into())?;
+        limits::check(
+            "maxPages",
+            pdf.pages().len() as u64,
+            limits.max_pages.into(),
+        )?;
         let doc = Self {
             pdf,
             allow_repaired,
+            limits,
         };
         doc.check_repaired()?;
         Ok(doc)
@@ -135,6 +198,10 @@ impl Document {
     /// (and then fails the next read unless `allow_repaired`).
     pub fn was_repaired(&self) -> bool {
         self.pdf.was_repaired()
+    }
+
+    pub fn limits(&self) -> &Limits {
+        &self.limits
     }
 
     pub fn pdf(&self) -> &Pdf {
@@ -164,6 +231,14 @@ impl Document {
     /// `Ok(vec![])`; an empty stream is `Ok` with empty data. Everything else that makes the
     /// content unreadable is an `Err`, never an empty page.
     pub fn page_contents(&self, index: usize) -> Result<Vec<ContentStream>, ReaderError> {
+        self.page_contents_with(index, &mut Budget::new(&self.limits))
+    }
+
+    pub(crate) fn page_contents_with(
+        &self,
+        index: usize,
+        budget: &mut Budget,
+    ) -> Result<Vec<ContentStream>, ReaderError> {
         let dict = self.page(index)?.raw();
         let unreadable = |r: Option<ObjRef>| ReaderError::ContentUnreadable {
             obj: r.map(object_id).unwrap_or(ObjectId {
@@ -184,7 +259,7 @@ impl Document {
         };
         let out = streams
             .iter()
-            .map(|s| decode_content(s))
+            .map(|s| decode_content(s, &self.limits, budget))
             .collect::<Result<_, _>>()?;
         self.check_repaired()?;
         Ok(out)
@@ -204,7 +279,11 @@ fn contents_array<'a>(
         .collect()
 }
 
-fn decode_content(stream: &Stream<'_>) -> Result<ContentStream, ReaderError> {
+fn decode_content(
+    stream: &Stream<'_>,
+    limits: &Limits,
+    budget: &mut Budget,
+) -> Result<ContentStream, ReaderError> {
     let obj = object_id(stream.obj_id().into());
     let dict = stream.dict();
     let named = dict
@@ -219,10 +298,7 @@ fn decode_content(stream: &Stream<'_>) -> Result<ContentStream, ReaderError> {
     if named != stream.filters().len() {
         return Err(ReaderError::UnsupportedFilter { obj });
     }
-    let data = stream
-        .decoded_strict()
-        .map_err(|_| ReaderError::DecodeFailed { obj })?
-        .into_owned();
+    let data = limits::decode_stream(stream, obj, limits, budget)?.into_owned();
     // shortcut: an invalid path operator that is the very last instruction goes unnoticed.
     let mut ops = TypedIter::new(&data);
     while ops.next().is_some() {}

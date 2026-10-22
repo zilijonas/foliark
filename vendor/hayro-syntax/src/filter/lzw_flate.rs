@@ -13,36 +13,53 @@ pub(crate) mod flate {
     /// With `strict`, a truncated, corrupt or garbage stream yields `None` instead of the
     /// bytes decoded so far.
     #[cfg(feature = "unsafe")]
-    pub(crate) fn decode(data: &[u8], params: &Dict<'_>, strict: bool) -> Option<Vec<u8>> {
+    pub(crate) fn decode(
+        data: &[u8],
+        params: &Dict<'_>,
+        strict: bool,
+        max: usize,
+    ) -> Option<Vec<u8>> {
         use flate2::read::{DeflateDecoder, ZlibDecoder};
         use std::io::Read;
 
-        fn zlib_stream(data: &[u8]) -> Option<Vec<u8>> {
-            let mut decoder = ZlibDecoder::new(data);
+        // Reads at most `max + 1` bytes, so an oversized stream is noticed without being built.
+        fn zlib_stream(data: &[u8], max: usize) -> Option<Vec<u8>> {
+            let mut decoder = ZlibDecoder::new(data).take((max as u64).saturating_add(1));
             let mut result = Vec::new();
             decoder.read_to_end(&mut result).ok().map(|_| result)
         }
 
-        fn deflate_stream(data: &[u8]) -> Option<Vec<u8>> {
-            let mut decoder = DeflateDecoder::new(data);
+        fn deflate_stream(data: &[u8], max: usize) -> Option<Vec<u8>> {
+            let mut decoder = DeflateDecoder::new(data).take((max as u64).saturating_add(1));
             let mut result = Vec::new();
             decoder.read_to_end(&mut result).ok().map(|_| result)
         }
 
-        let decoded = zlib_stream(data)
-            .or_else(|| deflate_stream(data))
+        let decoded = zlib_stream(data, max)
+            .or_else(|| deflate_stream(data, max))
             .or_else(|| {
                 warn!("flate stream is broken, decoding with fallback");
 
-                fallback::decode(data, strict)
+                fallback::decode(data, strict, max)
             })?;
+        if decoded.len() > max {
+            return Some(decoded);
+        }
         let params = PredictorParams::from_params(params);
         apply_predictor(decoded, &params)
     }
 
     #[cfg(not(feature = "unsafe"))]
-    pub(crate) fn decode(data: &[u8], params: &Dict<'_>, strict: bool) -> Option<Vec<u8>> {
-        let decoded = fallback::decode(data, strict)?;
+    pub(crate) fn decode(
+        data: &[u8],
+        params: &Dict<'_>,
+        strict: bool,
+        max: usize,
+    ) -> Option<Vec<u8>> {
+        let decoded = fallback::decode(data, strict, max)?;
+        if decoded.len() > max {
+            return Some(decoded);
+        }
         let params = PredictorParams::from_params(params);
         apply_predictor(decoded, &params)
     }
@@ -53,11 +70,11 @@ pub(crate) mod flate {
         use alloc::vec;
         use alloc::vec::Vec;
 
-        pub(crate) fn decode(data: &[u8], strict: bool) -> Option<Vec<u8>> {
-            flate_decode(data, strict)
+        pub(crate) fn decode(data: &[u8], strict: bool, max: usize) -> Option<Vec<u8>> {
+            flate_decode(data, strict, max)
         }
 
-        fn flate_decode(data: &[u8], strict: bool) -> Option<Vec<u8>> {
+        fn flate_decode(data: &[u8], strict: bool, max: usize) -> Option<Vec<u8>> {
             if data.len() >= 2 {
                 let cmf = data[0];
                 let flg = data[1];
@@ -66,12 +83,12 @@ pub(crate) mod flate {
                     && ((cmf as u16) << 8 | flg as u16).is_multiple_of(31)
                     && (flg & 0x20) == 0
                 {
-                    let mut stream = FlateStream::new(&data[2..]);
+                    let mut stream = FlateStream::new(&data[2..], max);
                     return stream.decode(strict);
                 }
             }
 
-            let mut stream = FlateStream::new(data);
+            let mut stream = FlateStream::new(data, max);
             stream.decode(strict)
         }
 
@@ -81,19 +98,22 @@ pub(crate) mod flate {
             code_buf: u32,
             code_size: u8,
             output: Vec<u8>,
+            /// Decoding stops once the output is longer than this.
+            max: usize,
             eof: bool,
             /// A block was corrupt or the data ended inside it.
             failed: bool,
         }
 
         impl<'a> FlateStream<'a> {
-            fn new(data: &'a [u8]) -> Self {
+            fn new(data: &'a [u8], max: usize) -> Self {
                 FlateStream {
                     data,
                     pos: 0,
                     code_buf: 0,
                     code_size: 0,
                     output: Vec::new(),
+                    max,
                     eof: false,
                     failed: false,
                 }
@@ -105,12 +125,12 @@ pub(crate) mod flate {
             }
 
             fn decode(&mut self, strict: bool) -> Option<Vec<u8>> {
-                while !self.eof && self.pos < self.data.len() {
+                while !self.eof && self.pos < self.data.len() && self.output.len() <= self.max {
                     self.read_block();
                 }
 
                 // Without `eof` the data ended before the final block.
-                if strict && (self.failed || !self.eof) {
+                if strict && self.output.len() <= self.max && (self.failed || !self.eof) {
                     return None;
                 }
 
@@ -289,6 +309,9 @@ pub(crate) mod flate {
                 };
 
                 loop {
+                    if self.output.len() > self.max {
+                        return;
+                    }
                     let code1 = match self.get_code(&lit_code_table) {
                         Some(c) => c,
                         None => {
@@ -588,10 +611,13 @@ pub(crate) mod lzw {
     use alloc::vec::Vec;
 
     /// Decode a LZW-encoded stream.
-    pub(crate) fn decode(data: &[u8], params: &Dict<'_>) -> Option<Vec<u8>> {
+    pub(crate) fn decode(data: &[u8], params: &Dict<'_>, max: usize) -> Option<Vec<u8>> {
         let params = PredictorParams::from_params(params);
 
-        let decoded = decode_impl(data, params.early_change)?;
+        let decoded = decode_impl(data, params.early_change, max)?;
+        if decoded.len() > max {
+            return Some(decoded);
+        }
 
         apply_predictor(decoded, &params)
     }
@@ -601,7 +627,7 @@ pub(crate) mod lzw {
     const MAX_ENTRIES: usize = 4096;
     const INITIAL_SIZE: u16 = 258;
 
-    fn decode_impl(data: &[u8], early_change: bool) -> Option<Vec<u8>> {
+    fn decode_impl(data: &[u8], early_change: bool, max: usize) -> Option<Vec<u8>> {
         let mut table = Table::new(early_change);
         let mut bit_size = table.code_length();
         let mut reader = BitReader::new(data);
@@ -609,6 +635,9 @@ pub(crate) mod lzw {
         let mut prev = None;
 
         loop {
+            if decoded.len() > max {
+                return Some(decoded);
+            }
             let next = match reader.read(bit_size) {
                 Some(code) => code as usize,
                 None => {
@@ -1051,7 +1080,7 @@ mod tests {
     #[test]
     fn decode_lzw() {
         let input = [0x80, 0x0B, 0x60, 0x50, 0x22, 0x0C, 0x0C, 0x85, 0x01];
-        let decoded = lzw::decode(&input, &Dict::default()).unwrap();
+        let decoded = lzw::decode(&input, &Dict::default(), usize::MAX).unwrap();
 
         assert_eq!(decoded, vec![45, 45, 45, 45, 45, 65, 45, 45, 45, 66]);
     }
@@ -1062,7 +1091,7 @@ mod tests {
             0x78, 0x9c, 0xf3, 0x48, 0xcd, 0xc9, 0xc9, 0x7, 0x0, 0x5, 0x8c, 0x1, 0xf5,
         ];
 
-        let decoded = flate::decode(&input, &Dict::default(), false).unwrap();
+        let decoded = flate::decode(&input, &Dict::default(), false, usize::MAX).unwrap();
         assert_eq!(decoded, b"Hello");
     }
 
@@ -1070,7 +1099,7 @@ mod tests {
     fn decode_flate() {
         let input = [0xf3, 0x48, 0xcd, 0xc9, 0xc9, 0x7, 0x0];
 
-        let decoded = flate::decode(&input, &Dict::default(), false).unwrap();
+        let decoded = flate::decode(&input, &Dict::default(), false, usize::MAX).unwrap();
         assert_eq!(decoded, b"Hello");
     }
     

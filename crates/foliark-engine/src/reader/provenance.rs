@@ -2,7 +2,8 @@
 //! operator is (stream + byte range), which Form instances it is drawn through and which
 //! object owns the resources it uses.
 use super::{Document, ReaderError, object_id};
-use foliark_model::{InstancePath, InstanceStep, ObjectId, Origin, SourceLoc};
+use crate::limits::{self, Budget};
+use foliark_model::{InstancePath, InstanceStep, Limits, ObjectId, Origin, SourceLoc};
 use hayro::hayro_interpret::font::GlyphRun;
 use hayro::hayro_interpret::hayro_syntax::object::dict::keys::{PARENT, RESOURCES};
 use hayro::hayro_interpret::hayro_syntax::object::{Dict, ObjRef, Stream};
@@ -16,9 +17,6 @@ use hayro::vello_cpu::peniko::kurbo::{Affine, Rect, Shape};
 use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 use std::sync::{Arc, Mutex};
-
-/// Deepest Form/pattern/Type3/appearance nesting (spec §9 `maxNesting` default).
-pub const MAX_NESTING: u32 = 32;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ItemKind {
@@ -65,6 +63,8 @@ struct Frame {
 
 struct ProvenanceDevice<'x> {
     xref: &'x XRef,
+    limits: &'x Limits,
+    budget: &'x mut Budget,
     /// `stack[0]` is the page.
     stack: Vec<Frame>,
     clips: Vec<Rect>,
@@ -77,6 +77,17 @@ struct ProvenanceDevice<'x> {
 }
 
 impl ProvenanceDevice<'_> {
+    /// Charge work units; the first failure is kept and everything after it is ignored. The
+    /// interpreter cannot be stopped from a device, so it still walks the rest of the stream.
+    fn charge(&mut self, units: u64) -> bool {
+        if self.error.is_none() {
+            if let Err(e) = self.budget.charge(units) {
+                self.error = Some(e);
+            }
+        }
+        self.error.is_none()
+    }
+
     fn push_item(&mut self, kind: ItemKind, transform: Affine) {
         let clip = self.clips.split_first().map(|(first, rest)| {
             let r = rest.iter().fold(*first, |acc, c| acc.intersect(*c));
@@ -102,7 +113,9 @@ impl<'a> Device<'a> for ProvenanceDevice<'_> {
         props: DrawProps<'a>,
         _: &DrawMode,
     ) {
-        self.push_item(ItemKind::Path, props.transform);
+        if self.charge(1) {
+            self.push_item(ItemKind::Path, props.transform);
+        }
     }
 
     fn push_clip_path(&mut self, clip_path: &ClipPath) {
@@ -113,6 +126,9 @@ impl<'a> Device<'a> for ProvenanceDevice<'_> {
 
     fn draw_glyph_run(&mut self, run: &GlyphRun<'_, 'a>, props: DrawProps<'a>, _: &DrawMode) {
         for g in run.glyphs() {
+            if !self.charge(1) {
+                return;
+            }
             let kind = ItemKind::Glyph {
                 font: g.font_ref().map(object_id),
                 code: g.char_code(),
@@ -122,6 +138,20 @@ impl<'a> Device<'a> for ProvenanceDevice<'_> {
     }
 
     fn draw_image(&mut self, image: Image<'a, '_>, props: ImageDrawProps<'a>) {
+        if self.error.is_some() {
+            return;
+        }
+        match limits::image_pixels(self.limits, image.width(), image.height()) {
+            Ok(pixels) => {
+                if !self.charge(pixels.div_ceil(1000)) {
+                    return;
+                }
+            }
+            Err(e) => {
+                self.error = Some(e);
+                return;
+            }
+        }
         let id = match &image {
             Image::Raster(r) => r.stream().obj_id(),
             Image::Stencil(s) => s.stream().obj_id(),
@@ -137,6 +167,7 @@ impl<'a> Device<'a> for ProvenanceDevice<'_> {
     fn pop_transparency_group(&mut self) {}
 
     fn begin_operator(&mut self, stream: ObjRef, range: Range<usize>) {
+        self.charge(1);
         self.origin = Origin::Source {
             loc: SourceLoc {
                 stream: object_id(stream),
@@ -155,8 +186,10 @@ impl<'a> Device<'a> for ProvenanceDevice<'_> {
             self.error = Some(ReaderError::FormCycle { obj: id });
             return false;
         }
-        if self.stack.len() > MAX_NESTING as usize {
-            self.error = Some(ReaderError::NestingLimit { limit: MAX_NESTING });
+        // `stack[0]` is the page: with `len() - 1` Forms open, `maxNesting` Forms may be open.
+        let depth = self.stack.len() as u64;
+        if let Err(e) = limits::check("maxNesting", depth, self.limits.max_nesting.into()) {
+            self.error = Some(e);
             return false;
         }
         self.entered.insert(id);
@@ -209,7 +242,8 @@ impl Document {
     /// optional content is included (`oc_visible == false`), and any content stream that fails
     /// to decode, a Form cycle or too deep nesting is an `Err`.
     pub fn page_items(&self, index: usize) -> Result<Vec<Item>, ReaderError> {
-        self.page_contents(index)?;
+        let mut budget = Budget::new(&self.limits);
+        self.page_contents_with(index, &mut budget)?;
         let page = self.page(index)?;
         let warnings = Arc::new(Mutex::new(Vec::new()));
         let sink = warnings.clone();
@@ -230,6 +264,8 @@ impl Document {
         );
         let mut device = ProvenanceDevice {
             xref: page.xref(),
+            limits: &self.limits,
+            budget: &mut budget,
             stack: vec![Frame {
                 step: InstanceStep {
                     form: NO_OBJECT,

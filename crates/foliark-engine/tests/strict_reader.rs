@@ -1,7 +1,7 @@
 //! The reader never turns damage into an empty page (spec §0.1, §12).
 use foliark_engine::reader::{ContentStream, Document, ReaderError};
 use foliark_engine::{Document as Engine, EngineError};
-use foliark_model::ObjectId;
+use foliark_model::{ErrorCode, FoliarkError, ObjectId};
 use pdf_writer::{Content, Filter, Finish, Pdf, Rect, Ref};
 
 const CONTENT: Ref = Ref::new(4);
@@ -87,7 +87,9 @@ fn valid_flate_decodes_and_garbage_or_truncated_flate_names_the_object() {
     .unwrap();
     let err = garbage.page_contents(0).unwrap_err();
     assert_eq!(err, ReaderError::DecodeFailed { obj: OBJ4 });
-    assert_eq!(err.code(), "DECODE_FAILED");
+    assert_eq!(err.code(), ErrorCode::DecodeFailed);
+    let wire = FoliarkError::from(&err);
+    assert_eq!(wire.details.unwrap().obj_ref.as_deref(), Some("4 0 R"));
 
     // The block header promises more bytes than the stream has.
     let cut = &good[..good.len() - 12];
@@ -136,7 +138,7 @@ fn corrupt_xref_is_repaired_only_when_allowed() {
     bytes[at + 10] = b'9';
     let err = open(bytes.clone()).err().unwrap();
     assert_eq!(err, ReaderError::RepairedPdf);
-    assert_eq!(err.code(), "REPAIRED_PDF");
+    assert_eq!(err.code(), ErrorCode::RepairedPdf);
 
     let doc = Document::open(bytes, None, true).unwrap();
     assert!(doc.was_repaired());
