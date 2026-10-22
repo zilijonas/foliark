@@ -51,9 +51,7 @@ impl Budget {
 
 /// An image of `width` x `height` (dimension bomb check). Returns the pixel count.
 pub(crate) fn image_pixels(limits: &Limits, width: u32, height: u32) -> Result<u64, ReaderError> {
-    let pixels = u64::from(width)
-        .checked_mul(u64::from(height))
-        .unwrap_or(u64::MAX);
+    let pixels = u64::from(width).saturating_mul(u64::from(height));
     check("maxImagePixels", pixels, limits.max_image_pixels.into())?;
     Ok(pixels)
 }

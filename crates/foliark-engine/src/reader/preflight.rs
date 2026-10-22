@@ -53,14 +53,11 @@ impl Scan {
 }
 
 impl Document {
-    /// The spec §1.1 `DocumentInfo`. Also checks every stream and image of the file against the
-    /// budgets (spec §9) without keeping what it decodes, so a bomb is refused here and not
-    /// while rendering. A stream that does not decode is only an error when it is read.
-    pub fn info(&self) -> Result<DocumentInfo, ReaderError> {
-        let pdf = &self.pdf;
+    /// Walk every object once: inventory plus the stream and image budgets.
+    fn scan(&self) -> Result<Scan, ReaderError> {
         let mut budget = Budget::new(&self.limits);
         let mut scan = Scan::default();
-        for object in pdf.objects() {
+        for object in self.pdf.objects() {
             match object {
                 Object::Dict(d) => scan.dict(&d),
                 Object::Stream(s) => {
@@ -68,8 +65,11 @@ impl Document {
                     scan.dict(d);
                     let obj = object_id(s.obj_id().into());
                     if name_is(d, "Subtype", "Image") {
-                        let dim = |k| d.get::<u32>(k).or_else(|| d.get::<u32>("W")).unwrap_or(0);
-                        let (w, h) = (dim("Width"), d.get::<u32>("Height").unwrap_or(0));
+                        let dim = |long, short| d.get::<u32>(long).or_else(|| d.get(short));
+                        let (w, h) = (
+                            dim("Width", "W").unwrap_or(0),
+                            dim("Height", "H").unwrap_or(0),
+                        );
                         budget.charge_pixels(limits::image_pixels(&self.limits, w, h)?)?;
                     }
                     if !is_image_codec(&s) {
@@ -82,7 +82,20 @@ impl Document {
                 _ => {}
             }
         }
+        Ok(scan)
+    }
 
+    /// Run the budget scan once per document (it is the render path's guard against bombs).
+    pub(crate) fn ensure_budgets(&self) -> Result<(), ReaderError> {
+        self.scanned.get_or_init(|| self.scan().map(|_| ())).clone()
+    }
+
+    /// The spec §1.1 `DocumentInfo`. Also checks every stream and image of the file against the
+    /// budgets (spec §9) without keeping what it decodes, so a bomb is refused here and not
+    /// while rendering. A stream that does not decode is only an error when it is read.
+    pub fn info(&self) -> Result<DocumentInfo, ReaderError> {
+        let pdf = &self.pdf;
+        let scan = self.scan()?;
         let catalog = pdf
             .xref()
             .get::<Dict<'_>>(pdf.xref().root_id())

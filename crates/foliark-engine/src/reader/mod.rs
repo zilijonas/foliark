@@ -7,6 +7,7 @@ use hayro::hayro_syntax::object::dict::keys::{CONTENTS, FILTER};
 use hayro::hayro_syntax::object::{Array, Name, ObjRef, Object, Stream};
 use hayro::hayro_syntax::page::Page;
 use hayro::hayro_syntax::{DecryptionError, LoadPdfError, Pdf};
+use std::cell::OnceCell;
 use std::fmt;
 
 mod preflight;
@@ -133,6 +134,8 @@ pub struct Document {
     pdf: Pdf,
     allow_repaired: bool,
     limits: Limits,
+    /// Result of the whole-document budget scan, filled on first use.
+    scanned: OnceCell<Result<(), ReaderError>>,
 }
 
 impl Document {
@@ -189,6 +192,7 @@ impl Document {
             pdf,
             allow_repaired,
             limits,
+            scanned: OnceCell::new(),
         };
         doc.check_repaired()?;
         Ok(doc)

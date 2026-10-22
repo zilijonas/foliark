@@ -1,5 +1,5 @@
 //! Reader and renderer. Thin wrappers over hayro; the other §14 modules land with their tasks.
-use foliark_model::{Matrix, PageGeometry};
+use foliark_model::{Limits, Matrix, PageGeometry};
 use hayro::hayro_interpret::InterpreterSettings;
 use hayro::hayro_syntax::page::Rotation;
 use hayro::vello_cpu::color::palette::css::WHITE;
@@ -65,10 +65,20 @@ impl Document {
         password: Option<&str>,
         allow_repaired: bool,
     ) -> Result<Self, EngineError> {
-        Ok(Self(reader::Document::open(
+        Self::open_with_limits(bytes, password, allow_repaired, Limits::default())
+    }
+
+    pub fn open_with_limits(
+        bytes: Vec<u8>,
+        password: Option<&str>,
+        allow_repaired: bool,
+        limits: Limits,
+    ) -> Result<Self, EngineError> {
+        Ok(Self(reader::Document::open_with_limits(
             bytes,
             password,
             allow_repaired,
+            limits,
         )?))
     }
 
@@ -122,7 +132,11 @@ impl Document {
         if width > MAX_SIDE || height > MAX_SIDE {
             return Err(EngineError::RenderTooLarge { width, height });
         }
-        // The renderer draws a page whose content fails to decode as blank; refuse instead.
+        let max = u64::from(self.0.limits().max_render_pixels);
+        limits::check("maxRenderPixels", (width * height) as u64, max)?;
+        // The renderer decodes fonts and images without caps: refuse bombs first, and refuse a
+        // page whose content fails to decode instead of drawing it blank.
+        self.0.ensure_budgets()?;
         self.0.page_contents(index)?;
         let pixmap = render(
             page,

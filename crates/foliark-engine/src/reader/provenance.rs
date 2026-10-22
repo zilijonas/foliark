@@ -80,10 +80,10 @@ impl ProvenanceDevice<'_> {
     /// Charge work units; the first failure is kept and everything after it is ignored. The
     /// interpreter cannot be stopped from a device, so it still walks the rest of the stream.
     fn charge(&mut self, units: u64) -> bool {
-        if self.error.is_none() {
-            if let Err(e) = self.budget.charge(units) {
-                self.error = Some(e);
-            }
+        if self.error.is_none()
+            && let Err(e) = self.budget.charge(units)
+        {
+            self.error = Some(e);
         }
         self.error.is_none()
     }
