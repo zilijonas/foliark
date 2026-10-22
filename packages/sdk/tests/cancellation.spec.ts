@@ -22,6 +22,8 @@ interface Fault {
   seen?: Req[];
   /** With `hang`: instead of going silent, report progress every `ms` for `for` ms and then answer. */
   chatter?: { ms: number; for: number };
+  /** Once: deliver a cancel to the worker the moment it reports progress: "between two steps", with no timing involved. */
+  cancelOnProgress?: boolean;
 }
 
 /** `stepBudget` 1 makes every page its own step, so a task spans many event-loop turns like a long page does. */
@@ -31,6 +33,11 @@ const worker = (stepBudget?: number, fault: Fault = {}) => (): Worker => {
   const lost = new Set<number>();
   const core = createWorkerCore({
     post: (m, transfer = []) => {
+      const p = m as { id?: number; progress?: unknown };
+      if (fault.cancelOnProgress && p.progress) {
+        fault.cancelOnProgress = false; // once
+        core.onMessage({ v: 1, cancel: p.id });
+      }
       if (lost.has((m as { id?: number }).id ?? -1)) return;
       port2.postMessage(m, { transfer });
     },
@@ -255,13 +262,11 @@ describe("cooperative cancellation", () => {
   });
 
   it("an abort between two steps drops the task: CANCELLED, and the next op is unaffected", async () => {
-    const f = await stepped();
+    // The cancel is delivered from inside the worker's own loop at its first yield. A timer-based abort from the
+    // main thread raced the search: a 4-page search finishes in a few ms, so a slow timer turn made it a no-op.
+    const f = await stepped({ cancelOnProgress: true });
     const doc = await f.open(fixture("hddn/rotation-crop.pdf"));
-    const ctl = new AbortController();
-    const running = doc.search("a", { signal: ctl.signal });
-    await tick();
-    ctl.abort();
-    expect((await rejects(running)).code).toBe("CANCELLED");
+    expect((await rejects(doc.search("a"))).code).toBe("CANCELLED");
     expect((await doc.search("a")).length).toBeGreaterThanOrEqual(0);
     expect(f.generation).toBe(1);
   });
