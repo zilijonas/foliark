@@ -79,6 +79,7 @@ pub struct Writer<'d> {
     limits: Limits,
     spans: Spans,
     repl: BTreeMap<ObjectId, NewStream>,
+    encoded: BTreeMap<ObjectId, Vec<u8>>,
     appended: BTreeMap<usize, Vec<u8>>,
     extras: Vec<Extra>,
     page_fonts: PageFonts,
@@ -101,6 +102,7 @@ impl<'d> Writer<'d> {
             limits,
             spans: BTreeMap::new(),
             repl: BTreeMap::new(),
+            encoded: BTreeMap::new(),
             appended: BTreeMap::new(),
             extras: Vec::new(),
             page_fonts: BTreeMap::new(),
@@ -129,6 +131,13 @@ impl<'d> Writer<'d> {
             .entry(stream)
             .or_default()
             .push((range, ops.to_vec()));
+        self
+    }
+
+    /// Replace the encoded bytes of the stream `obj` (an image): its dictionary and filters are
+    /// written as for a source stream.
+    pub fn replace_stream_data(&mut self, obj: ObjectId, encoded: Vec<u8>) -> &mut Self {
+        self.encoded.insert(obj, encoded);
         self
     }
 
@@ -281,6 +290,7 @@ impl<'d> Writer<'d> {
             &self.redirects,
         );
         walk.layers_resolved = self.layers_resolved;
+        walk.encoded = &self.encoded;
         let pages = walk.build(
             &self.appended,
             [&self.page_fonts, &self.page_xobjects],

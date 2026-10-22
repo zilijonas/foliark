@@ -406,7 +406,11 @@ pub(crate) struct Walk<'a> {
     bytes: usize,
     /// Optional content was flattened by the caller (`Writer::resolve_layers`).
     pub layers_resolved: bool,
+    /// Encoded stream bytes that replace the source's (`Writer::replace_stream_data`).
+    pub encoded: &'a BTreeMap<ObjectId, Vec<u8>>,
 }
+
+static NO_ENCODED: BTreeMap<ObjectId, Vec<u8>> = BTreeMap::new();
 
 fn name_val(n: &[u8]) -> Val {
     Val::Name(n.to_vec())
@@ -443,6 +447,7 @@ impl<'a> Walk<'a> {
             next: 1,
             bytes: 0,
             layers_resolved: false,
+            encoded: &NO_ENCODED,
         }
     }
 
@@ -782,7 +787,7 @@ impl<'a> Walk<'a> {
             (Some(n), _) => (Some(deflate(&n.data)), flate()),
             (None, Some(s)) => {
                 let (d, f) = self.stream_data(s, id, class)?;
-                (Some(d), f)
+                (Some(self.encoded.get(&id).cloned().unwrap_or(d)), f)
             }
             (None, None) => (None, Vec::new()),
         };

@@ -227,8 +227,21 @@ pub fn empty_unused_truetype_glyphs(
             }
         }
     }
-    // Reassemble: the same directory order and tags, 4-byte aligned tables.
-    let mut out = program[..12].to_vec();
+    // Reassemble: the same directory order, 4-byte aligned tables. Only the tables a PDF
+    // viewer reads stay: `name` (copyright, designer), layout, kerning, `DSIG` and vendor tables
+    // go, `post` keeps the names of the glyphs that stay.
+    const NEEDED: [&[u8; 4]; 13] = [
+        b"head", b"hhea", b"maxp", b"loca", b"glyf", b"hmtx", b"cmap", b"post", b"cvt ", b"fpgm",
+        b"prep", b"OS/2", b"vmtx",
+    ];
+    tables.retain(|t| NEEDED.contains(&&t.0) || &t.0 == b"vhea");
+    let n_tables = tables.len();
+    let sel = n_tables.max(1).ilog2() as u16;
+    let range = 16 * (1u16 << sel);
+    let mut out = program[..4].to_vec();
+    for v in [n_tables as u16, range, sel, n_tables as u16 * 16 - range] {
+        out.extend_from_slice(&v.to_be_bytes());
+    }
     let mut data = Vec::new();
     let base = 12 + 16 * n_tables;
     let mut records = Vec::new();
@@ -236,6 +249,7 @@ pub fn empty_unused_truetype_glyphs(
         let mut body = match &tag {
             b"glyf" => new_glyf.clone(),
             b"loca" => new_loca.clone(),
+            b"post" => post_names(&program[off..off + len], &keep, n_glyphs),
             _ => program[off..off + len].to_vec(),
         };
         if &tag == b"head" {
@@ -266,6 +280,48 @@ pub fn empty_unused_truetype_glyphs(
 }
 
 // ---- Fonts touched by removal ---------------------------------------------------------------
+
+/// `post` with the glyph names of glyphs outside `keep` gone: format 2.0 gets `.notdef` for
+/// them and only the strings the kept glyphs name; other formats carry no per-glyph names.
+fn post_names(post: &[u8], keep: &BTreeSet<usize>, n_glyphs: usize) -> Vec<u8> {
+    if be32(post, 0) != Some(0x0002_0000) || usize::from(be16(post, 32).unwrap_or(0)) != n_glyphs {
+        return post.to_vec();
+    }
+    let mut strings = Vec::new();
+    let mut at = 34 + 2 * n_glyphs;
+    while let Some(&len) = post.get(at) {
+        let end = at + 1 + usize::from(len);
+        match post.get(at + 1..end) {
+            Some(s) => strings.push(s),
+            None => break,
+        }
+        at = end;
+    }
+    let mut out = post[..34].to_vec();
+    let (mut names, mut used): (Vec<u8>, Vec<usize>) = (Vec::new(), Vec::new());
+    for g in 0..n_glyphs {
+        let idx = usize::from(be16(post, 34 + 2 * g).unwrap_or(0));
+        let new = match idx {
+            _ if !keep.contains(&g) => 0,
+            0..258 => idx,
+            _ => match strings.get(idx - 258) {
+                Some(s) => {
+                    let n = used.iter().position(|&u| u == idx).unwrap_or_else(|| {
+                        used.push(idx);
+                        names.push(s.len() as u8);
+                        names.extend_from_slice(s);
+                        used.len() - 1
+                    });
+                    258 + n
+                }
+                None => 0,
+            },
+        };
+        out.extend_from_slice(&(new as u16).to_be_bytes());
+    }
+    out.extend(names);
+    out
+}
 
 /// What happened to the font program of a touched font (spec §5.6).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

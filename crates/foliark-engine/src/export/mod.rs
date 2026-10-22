@@ -26,7 +26,7 @@ use crate::document::{Binding, Committed, StoredRedaction};
 use crate::redaction::plan::{RedactionPlan, bounds_of, glyph_boxes, text_coverage};
 use crate::redaction::{Executed, execute, image};
 use crate::sanitize::document::scan;
-use crate::sanitize::{interactive, text_semantics, visibility};
+use crate::sanitize::{interactive, resources, text_semantics, visibility};
 use crate::writer::Writer;
 use foliark_model::{
     Capabilities, Capability, CapabilityReason, CapabilityStatus, EditsReport, ErrorCode,
@@ -365,6 +365,8 @@ pub fn prepare(
     }
     let done = execute(doc, &plan, &mut w).map_err(|e| attribute(&plan, e))?;
     check_stages(&plan, &done)?;
+    let touched = plan.font_survivors.keys().copied().collect();
+    let res = resources::rebuild(doc, &touched, &mut w)?;
     for (page, ops) in fills(doc, committed)? {
         w.append_page_content(page as usize, ops.as_bytes())?;
     }
@@ -413,6 +415,7 @@ pub fn prepare(
         .text
         .fonts_with_glyph_inventory
         .into_iter()
+        .chain(res.fonts_with_glyph_inventory)
         .map(|(_, name)| name)
         .collect();
     inventory.sort_unstable();

@@ -207,21 +207,38 @@ pub fn stream(dict: &str, data: &str) -> String {
 /// 3 the page (`page_extra` entries), 4 its content, 5 Helvetica `/F1` (add `/Resources` through
 /// `page_extra`), then `objs` as objects 6.. (`null` for a gap).
 pub fn tiny_pdf(catalog: &str, page_extra: &str, content: &str, objs: &[String]) -> Vec<u8> {
-    let mut all = vec![
-        format!("<< /Type /Catalog /Pages 2 0 R {catalog} >>"),
-        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_owned(),
+    let objs: Vec<Vec<u8>> = objs.iter().map(|o| o.clone().into_bytes()).collect();
+    tiny_pdf_bin(catalog, page_extra, content, &objs)
+}
+
+/// `stream` for binary data.
+pub fn bin_stream(dict: &str, data: &[u8]) -> Vec<u8> {
+    let mut out = format!("<< {dict} /Length {} >>\nstream\n", data.len()).into_bytes();
+    out.extend_from_slice(data);
+    out.extend_from_slice(b"\nendstream");
+    out
+}
+
+/// [`tiny_pdf`] with binary objects.
+pub fn tiny_pdf_bin(catalog: &str, page_extra: &str, content: &str, objs: &[Vec<u8>]) -> Vec<u8> {
+    let mut all: Vec<Vec<u8>> = vec![
+        format!("<< /Type /Catalog /Pages 2 0 R {catalog} >>").into_bytes(),
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_vec(),
         format!(
             "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Contents 4 0 R {page_extra} >>"
-        ),
-        stream("", content),
-        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".to_owned(),
+        )
+        .into_bytes(),
+        stream("", content).into_bytes(),
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".to_vec(),
     ];
     all.extend(objs.iter().cloned());
     let mut out = b"%PDF-1.7\n".to_vec();
     let mut at = Vec::new();
     for (i, o) in all.iter().enumerate() {
         at.push(out.len());
-        out.extend(format!("{} 0 obj\n{o}\nendobj\n", i + 1).bytes());
+        out.extend(format!("{} 0 obj\n", i + 1).bytes());
+        out.extend_from_slice(o);
+        out.extend(b"\nendobj\n");
     }
     let xref = out.len();
     out.extend(format!("xref\n0 {}\n0000000000 65535 f \n", all.len() + 1).bytes());
