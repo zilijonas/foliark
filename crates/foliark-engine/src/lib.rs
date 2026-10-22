@@ -1,6 +1,7 @@
 //! Reader, renderer, text and the `Engine` session layer (spec §13); the other §14 modules land with their tasks.
 use foliark_model::{Limits, PageGeometry, PdfError};
 
+mod document;
 mod engine;
 pub mod interpret;
 pub mod limits;
@@ -9,6 +10,7 @@ mod render;
 pub mod text;
 pub mod writer;
 
+pub use document::{Applied, Binding, Committed, EditApplier, NotBuilt, StoredRedaction};
 pub use engine::{BoxTask, DocId, Engine, Step, Task};
 pub use render::{RenderOptions, RenderedPage};
 

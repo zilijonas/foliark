@@ -1,7 +1,7 @@
 //! Engine sessions (spec §13): one `Engine` per worker owns the limits, the open documents,
 //! the font registry and the long-op `Task`s. One method per public op, `DocId` strings as
 //! handles. Ops that are not built yet return the typed refusal in [`not_built`].
-use crate::text::TextLayout;
+use crate::document::{Binding, Committed, EditApplier, NotBuilt, Session};
 use crate::{Document, RenderOptions, RenderedPage};
 use foliark_model::{
     Capabilities, ChangeResult, ChangeSet, DocumentInfo, ErrorCode, ErrorDetails, ExportMode,
@@ -32,7 +32,7 @@ pub type BoxTask<T> = Box<dyn Task<Out = T>>;
 /// An op the spec defines but this build does not implement. `INVALID_ARGUMENT` with
 /// `details.feature` is the refusal: the spec has no dedicated code, `INTERNAL` would make
 /// the client reset the worker, and `*_UNSUPPORTED` codes name specific PDF features.
-fn not_built(feature: &str) -> PdfError {
+pub(crate) fn not_built(feature: &str) -> PdfError {
     PdfError::with(
         ErrorCode::InvalidArgument,
         ErrorDetails {
@@ -63,40 +63,13 @@ fn refused<T: 'static>(feature: &'static str) -> BoxTask<T> {
     once(move |_| Err(not_built(feature)))
 }
 
-struct Session {
-    doc: Document,
-    info: DocumentInfo,
-    revision: u32,
-    /// The last page layout built (hit testing and selection hit one page repeatedly).
-    layout: Option<(usize, bool, TextLayout)>,
-}
-
-impl Session {
-    fn layout(&mut self, id: &str, page: u32, hidden: bool) -> Result<&TextLayout, PdfError> {
-        let page = page as usize;
-        if self
-            .layout
-            .as_ref()
-            .is_none_or(|(p, h, _)| (*p, *h) != (page, hidden))
-        {
-            let mut l = self.doc.text_layout(page, hidden)?;
-            l.page.doc_id = id.to_owned();
-            l.page.revision = self.revision;
-            self.layout = Some((page, hidden, l));
-        }
-        self.layout
-            .as_ref()
-            .map(|(_, _, l)| l)
-            .ok_or(PdfError::new(ErrorCode::Internal))
-    }
-}
-
 pub struct Engine {
     limits: Limits,
     generation: u32,
     next_doc: u64,
     docs: HashMap<DocId, Session>,
     fonts: Registry,
+    applier: Box<dyn EditApplier>,
 }
 
 fn finite(values: &[f64]) -> Result<(), PdfError> {
@@ -115,7 +88,14 @@ impl Engine {
             next_doc: 0,
             docs: HashMap::new(),
             fonts: Registry::new(),
+            applier: Box::new(NotBuilt),
         }
+    }
+
+    /// Replace the text-edit implementation (default: every edit is refused as not built).
+    pub fn with_edit_applier(mut self, applier: Box<dyn EditApplier>) -> Self {
+        self.applier = applier;
+        self
     }
 
     /// The worker generation stamped into doc ids and (later) export plans.
@@ -136,6 +116,39 @@ impl Engine {
         self.docs.len()
     }
 
+    fn get(&self, doc: &str) -> Result<&Session, PdfError> {
+        self.docs
+            .get(doc)
+            .ok_or(PdfError::new(ErrorCode::DocumentGone))
+    }
+
+    /// The revision of an open document (0 at open, +1 per accepted `apply_changes`).
+    pub fn revision(&self, doc: &str) -> Result<u32, PdfError> {
+        Ok(self.get(doc)?.revision)
+    }
+
+    /// What a derived result (an export plan, a cached layout) must be checked against.
+    pub fn binding(&self, doc: &str) -> Result<Binding, PdfError> {
+        Ok(Binding {
+            doc_id: doc.to_owned(),
+            generation: self.generation,
+            revision: self.get(doc)?.revision,
+        })
+    }
+
+    /// True while `binding` names an open document at its current revision.
+    pub fn is_current(&self, binding: &Binding) -> bool {
+        binding.generation == self.generation
+            && self
+                .get(&binding.doc_id)
+                .is_ok_and(|s| s.revision == binding.revision)
+    }
+
+    /// The committed edit and redaction lists of the current revision.
+    pub fn committed(&self, doc: &str) -> Result<&Committed, PdfError> {
+        Ok(&self.get(doc)?.committed)
+    }
+
     fn session(&mut self, doc: &str) -> Result<&mut Session, PdfError> {
         self.docs
             .get_mut(doc)
@@ -154,18 +167,14 @@ impl Engine {
         if open >= max {
             return Err(PdfError::limit("maxOpenDocuments", open + 1, max));
         }
+        let source = bytes.clone();
         let doc = Document::open_with_limits(bytes, password, allow_repaired, self.limits.clone())?;
         let info = doc.reader().info()?;
         self.next_doc += 1;
         let id = format!("{}-{}", self.generation, self.next_doc);
         self.docs.insert(
             id.clone(),
-            Session {
-                doc,
-                info: info.clone(),
-                revision: 0,
-                layout: None,
-            },
+            Session::new(id.clone(), source, doc, info.clone()),
         );
         Ok((id, info))
     }
@@ -175,7 +184,7 @@ impl Engine {
     }
 
     pub fn pages(&mut self, doc: &str) -> Result<Vec<PageGeometry>, PdfError> {
-        let d = &self.session(doc)?.doc;
+        let d = self.session(doc)?.doc();
         (0..d.page_count()).map(|i| d.page_geometry(i)).collect()
     }
 
@@ -198,7 +207,7 @@ impl Engine {
             return Err(PdfError::new(ErrorCode::InvalidArgument));
         }
         let s = self.session(doc)?;
-        Ok(s.layout(doc, page, false)?.hit_test(p, tolerance))
+        Ok(s.layout(page, false)?.hit_test(p, tolerance))
     }
 
     pub fn select(
@@ -210,7 +219,7 @@ impl Engine {
     ) -> Result<Option<TextRange>, PdfError> {
         finite(&[from.x, from.y, to.x, to.y])?;
         let s = self.session(doc)?;
-        Ok(s.layout(doc, page, false)?.select(from, to))
+        Ok(s.layout(page, false)?.select(from, to))
     }
 
     pub fn quads_for(
@@ -221,7 +230,7 @@ impl Engine {
         end: u32,
     ) -> Result<TextRange, PdfError> {
         let s = self.session(doc)?;
-        s.layout(doc, page, false)?.quads_for(start, end)
+        s.layout(page, false)?.quads_for(start, end)
     }
 
     /// All or nothing: every face is validated before the registry changes. Registered fonts
@@ -247,7 +256,7 @@ impl Engine {
         let doc = doc.to_owned();
         once(move |e| {
             let s = e.session(&doc)?;
-            let mut text = s.layout(&doc, page, opts.include_ocg_hidden)?.page.clone();
+            let mut text = s.layout(page, opts.include_ocg_hidden)?.page.clone();
             if !opts.chars {
                 text.clusters = None;
             }
@@ -269,7 +278,7 @@ impl Engine {
 
     pub fn render(&self, doc: &str, page: u32, opts: RenderOptions) -> BoxTask<RenderedPage> {
         let doc = doc.to_owned();
-        once(move |e| e.session(&doc)?.doc.render_page(page as usize, opts))
+        once(move |e| e.session(&doc)?.doc().render_page(page as usize, opts))
     }
 
     pub fn capabilities(&self, _doc: &str, _deep: bool) -> BoxTask<Capabilities> {
@@ -287,8 +296,17 @@ impl Engine {
         Err(not_built("prepareParagraph"))
     }
 
-    pub fn apply_changes(&self, _doc: &str, _changes: ChangeSet) -> BoxTask<ChangeResult> {
-        refused("applyChanges")
+    /// Spec §4: atomic at `changes.base_revision`. A stale base is `STALE_REVISION`; item
+    /// rejections come back in the result with `accepted: false` and change nothing.
+    pub fn apply_changes(&self, doc: &str, changes: ChangeSet) -> BoxTask<ChangeResult> {
+        let doc = doc.to_owned();
+        once(move |e| {
+            let s = e
+                .docs
+                .get_mut(&doc)
+                .ok_or(PdfError::new(ErrorCode::DocumentGone))?;
+            s.apply(changes, &e.limits, &*e.applier)
+        })
     }
 
     pub fn prepare_export(
@@ -325,7 +343,7 @@ impl Task for SearchTask {
                 .opts
                 .pages
                 .clone()
-                .unwrap_or_else(|| (0..s.doc.page_count() as u32).collect());
+                .unwrap_or_else(|| (0..s.doc().page_count() as u32).collect());
             p.sort_unstable();
             p.dedup();
             p
@@ -333,7 +351,7 @@ impl Task for SearchTask {
         let max_hits = self.opts.max_hits as usize;
         let mut spent = 0u64;
         while self.next < pages.len() && self.hits.len() < max_hits && spent < budget {
-            let layout = s.layout(&self.doc, pages[self.next], false)?;
+            let layout = s.layout(pages[self.next], false)?;
             // A page costs its clusters (work units, spec §9), and at least one.
             spent += layout.page.clusters.as_ref().map_or(0, Vec::len) as u64 + 1;
             let room = max_hits - self.hits.len();

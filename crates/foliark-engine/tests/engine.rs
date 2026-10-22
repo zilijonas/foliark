@@ -233,18 +233,6 @@ fn ops_that_are_not_built_refuse_with_their_feature_name() {
         feature(run(&mut e, t, 1).0.map(|_| ())),
         (ErrorCode::InvalidArgument, "capabilities".into())
     );
-    let t = e.apply_changes(
-        &d,
-        foliark_model::ChangeSet {
-            base_revision: 0,
-            text_edits: None,
-            redactions: None,
-        },
-    );
-    assert_eq!(
-        feature(run(&mut e, t, 1).0.map(|_| ())),
-        (ErrorCode::InvalidArgument, "applyChanges".into())
-    );
     let t = e.prepare_export(&d, foliark_model::ExportMode::Native, Default::default());
     assert_eq!(
         feature(run(&mut e, t, 1).0.map(|_| ())),

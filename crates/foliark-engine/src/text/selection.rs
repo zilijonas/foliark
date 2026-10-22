@@ -1,6 +1,7 @@
 //! Hit testing and selection over clusters (spec §3.5).
 use super::TextLayout;
-use foliark_model::{Cluster, ErrorCode, Hit, PdfError, Point, Quad, TextRange};
+use super::extract::{ClusterId, bounds};
+use foliark_model::{Cluster, ErrorCode, Hit, PdfError, Point, Quad, Rect, TextRange};
 
 fn inside(q: &Quad, p: Point) -> bool {
     let sides = [0, 1, 2, 3].map(|i| {
@@ -72,6 +73,9 @@ fn union_quad(quads: &[&Quad]) -> Quad {
     Quad([at(u0, v0), at(u1, v0), at(u1, v1), at(u0, v1)])
 }
 
+/// Cluster indices per visual line id, in text order.
+type Lines = Vec<(u32, Vec<usize>)>;
+
 impl TextLayout {
     fn clusters(&self) -> &[Cluster] {
         self.page.clusters.as_deref().unwrap_or_default()
@@ -106,31 +110,72 @@ impl TextLayout {
         self.quads_for(c.start, d.end).ok()
     }
 
-    /// One quad per visual line for the UTF-16 range `[start, end)` of `text`. A cluster the
-    /// range cuts into counts whole and sets `partial_cluster`.
-    pub fn quads_for(&self, start: u32, end: u32) -> Result<TextRange, PdfError> {
-        let units: Vec<u16> = self.page.text.encode_utf16().collect();
-        if start > end || end as usize > units.len() {
+    /// The clusters a UTF-16 range `[start, end)` touches, grouped per visual line in text
+    /// order, and whether it cuts into one. A cut cluster counts whole.
+    fn touched(&self, start: u32, end: u32) -> Result<(Lines, bool), PdfError> {
+        if start > end || end as usize > self.page.text.encode_utf16().count() {
             return Err(PdfError::new(ErrorCode::InvalidArgument));
         }
-        let mut lines: Vec<(u32, Vec<&Quad>)> = Vec::new();
+        let mut lines = Lines::new();
         let mut partial = false;
-        for (c, m) in self.clusters().iter().zip(&self.meta) {
+        for (i, (c, m)) in self.clusters().iter().zip(&self.meta).enumerate() {
             if c.start >= end || c.end <= start {
                 continue;
             }
             partial |= c.start < start || c.end > end;
             match lines.iter_mut().find(|(l, _)| *l == m.line) {
-                Some((_, quads)) => quads.push(&c.quad),
-                None => lines.push((m.line, vec![&c.quad])),
+                Some((_, idx)) => idx.push(i),
+                None => lines.push((m.line, vec![i])),
             }
         }
+        Ok((lines, partial))
+    }
+
+    /// One quad per visual line for the UTF-16 range `[start, end)` of `text`. A cluster the
+    /// range cuts into counts whole and sets `partial_cluster`.
+    pub fn quads_for(&self, start: u32, end: u32) -> Result<TextRange, PdfError> {
+        let (lines, partial_cluster) = self.touched(start, end)?;
+        let units: Vec<u16> = self.page.text.encode_utf16().collect();
+        let clusters = self.clusters();
         Ok(TextRange {
             start,
             end,
             text: String::from_utf16_lossy(&units[start as usize..end as usize]),
-            quads: lines.iter().map(|(_, q)| union_quad(q)).collect(),
-            partial_cluster: partial,
+            quads: lines
+                .iter()
+                .map(|(_, idx)| {
+                    union_quad(&idx.iter().map(|&i| &clusters[i].quad).collect::<Vec<_>>())
+                })
+                .collect(),
+            partial_cluster,
         })
+    }
+
+    /// What redacting the UTF-16 range `[start, end)` takes out (spec §4): one display-space
+    /// bounding box per visual line and the id of every cluster the range touches.
+    pub fn redaction_target(
+        &self,
+        start: u32,
+        end: u32,
+    ) -> Result<(Vec<Rect>, Vec<ClusterId>), PdfError> {
+        let (lines, _) = self.touched(start, end)?;
+        let clusters = self.clusters();
+        let rects = lines
+            .iter()
+            .map(|(_, idx)| {
+                let b = bounds(idx.iter().map(|&i| clusters[i].quad));
+                Rect {
+                    x: b[0],
+                    y: b[1],
+                    width: b[2] - b[0],
+                    height: b[3] - b[1],
+                }
+            })
+            .collect();
+        let ids = lines
+            .iter()
+            .flat_map(|(_, idx)| idx.iter().map(|&i| self.meta[i].id.clone()))
+            .collect();
+        Ok((rects, ids))
     }
 }

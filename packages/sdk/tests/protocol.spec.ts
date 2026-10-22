@@ -116,6 +116,19 @@ describe("per-op payloads", () => {
     expect(checkRequest(req("hitTest", { page: 0, point: { x: NaN, y: 0 } }), 1).ok).toBe(false);
     expect(checkRequest(req("quadsFor", { page: 0, start: 2, end: -1 }), 1).ok).toBe(false);
     expect(checkRequest(req("search", { query: 5 }), 1).ok).toBe(false);
+    const rect = { x: 0, y: 0, width: 1, height: 1 };
+    const changes = (c: object) => checkRequest(req("applyChanges", { changes: { baseRevision: 0, ...c } }), 1).ok;
+    expect(changes({})).toBe(true);
+    expect(changes({ redactions: [{ kind: "region", id: "a", pageIndex: 0, rect }, { kind: "text", id: "b", pageIndex: 0, start: 1, end: 2, fill: null }] })).toBe(true);
+    expect(changes({ textEdits: [{ id: "e", pageIndex: 0, rects: [rect], text: "x" }] })).toBe(true);
+    for (const bad of [
+      { redactions: [{ kind: "blur", id: "a", pageIndex: 0 }] },
+      { redactions: [{ kind: "region", id: "a", pageIndex: 0, rect: { ...rect, width: NaN } }] },
+      { redactions: [{ kind: "text", id: "a", pageIndex: 0, start: -1, end: 2 }] },
+      { redactions: [{ kind: "region", id: "a", pageIndex: 0, rect, fill: [0, 0] }] },
+      { textEdits: [{ id: "e", pageIndex: 0, rects: "x", text: "x" }] },
+      { redactions: {} },
+    ]) expect(changes(bad)).toBe(false);
     expect(checkRequest(req("registerFonts", { fonts: [{ bytes: new Uint8Array(4), family: "A", weight: 400, style: "normal" }] }, undefined), 1).ok).toBe(false); // a view
     expect(checkRequest(req("registerFonts", { fonts: [{ bytes: new ArrayBuffer(4), family: "A", weight: 500, style: "normal" }] }, undefined), 1).ok).toBe(false);
   });

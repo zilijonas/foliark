@@ -1,8 +1,8 @@
 //! Clusters, styles, lines, words and blocks (spec §3.1 to §3.4).
 use crate::interpret::{FontInfo, ItemKind, SemanticPage};
 use foliark_model::{
-    Cluster, GROUPING, Matrix, PdfError, Point, Quad, StyleFlags, StyleRun, TextPage, TextStats,
-    Word, WordSource, page_geometry,
+    Cluster, GROUPING, InstancePath, Matrix, PdfError, Point, Quad, SourceLoc, StyleFlags,
+    StyleRun, TextPage, TextStats, Word, WordSource, page_geometry,
 };
 
 const INVISIBLE: u32 = 1;
@@ -20,10 +20,22 @@ pub struct TextLayout {
     pub(super) meta: Vec<ClusterMeta>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub(super) struct ClusterMeta {
     pub line: u32,
     pub word: u32,
+    pub id: ClusterId,
+}
+
+/// Names one shown glyph of the input file, so it can be found again after a reopen: the page,
+/// the Form instances it is drawn through, the operator, and the code's index inside that
+/// operator (`op_glyph_index`). One glyph is one cluster (spec §3.1).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ClusterId {
+    pub page: u32,
+    pub path: InstancePath,
+    pub loc: SourceLoc,
+    pub glyph: u32,
 }
 
 /// One shown glyph in display space, before grouping.
@@ -40,6 +52,7 @@ struct Glyph {
     style: u32,
     flags: u32,
     whitespace: bool,
+    id: ClusterId,
 }
 
 struct Line {
@@ -75,7 +88,7 @@ fn same_direction(a: Point, b: Point) -> bool {
     cross(a, b).abs() < 0.01 && dot(a, b) > 0.0
 }
 
-fn bounds(quads: impl Iterator<Item = Quad>) -> [f64; 4] {
+pub(super) fn bounds(quads: impl Iterator<Item = Quad>) -> [f64; 4] {
     let mut b = [
         f64::INFINITY,
         f64::INFINITY,
@@ -167,6 +180,12 @@ impl TextLayout {
                         style,
                         flags,
                         whitespace,
+                        id: ClusterId {
+                            page: model.index as u32,
+                            path: item.path.clone(),
+                            loc: item.loc,
+                            glyph: glyph.op_glyph_index,
+                        },
                     });
                 }
                 _ => {}
@@ -358,6 +377,7 @@ fn assemble(
             meta.push(ClusterMeta {
                 line: w.line,
                 word: n as u32,
+                id: g.id.clone(),
             });
             offset += len;
             stats.unmapped_glyphs += u32::from(g.flags & UNMAPPED != 0);

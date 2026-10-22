@@ -8,7 +8,7 @@ mod extract;
 mod search;
 mod selection;
 
-pub use extract::TextLayout;
+pub use extract::{ClusterId, TextLayout};
 
 impl crate::Document {
     /// The extracted text of one page (spec §3.4). `doc_id` is empty and `revision` is 0 here:

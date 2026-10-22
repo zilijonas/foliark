@@ -14,6 +14,11 @@ pub struct Font {
 
 /// Page size is 300 x 400; `pages` are content streams; `rotate` is the /Rotate of every page.
 pub fn build(pages: &[&str], font: &Font, rotate: i32) -> Document {
+    Document::open(pdf_bytes(pages, font, rotate), None).unwrap()
+}
+
+/// The file `build` opens.
+pub fn pdf_bytes(pages: &[&str], font: &Font, rotate: i32) -> Vec<u8> {
     let mut pdf = Pdf::new();
     let (cat, tree, f1, cmap) = (Ref::new(1), Ref::new(2), Ref::new(3), Ref::new(4));
     pdf.catalog(cat).pages(tree);
@@ -74,7 +79,7 @@ pub fn build(pages: &[&str], font: &Font, rotate: i32) -> Document {
         );
         pdf.stream(cmap, body.as_bytes());
     }
-    Document::open(pdf.finish(), None).unwrap()
+    pdf.finish()
 }
 
 /// `text` sliced by UTF-16 offsets, the way JavaScript's `slice` does.

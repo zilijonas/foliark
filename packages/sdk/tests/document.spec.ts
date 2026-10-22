@@ -213,6 +213,31 @@ describe("cancellation", () => {
   });
 });
 
+describe("applyChanges", () => {
+  it("commits a redaction list atomically, moves the revision, and refuses a stale or partly bad ChangeSet", async () => {
+    const doc = await open("hddn/unicode-glyph-widths.pdf");
+    const word = (await doc.extractText(0)).words[0];
+    const region = { kind: "region", id: "r", pageIndex: 0, rect: { x: 0, y: 0, width: 20, height: 20 } } as const;
+    const cs = {
+      baseRevision: 0,
+      redactions: [region, { kind: "text", id: "t", pageIndex: 0, start: word.start, end: word.end, fill: [1, 0, 0] }],
+    } as const;
+    const r = await doc.applyChanges(cs as never);
+    expect(r).toMatchObject({ accepted: true, revision: 1, rejected: [], changedPages: [0], layouts: [] });
+    expect([doc.revision, (await doc.extractText(0)).revision]).toEqual([1, 1]);
+
+    // The same request again is a stale base: no second commit, the handle keeps revision 1.
+    const stale = await rejects(doc.applyChanges(cs as never));
+    expect([stale.code, doc.revision]).toEqual(["STALE_REVISION", 1]);
+
+    // One bad item rejects the set: nothing moves and the rejection names the item.
+    const bad = { ...region, id: "x", pageIndex: 99 };
+    const refused = await doc.applyChanges({ baseRevision: 1, redactions: [region, bad] });
+    expect(refused).toMatchObject({ accepted: false, revision: 1, rejected: [{ id: "x", code: "INVALID_ARGUMENT" }] });
+    expect(doc.revision).toBe(1);
+  });
+});
+
 describe("ops that are not built yet", () => {
   it("refuse with a typed error naming the feature, and leave the document usable", async () => {
     const doc = await open();
@@ -222,7 +247,6 @@ describe("ops that are not built yet", () => {
     };
     await refused(doc.capabilities({ deep: true }), "capabilities");
     await refused(doc.prepareParagraph(0, [{ x: 0, y: 0, width: 10, height: 10 }]), "prepareParagraph");
-    await refused(doc.applyChanges({ baseRevision: 0 }), "applyChanges");
     await refused(doc.prepareExport({ mode: "native" }), "prepareExport");
     await refused(doc.export({ planId: "p" } as never), "export");
     expect(doc.revision).toBe(0);

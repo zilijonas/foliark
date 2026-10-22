@@ -140,7 +140,7 @@ export function postTransfer(
   if (buffers.some((b) => b.byteLength !== 0 && !isDetached(b))) throw new FoliarkError("INTERNAL", "buffer was not detached by transfer");
 }
 
-// ---- per-op payloads (spec 10.4). Deep ChangeSet/ExportReport/ParagraphInfo checks belong to the ops that build them ----
+// ---- per-op payloads (spec 10.4). Deep ExportReport/ParagraphInfo checks belong to the ops that build them ----
 
 type Guard = (x: unknown) => boolean;
 const isNull: Guard = (x) => x === null;
@@ -186,6 +186,22 @@ const isRegisteredFont = shape({
   id: isStr, family: isStr, weight: isU32, style: (x) => x === "normal" || x === "italic", postscriptName: isStr, glyphCount: isU32,
 });
 const isMode = (x: unknown) => x === "native" || x === "raster";
+/** Rust serializes an absent `Option` as null. */
+const optNull = (g: (x: unknown) => boolean) => (x: unknown) => x === undefined || x === null || g(x);
+const isTextEdit = shape({ id: isStr, pageIndex: isU32, rects: arrayOf(isRect), text: isStr, font: optNull(isStr) });
+const isRedaction = (x: unknown) =>
+  shape({ id: isStr, pageIndex: isU32, fill: optNull(isRgb) })(x) &&
+  ((x as Rec).kind === "region" ? isRect((x as Rec).rect) : (x as Rec).kind === "text" && isU32((x as Rec).start) && isU32((x as Rec).end));
+const isChangeSet = shape({ baseRevision: isU32, textEdits: opt(arrayOf(isTextEdit)), redactions: opt(arrayOf(isRedaction)) });
+const isEditLayout = shape({
+  id: isStr, lines: isU32, approximate: isBool,
+  runs: arrayOf(shape({ source: (x) => x === "embedded" || x === "registered", font: isStr, clusters: isU32 })),
+});
+const isChangeResult = shape({
+  accepted: isBool, revision: isU32,
+  rejected: arrayOf(shape({ id: isStr, code: isErrorCode, details: optNull(isRec) })),
+  changedPages: arrayOf(isU32), layouts: arrayOf(isEditLayout),
+});
 
 export const argsGuards = (maxBytes = DEFAULT_MAX_BUFFER_BYTES): Partial<Record<OpName, Guard>> => ({
   init: shape({ wasmUrl: isStr, cmapsUrl: opt(isStr), limits: opt(isRec), fontMatch: opt(arrayOf(shape({ pattern: isStr, family: isStr }))) }),
@@ -205,7 +221,7 @@ export const argsGuards = (maxBytes = DEFAULT_MAX_BUFFER_BYTES): Partial<Record<
     page: isU32, scale: opt((x) => isNum(x) && x > 0), clip: opt(isRect), annotations: opt(isBool), background: opt(tuple(4)),
   }),
   prepareParagraph: shape({ page: isU32, rects: arrayOf(isRect), font: opt(isStr), editorFace: opt(isBool) }),
-  applyChanges: shape({ changes: shape({ baseRevision: isU32 }) }),
+  applyChanges: shape({ changes: isChangeSet }),
   prepareExport: shape({ mode: isMode, policy: opt(isRec) }),
   export: shape({ planId: isStr }),
   registerFonts: shape({
@@ -233,9 +249,7 @@ export const resultGuards = (maxBytes = DEFAULT_MAX_BUFFER_BYTES): Partial<Recor
     isBuffer((x as Rec).data, maxBytes, 1) &&
     ((x as Rec).data as ArrayBuffer).byteLength === x.width * x.height * 4,
   prepareParagraph: shape({ docId: isStr, revision: isU32, pageIndex: isU32, bounds: isRect, font: isRec }),
-  applyChanges: shape({
-    accepted: isBool, revision: isU32, rejected: arrayOf(isRec), changedPages: arrayOf(isU32), layouts: arrayOf(isRec),
-  }),
+  applyChanges: isChangeResult,
   prepareExport: shape({
     planId: isStr, docId: isStr, generation: isU32, revision: isU32, mode: isMode, policyHash: isStr,
     fontRegistryVersion: isU32, byteLength: isU32, report: isRec,
