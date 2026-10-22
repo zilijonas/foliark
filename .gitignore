@@ -12,4 +12,5 @@ __pycache__/
 *.pyc
 .worktrees/
 packages/sdk/LICENSE_FOXIT
+packages/sdk/SUPPORT_MATRIX.md
 dist-pkg/

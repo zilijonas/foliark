@@ -1,4 +1,4 @@
-Third-party material in the distributed files (wasm/foliark_wasm_bg.wasm). Source: docs/provenance/assets.md in the Foliark repository.
+Third-party material in the distributed files (wasm/foliark_wasm_bg.wasm). Full inventory and licence texts: THIRD_PARTY_NOTICES.md.
 
 Fonts: the 14 standard PDF fonts (FoxitSans, FoxitSerif, FoxitFixed families, FoxitSymbol, FoxitDingbats) embedded by
 hayro-interpret, copyright Foxit Software / PDFium Authors, BSD-style licence in LICENSE_FOXIT (shipped next to this file).
@@ -6,5 +6,5 @@ hayro-interpret, copyright Foxit Software / PDFium Authors, BSD-style licence in
 Colour profiles: CGATS001Compat-v2-micro.icc, LAB.icc and ProPhoto-v2-micro.icc, CC0 (public domain dedication).
 
 Rust crates compiled into the wasm (hayro, vello_cpu, pdf and font libraries and their dependencies) are
-permissively licensed (MIT, Apache-2.0, BSD-3-Clause, Zlib, Unlicense, 0BSD, Unicode-3.0 only, checked by cargo-deny); the
-full list is Cargo.lock in the Foliark repository.
+permissively licensed (MIT, Apache-2.0, BSD-3-Clause, Zlib, Unlicense, 0BSD, Unicode-3.0 only, checked by cargo-deny);
+each crate and its licence text is in THIRD_PARTY_NOTICES.md.
