@@ -41,13 +41,11 @@ fn read_tables(buf: &[u8]) -> Option<Tables> {
 fn write_tables(version: &[u8], mut tables: Tables) -> Option<Vec<u8>> {
     tables.get_mut(b"head")?.get_mut(8..12)?.fill(0);
     let n = tables.len();
-    let pow = (1usize..).take_while(|p| p * 2 <= n).last().unwrap_or(1);
-    let search_range = pow * 16;
     let mut out = version.to_vec();
     out.extend_from_slice(&(n as u16).to_be_bytes());
-    out.extend_from_slice(&(search_range as u16).to_be_bytes());
-    out.extend_from_slice(&(pow.ilog2() as u16).to_be_bytes());
-    out.extend_from_slice(&((n * 16 - search_range) as u16).to_be_bytes());
+    for v in binary_search_fields(n, 16) {
+        out.extend_from_slice(&v.to_be_bytes());
+    }
     let mut body = Vec::new();
     let mut head_at = 0;
     for (tag, data) in &tables {
@@ -68,13 +66,25 @@ fn write_tables(version: &[u8], mut tables: Tables) -> Option<Vec<u8>> {
     Some(out)
 }
 
+/// searchRange, entrySelector and rangeShift for a binary search over `count` items of `unit`
+/// bytes: the largest power of two `2^k <= count` sets `k` and `searchRange = unit * 2^k`.
+fn binary_search_fields(count: usize, unit: usize) -> [u16; 3] {
+    let k = count.ilog2();
+    let search_range = unit << k;
+    [
+        search_range as u16,
+        k as u16,
+        (count * unit - search_range) as u16,
+    ]
+}
+
 /// (3,1) format-4 cmap, one segment per code point plus the 0xFFFF terminator.
 fn cmap_format4(pairs: &[(u16, u16)]) -> Vec<u8> {
     let segs = pairs.len() + 1;
-    let pow = (1usize..).take_while(|p| p * 2 <= segs).last().unwrap_or(1);
     let u16s = |v: &mut Vec<u8>, it: &mut dyn Iterator<Item = u16>| {
         it.for_each(|x| v.extend_from_slice(&x.to_be_bytes()));
     };
+    let [search_range, entry_selector, range_shift] = binary_search_fields(segs, 2);
     let mut sub = Vec::new();
     u16s(
         &mut sub,
@@ -83,9 +93,9 @@ fn cmap_format4(pairs: &[(u16, u16)]) -> Vec<u8> {
             (16 + 8 * segs) as u16,
             0,
             (segs * 2) as u16,
-            (pow * 2) as u16,
-            pow.ilog2() as u16,
-            ((segs - pow) * 2) as u16,
+            search_range,
+            entry_selector,
+            range_shift,
         ]
         .into_iter(),
     );
@@ -225,4 +235,74 @@ pub fn repair(program: &[u8], family: &str, bold: bool, pairs: &[(u32, u32)]) ->
         p
     });
     write_tables(&program[..4], tables)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SANS: &str = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../foliark-text/tests/data/LiberationSans-Regular.ttf"
+    );
+
+    #[test]
+    fn format4_search_fields_follow_spec() {
+        // (segCount, searchRange, entrySelector, rangeShift), worked out from the OpenType spec.
+        for (segs, sr, es, rs) in [
+            (1, 2, 0, 0),
+            (2, 4, 1, 0),
+            (3, 4, 1, 2),
+            (5, 8, 2, 2),
+            (8, 16, 3, 0),
+        ] {
+            let pairs: Vec<(u16, u16)> = (0..segs - 1).map(|i| (0x41 + i, 1 + i)).collect();
+            let cmap = cmap_format4(&pairs);
+            let sub = &cmap[12..]; // past the cmap table header and encoding record
+            assert_eq!(be16(sub, 6), Some(2 * segs), "segCountX2 for {segs}");
+            assert_eq!(be16(sub, 8), Some(sr), "searchRange for {segs}");
+            assert_eq!(be16(sub, 10), Some(es), "entrySelector for {segs}");
+            assert_eq!(be16(sub, 12), Some(rs), "rangeShift for {segs}");
+        }
+    }
+
+    #[test]
+    fn repaired_fixture_headers_follow_spec() {
+        let program = std::fs::read(SANS).unwrap();
+        // Glyph ids past the font's glyph count: the program cannot agree, so the cmap is rebuilt.
+        for extra in [1u32, 2, 4, 7] {
+            let pairs: Vec<(u32, u32)> = (0..extra).map(|i| (0x100 + i, 0xFF00 + i)).collect();
+            let out = repair(&program, "Liberation Sans", false, &pairs).unwrap();
+            let map = FontRef::new(&out).unwrap().charmap();
+            assert_eq!(map.map(0x100u32).map(|g| g.to_u32()), Some(0xFF00u32));
+
+            let n = be16(&out, 4).unwrap() as usize;
+            let k = n.ilog2();
+            assert_eq!(be16(&out, 6), Some((16 << k) as u16), "table searchRange");
+            assert_eq!(be16(&out, 8), Some(k as u16), "table entrySelector");
+            assert_eq!(
+                be16(&out, 10),
+                Some((16 * n - (16 << k)) as u16),
+                "table rangeShift"
+            );
+
+            let tables = read_tables(&out).unwrap();
+            let cmap = &tables[b"cmap"];
+            let sub = be32(cmap, 8).unwrap() as usize;
+            let segs = usize::from(be16(cmap, sub + 6).unwrap() / 2);
+            assert_eq!(segs, extra as usize + 1);
+            let k = segs.ilog2();
+            assert_eq!(
+                be16(cmap, sub + 8),
+                Some((2 << k) as u16),
+                "cmap searchRange"
+            );
+            assert_eq!(be16(cmap, sub + 10), Some(k as u16), "cmap entrySelector");
+            assert_eq!(
+                be16(cmap, sub + 12),
+                Some((2 * segs - (2 << k)) as u16),
+                "cmap rangeShift"
+            );
+        }
+    }
 }

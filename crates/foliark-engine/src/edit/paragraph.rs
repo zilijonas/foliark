@@ -447,6 +447,8 @@ impl Document {
             color: style.color,
             bold: style.flags.bold,
             italic: style.flags.italic,
+            serif: style.flags.serif,
+            mono: style.flags.mono,
             mixed_style: mixed,
             wrap_width: wrap_right - x0,
             max_height: bottom_limit - top,

@@ -513,6 +513,8 @@ pub struct ParagraphInfo {
     pub color: [f64; 3],
     pub bold: bool,
     pub italic: bool,
+    pub serif: bool,
+    pub mono: bool,
     pub mixed_style: bool,
     pub wrap_width: f64,
     pub max_height: f64,

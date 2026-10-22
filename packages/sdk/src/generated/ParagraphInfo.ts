@@ -3,4 +3,4 @@ import type { EditorFace } from "./EditorFace";
 import type { FontResolution } from "./FontResolution";
 import type { Rect } from "./Rect";
 
-export type ParagraphInfo = { docId: string, revision: number, pageIndex: number, bounds: Rect, originX: number, top: number, firstBaseline: number, fontSize: number, lineStep: number, color: [number, number, number], bold: boolean, italic: boolean, mixedStyle: boolean, wrapWidth: number, maxHeight: number, maxLines: number, originalText: string | null, font: FontResolution, editorFace?: EditorFace | null, };
+export type ParagraphInfo = { docId: string, revision: number, pageIndex: number, bounds: Rect, originX: number, top: number, firstBaseline: number, fontSize: number, lineStep: number, color: [number, number, number], bold: boolean, italic: boolean, serif: boolean, mono: boolean, mixedStyle: boolean, wrapWidth: number, maxHeight: number, maxLines: number, originalText: string | null, font: FontResolution, editorFace?: EditorFace | null, };
