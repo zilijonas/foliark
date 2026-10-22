@@ -11,6 +11,7 @@ use crate::interpret::state::{TextStateFont, handle_gs};
 use crate::interpret::text::TextRenderingMode;
 use crate::pattern::{Pattern, ShadingPattern};
 use crate::shading::Shading;
+use crate::types::ReducedImageCache;
 use crate::util::{OptionLog, RectExt};
 use crate::x_object::{FormXObject, ImageXObject, XObject};
 use hayro_syntax::content::TypedIter;
@@ -121,6 +122,17 @@ pub struct InterpreterSettings {
     /// and the caller must discard it. A caller that needs cancellation or a work budget keeps
     /// its own flag and answers from it.
     pub should_stop: Option<StopFn>,
+    /// Decode an image no larger than it is drawn: when the renderer's target size is at least
+    /// 1.2 times smaller than the image on an axis, the decoded samples are area-averaged down to
+    /// one pixel under the target (so the renderer does not resample again) and the scale
+    /// factors grow to match. Images with an alpha channel or mask are left alone. Default
+    /// `false`: the image is decoded at full size and the renderer resamples it. Exact consumers
+    /// (redaction, export of pixels) must leave this off.
+    pub reduce_images: bool,
+    /// With `reduce_images`: keeps reduced decodes of image objects between interpretations
+    /// (see [`ReducedImageCache`]); an image is then reduced only from its second draw on.
+    /// Default `None`: every draw reduces.
+    pub reduced_image_cache: Option<Arc<dyn ReducedImageCache>>,
 }
 
 impl Default for InterpreterSettings {
@@ -144,6 +156,8 @@ impl Default for InterpreterSettings {
             report_font_substitution: false,
             max_image_pixels: u64::MAX,
             should_stop: None,
+            reduce_images: false,
+            reduced_image_cache: None,
         }
     }
 }

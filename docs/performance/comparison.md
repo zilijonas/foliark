@@ -78,3 +78,46 @@ Selected by the data above, not by guess. Before/after on the same bench (`tools
 6. Tried and dropped: opt-level 3 for `miniz_oxide fdeflate png crc32fast adler2 simd-adler32` (flate decode and PNG encode): no measurable gain on export or raster export, cost size.
 
 Regressions run after the change: `cargo test --workspace --no-fail-fast` (359 passed, 0 failed, 1 ignored; includes `strict_native`), `pnpm --filter @foliark/sdk test` (78 passed), `tests/smoke/run.mjs` chromium and webkit (ok, hang watchdog ok), `tests/package-consumers/run.sh` (6 builds ok).
+
+## NEW-81: scanned and image-heavy pages
+Data: `comparison.json` key `scans` (HDDN, SDK before, SDK after, fidelity). Fixtures: `tests/fixtures/generators/scans.py`, seven synthetic 300 dpi A4 scans, 3 pages each (baseline and progressive JPEG in RGB and gray, JBIG2 generic region, CCITT G4, Flate gray), byte-identical for both engines. Chromium 151, Apple M4, medians over 15 pages (HDDN) / 15 renders (SDK).
+
+**Why the earlier HDDN numbers were wrong.** The 5 `GET_PAGE_PREVIEW` errors on `image-heavy-6p` (and on every scanned page) were not a size limit or a timeout: HDDN puts a scanned page in its OCR lane and `COMMIT_IMPORT` throws `incomplete-ocr` until OCR has run, so no document was committed and the preview failed with `errors.unknown`. The harness now commits with `allowIncompleteOcr: true` (OCR itself is not measured). With that HDDN renders all seven fixtures without error, and the old "SDK 109 ms vs HDDN 6 ms" compared against a failed call. HDDN `LOAD_PDF` takes about 12 s for a 3-page scan (OCR-lane classification); not compared here.
+
+**What was measured first.** Native profile (macOS `sample`, symbolicated build): the downscale (pic-scale vertical pass, scalar in hayro without its `simd` feature) is 45% to 65% of a scanned page, then inflate (Flate) or JPEG entropy decoding. zune-jpeg full decode is 8 ms (baseline gray) to 26 ms (progressive RGB) for 8.7 Mpx. Scaled IDCT does not pay: zune-jpeg has no scaled output, and `jpeg-decoder`'s `scale()` (scratch bench) is slower than zune's full decode at every scale (baseline gray 10.6 ms at 1/2 vs 8.3 ms full; progressive RGB 42.9 vs 26.2), because entropy decoding dominates and cannot be skipped. The scale needed here is 1/3 (preview) or 1/1.4 (OCR), which scaled IDCT (1/2, 1/4, 1/8) could not use fully anyway.
+
+**What was implemented (fork patch P17, `patches/hayro/README.md`).**
+1. `InterpreterSettings::reduce_images`: the decoded gray or RGB samples are resampled once, with the renderer's own Hermite filter, to the drawn size (hayro's `target_dimension`), so the renderer does not resample again. Pixels match the full-size path (max channel difference 1, mean 0.00 to 0.13 at both scales); PyMuPDF differs from both by the same 0.02 to 3.1 mean. Images with alpha, masks, a transfer function or a decode that already changed size are left alone.
+2. `InterpreterSettings::reduced_image_cache` and the engine's `ImageStore` (one per document, byte-bounded by the session cache budget, LRU): the reduced decode is kept per (object, reduced size, stencil). An image is only reduced from its second draw on (`ReducedImageCache::seen`), so a page drawn once, such as the OCR render, pays nothing.
+3. `Document::render_page` (preview, SDK) uses both. `render_page_exact` (raster export burn-in, `export/raster_pixels.rs`) and `RasterImage::from_stream` (redaction pixel erasure) never reduce. Tests: `tests/render_images.rs` (first draw identical to exact, second within 2 levels and stored, third identical to second, native-size draw untouched) plus the existing raster and image redaction suites.
+4. `opt-level = 3` for `hayro-interpret`, `hayro-jbig2`, `hayro-ccitt` (the reducer and the bilevel decoders run in wasm). wasm 5,566,051 B raw, 2,125,861 B gzip -9 (was 5,359,831 / 2,050,728: +3.9% / +3.7%).
+
+Not done: a 1-bit-domain resample for CCITT and JBIG2 (the gray-domain reducer already beats HDDN 4.2x and 1.4x at 1.35), and a faster first draw. In wasm the reducer is not faster than pic-scale's SIMD fixed-point path, so the second draw costs 3 to 9 ms more than a plain draw, once, in exchange for 5x to 30x on every later draw of the same page and scale.
+
+
+#### Scale 1.35, ms per page, median, chromium 151.0.7922.34
+
+| fixture | HDDN (PyMuPDF + PNG) | SDK before | SDK after, 1st render | SDK after, 2nd | SDK after, 3rd and later | 1st vs HDDN |
+|---|---|---|---|---|---|---|
+| jpeg-baseline-rgb | 73.7 | 40.5 | 41.8 | 48.9 | 2.2 | 1.8x faster |
+| jpeg-baseline-gray | 66.7 | 17.8 | 18.2 | 21.1 | 1.5 | 3.7x faster |
+| jpeg-progressive-rgb | 76 | 80.3 | 82.5 | 91 | 2.1 | 0.9x faster |
+| jpeg-progressive-gray | 64.6 | 50.7 | 51.3 | 54.3 | 1.3 | 1.3x faster |
+| jbig2 | 29.3 | 21.6 | 21.4 | 24.2 | 1.3 | 1.4x faster |
+| ccitt-g4 | 28.4 | 6.7 | 6.7 | 9.6 | 1.2 | 4.2x faster |
+| flate-gray | 94.4 | 16.8 | 16.7 | 19.5 | 1.2 | 5.7x faster |
+
+#### Scale 3 (HDDN OCR scale), ms per page, median, chromium 151.0.7922.34
+
+| fixture | HDDN (PyMuPDF + PNG) | SDK before | SDK after, 1st render | SDK after, 2nd | SDK after, 3rd and later | 1st vs HDDN |
+|---|---|---|---|---|---|---|
+| jpeg-baseline-rgb | 245.1 | 54.7 | 57.4 | 77.5 | 10.3 | 4.3x faster |
+| jpeg-baseline-gray | 253.9 | 27.2 | 27.7 | 33.3 | 6.4 | 9.2x faster |
+| jpeg-progressive-rgb | 254 | 94.1 | 97.8 | 118 | 10.2 | 2.6x faster |
+| jpeg-progressive-gray | 246.2 | 59.9 | 61.3 | 66.8 | 6.1 | 4.0x faster |
+| jbig2 | 90.8 | 31 | 30.9 | 37 | 6.1 | 2.9x faster |
+| ccitt-g4 | 88.4 | 16.1 | 16.4 | 22.4 | 6.3 | 5.4x faster |
+| flate-gray | 571 | 26.3 | 26.4 | 32.5 | 6.1 | 21.6x faster |
+
+
+Reading it: the first render is unchanged (within noise, by design). The SDK is faster than HDDN on every fixture and scale except progressive RGB at scale 1.35 (82.5 vs 76 ms, 0.9x: zune-jpeg progressive entropy decoding, not addressable here). A re-render (3rd and later draw) takes 1.2 to 2.2 ms at 1.35 and 6 to 10 ms at the OCR scale. The store holds 16 MiB per document by default, so only the most recent pages and scales stay (one RGB page at scale 3 is 13.5 MB).

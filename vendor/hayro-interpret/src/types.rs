@@ -4,7 +4,7 @@ use crate::pattern::Pattern;
 use crate::util::hash128;
 use crate::x_object::ImageXObject;
 use crate::x_object::soft_mask::SoftMask;
-use hayro_syntax::object::Stream;
+use hayro_syntax::object::{ObjectIdentifier, Stream};
 use kurbo::{Affine, BezPath, Cap, Join};
 use smallvec::{SmallVec, smallvec};
 
@@ -424,4 +424,33 @@ pub enum BlendMode {
     Color,
     /// Luminosity blend mode.
     Luminosity,
+}
+
+/// Names one reduced decode of an image object: [`InterpreterSettings::reduce_images`] shrank it to
+/// `width` x `height` (`stencil`: it was drawn as an image mask).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct ReducedImageKey {
+    /// The image XObject.
+    pub object: ObjectIdentifier,
+    /// Reduced width.
+    pub width: u32,
+    /// Reduced height.
+    pub height: u32,
+    /// Whether the image is a stencil mask.
+    pub stencil: bool,
+}
+
+/// Keeps reduced image decodes between interpretations of the same file, so drawing an image at
+/// the same size again skips its decode. Only images that are indirect objects, have no alpha
+/// channel and are not changed by a transfer function are asked for. The cache decides what to
+/// keep (and how much); a decode of an object is only valid for the file it came from.
+pub trait ReducedImageCache: Send + Sync {
+    /// The stored decode for `key`, if any.
+    fn get(&self, key: &ReducedImageKey) -> Option<ImageData>;
+    /// Record that `key` is being drawn and report whether it was drawn before. The first time
+    /// the image is decoded at full size and left to the renderer (a page drawn once pays nothing
+    /// extra); from the second time it is reduced and offered to [`Self::insert`].
+    fn seen(&self, key: &ReducedImageKey) -> bool;
+    /// Offer a decode; the cache may drop it.
+    fn insert(&self, key: ReducedImageKey, image: &ImageData);
 }

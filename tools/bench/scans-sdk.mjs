@@ -1,6 +1,6 @@
 // SDK renders of the synthetic scans (NEW-81): node tools/bench/scans-sdk.mjs [--browser chromium|webkit] [--out FILE]
-// Per scan fixture and scale: renderPage right after open (empty image store, so decode + resample) and the repeat render of
-// the same page (what a re-render after an edit or a preview refresh costs). Uses the prebuilt packages/sdk/{dist,wasm}.
+// Per scan fixture and scale: renderPage right after open (first draw), the second and the third render of the same page
+// (the third is what a re-render after an edit or a preview refresh costs once the decode is kept). Uses the prebuilt packages/sdk/{dist,wasm}.
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -23,15 +23,21 @@ export async function runSdkScans({ browserName = "chromium", scales = [1.35, 3]
     await page.evaluate(() => initSdk());
     for (const f of fixtures) {
       const b64 = f.buf.toString("base64");
-      const first = Object.fromEntries(scales.map((s) => [s, []])), repeat = Object.fromEntries(scales.map((s) => [s, []]));
+      const first = Object.fromEntries(scales.map((s) => [s, []])), second = Object.fromEntries(scales.map((s) => [s, []])), repeat = Object.fromEntries(scales.map((s) => [s, []]));
       for (let i = 0; i < rounds; i++) {
         const { pages } = await page.evaluate((b) => sdkOpen(b), b64);
-        for (let p = 0; p < pages; p++) for (const s of scales) first[s].push((await page.evaluate(({ p, s }) => sdkRender(p, s), { p, s })).ms);
-        for (let p = 0; p < pages; p++) for (const s of scales) repeat[s].push((await page.evaluate(({ p, s }) => sdkRender(p, s), { p, s })).ms);
+        // the repeat follows its first render at once: the per-document image store is bounded (16 MiB), so a pass over every page
+        // and scale first would measure eviction, not the re-render of one page
+        for (let p = 0; p < pages; p++) for (const s of scales) {
+          first[s].push((await page.evaluate(({ p, s }) => sdkRender(p, s), { p, s })).ms);
+          second[s].push((await page.evaluate(({ p, s }) => sdkRender(p, s), { p, s })).ms);
+          repeat[s].push((await page.evaluate(({ p, s }) => sdkRender(p, s), { p, s })).ms);
+        }
         await page.evaluate(() => sdkClose());
       }
       for (const s of scales) {
         measurements.push({ op: `renderPage@${s} first after open`, input: f.id, ...stat1(first[s]), pages: f.pages });
+        measurements.push({ op: `renderPage@${s} second`, input: f.id, ...stat1(second[s]), pages: f.pages });
         measurements.push({ op: `renderPage@${s} repeat`, input: f.id, ...stat1(repeat[s]), pages: f.pages });
       }
     }

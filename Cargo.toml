@@ -52,3 +52,10 @@ opt-level = 3
 opt-level = 3
 [profile.release.package.pic-scale]
 opt-level = 3
+# Scanned pages (NEW-81): the reduced-decode resampler lives in hayro-interpret; its image loops and the bilevel decoders run in wasm
+[profile.release.package.hayro-interpret]
+opt-level = 3
+[profile.release.package.hayro-jbig2]
+opt-level = 3
+[profile.release.package.hayro-ccitt]
+opt-level = 3

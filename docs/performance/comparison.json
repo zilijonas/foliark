@@ -2530,5 +2530,1135 @@
   "ms = median of n, p95 over the same samples; localhost, headless, identity encoding (wire bytes = file bytes)",
   "hddn and sdk inputs are byte-identical files (sha256 in inputs)",
   "unavailable lists what could not be measured and why"
- ]
+ ],
+ "scans": {
+  "kind": "scanned-page render, NEW-81",
+  "createdAt": "2026-10-22T09:04:33.653Z",
+  "machine": {
+   "cpu": "Apple M4",
+   "cores": 10,
+   "ramGB": 24,
+   "macOS": "26.6.2",
+   "arch": "arm64",
+   "loadAvg1mAtStart": 3.9
+  },
+  "fixtures": "tests/fixtures/generators/scans.py (3 pages each, 2480x3508 px, 300 dpi A4, synthetic); sha256 in sdkAfter.inputs",
+  "hddn": {
+   "engine": "hddn@2fe0f9a",
+   "browser": "chromium 151.0.7922.34",
+   "inputs": [
+    {
+     "id": "scan-jpeg-baseline-rgb",
+     "sha256": "879abdb67f1632da6051b948cbf4a6b391eb21130e1036181d4dad7e1be427fc",
+     "pages": 3,
+     "bytes": 2843762,
+     "origin": "tests/fixtures/generators/scans.py (Pillow, synthetic)"
+    },
+    {
+     "id": "scan-jpeg-baseline-gray",
+     "sha256": "5271d648731a13d3733224cf5acc983f8a4a9b6b1db699d290749ad5a0d8ee26",
+     "pages": 3,
+     "bytes": 2729588,
+     "origin": "tests/fixtures/generators/scans.py (Pillow, synthetic)"
+    },
+    {
+     "id": "scan-jpeg-progressive-rgb",
+     "sha256": "d9304ebd412d28e89c39f91124ca1f499e2d3b951c019a17f03ee1536364b578",
+     "pages": 3,
+     "bytes": 2452992,
+     "origin": "tests/fixtures/generators/scans.py (Pillow, synthetic)"
+    },
+    {
+     "id": "scan-jpeg-progressive-gray",
+     "sha256": "25b93c13449d6cb5332aa0447a01cb623c4bc4eb4794e614062729274290eccd",
+     "pages": 3,
+     "bytes": 2437172,
+     "origin": "tests/fixtures/generators/scans.py (Pillow, synthetic)"
+    },
+    {
+     "id": "scan-jbig2",
+     "sha256": "794020ab57067070f9b3378bbc777b70138f0c47548825f82b45ccd605f5bd71",
+     "pages": 3,
+     "bytes": 139170,
+     "origin": "tests/fixtures/generators/scans.py (Pillow, synthetic)"
+    },
+    {
+     "id": "scan-ccitt-g4",
+     "sha256": "9f0da9432fb1cf41410e959fd48a19e8447552cd3bb8ac71111861138d90d8c5",
+     "pages": 3,
+     "bytes": 205176,
+     "origin": "tests/fixtures/generators/scans.py (Pillow, synthetic)"
+    },
+    {
+     "id": "scan-flate-gray",
+     "sha256": "50a514ccdf3a195dab51b8b249f29b973501e8ae545e60a8e9ed2fc2c18fd9a1",
+     "pages": 3,
+     "bytes": 7910192,
+     "origin": "tests/fixtures/generators/scans.py (Pillow, synthetic)"
+    }
+   ],
+   "measurements": [
+    {
+     "op": "LOAD_PDF",
+     "input": "scan-jpeg-baseline-rgb",
+     "run": "warm",
+     "ms": 12394.9,
+     "p95": 12681,
+     "n": 5,
+     "pages": 3
+    },
+    {
+     "op": "GET_PAGE_PREVIEW@1.35",
+     "input": "scan-jpeg-baseline-rgb",
+     "run": "warm",
+     "ms": 73.7,
+     "p95": 92.8,
+     "n": 15,
+     "pages": 3,
+     "perPageMedianMs": [
+      74.1,
+      73.7,
+      65.9
+     ]
+    },
+    {
+     "op": "GET_PAGE_PREVIEW@3",
+     "input": "scan-jpeg-baseline-rgb",
+     "run": "warm",
+     "ms": 245.1,
+     "p95": 309.4,
+     "n": 15,
+     "pages": 3,
+     "perPageMedianMs": [
+      244.7,
+      245.4,
+      243.9
+     ]
+    },
+    {
+     "op": "LOAD_PDF",
+     "input": "scan-jpeg-baseline-gray",
+     "run": "warm",
+     "ms": 12280.5,
+     "p95": 12323.7,
+     "n": 5,
+     "pages": 3
+    },
+    {
+     "op": "GET_PAGE_PREVIEW@1.35",
+     "input": "scan-jpeg-baseline-gray",
+     "run": "warm",
+     "ms": 66.7,
+     "p95": 76.7,
+     "n": 15,
+     "pages": 3,
+     "perPageMedianMs": [
+      66.7,
+      67,
+      64.6
+     ]
+    },
+    {
+     "op": "GET_PAGE_PREVIEW@3",
+     "input": "scan-jpeg-baseline-gray",
+     "run": "warm",
+     "ms": 253.9,
+     "p95": 277.3,
+     "n": 15,
+     "pages": 3,
+     "perPageMedianMs": [
+      254,
+      253.9,
+      250.2
+     ]
+    },
+    {
+     "op": "LOAD_PDF",
+     "input": "scan-jpeg-progressive-rgb",
+     "run": "warm",
+     "ms": 12466.8,
+     "p95": 12567.1,
+     "n": 5,
+     "pages": 3
+    },
+    {
+     "op": "GET_PAGE_PREVIEW@1.35",
+     "input": "scan-jpeg-progressive-rgb",
+     "run": "warm",
+     "ms": 76,
+     "p95": 116.7,
+     "n": 15,
+     "pages": 3,
+     "perPageMedianMs": [
+      75.9,
+      76.2,
+      68.5
+     ]
+    },
+    {
+     "op": "GET_PAGE_PREVIEW@3",
+     "input": "scan-jpeg-progressive-rgb",
+     "run": "warm",
+     "ms": 254,
+     "p95": 343.3,
+     "n": 15,
+     "pages": 3,
+     "perPageMedianMs": [
+      256.1,
+      253,
+      253.3
+     ]
+    },
+    {
+     "op": "LOAD_PDF",
+     "input": "scan-jpeg-progressive-gray",
+     "run": "warm",
+     "ms": 12345.2,
+     "p95": 12389.8,
+     "n": 5,
+     "pages": 3
+    },
+    {
+     "op": "GET_PAGE_PREVIEW@1.35",
+     "input": "scan-jpeg-progressive-gray",
+     "run": "warm",
+     "ms": 64.6,
+     "p95": 97,
+     "n": 15,
+     "pages": 3,
+     "perPageMedianMs": [
+      65,
+      64.7,
+      62.5
+     ]
+    },
+    {
+     "op": "GET_PAGE_PREVIEW@3",
+     "input": "scan-jpeg-progressive-gray",
+     "run": "warm",
+     "ms": 246.2,
+     "p95": 287.5,
+     "n": 15,
+     "pages": 3,
+     "perPageMedianMs": [
+      247.4,
+      245.1,
+      244.3
+     ]
+    },
+    {
+     "op": "LOAD_PDF",
+     "input": "scan-jbig2",
+     "run": "warm",
+     "ms": 11797.9,
+     "p95": 11863.2,
+     "n": 5,
+     "pages": 3
+    },
+    {
+     "op": "GET_PAGE_PREVIEW@1.35",
+     "input": "scan-jbig2",
+     "run": "warm",
+     "ms": 29.3,
+     "p95": 51.6,
+     "n": 15,
+     "pages": 3,
+     "perPageMedianMs": [
+      29.3,
+      29.3,
+      23.7
+     ]
+    },
+    {
+     "op": "GET_PAGE_PREVIEW@3",
+     "input": "scan-jbig2",
+     "run": "warm",
+     "ms": 90.8,
+     "p95": 110,
+     "n": 15,
+     "pages": 3,
+     "perPageMedianMs": [
+      91.3,
+      90.8,
+      90.7
+     ]
+    },
+    {
+     "op": "LOAD_PDF",
+     "input": "scan-ccitt-g4",
+     "run": "warm",
+     "ms": 11773.4,
+     "p95": 11825.5,
+     "n": 5,
+     "pages": 3
+    },
+    {
+     "op": "GET_PAGE_PREVIEW@1.35",
+     "input": "scan-ccitt-g4",
+     "run": "warm",
+     "ms": 28.4,
+     "p95": 39.1,
+     "n": 15,
+     "pages": 3,
+     "perPageMedianMs": [
+      28.6,
+      28.4,
+      23.3
+     ]
+    },
+    {
+     "op": "GET_PAGE_PREVIEW@3",
+     "input": "scan-ccitt-g4",
+     "run": "warm",
+     "ms": 88.4,
+     "p95": 97.8,
+     "n": 15,
+     "pages": 3,
+     "perPageMedianMs": [
+      87.9,
+      88.4,
+      88.7
+     ]
+    },
+    {
+     "op": "LOAD_PDF",
+     "input": "scan-flate-gray",
+     "run": "warm",
+     "ms": 13917.9,
+     "p95": 13973,
+     "n": 5,
+     "pages": 3
+    },
+    {
+     "op": "GET_PAGE_PREVIEW@1.35",
+     "input": "scan-flate-gray",
+     "run": "warm",
+     "ms": 94.4,
+     "p95": 114.8,
+     "n": 15,
+     "pages": 3,
+     "perPageMedianMs": [
+      96.5,
+      95.8,
+      83.6
+     ]
+    },
+    {
+     "op": "GET_PAGE_PREVIEW@3",
+     "input": "scan-flate-gray",
+     "run": "warm",
+     "ms": 571,
+     "p95": 590.7,
+     "n": 15,
+     "pages": 3,
+     "perPageMedianMs": [
+      569.8,
+      571,
+      582.6
+     ]
+    }
+   ],
+   "unavailable": []
+  },
+  "sdkBefore": {
+   "engine": "foliark@811b9ce",
+   "browser": "chromium 151.0.7922.34",
+   "wasmSha256": "f08423f6dd7b726222e2640f9ea76a4babdf88e0d9ceb71c84b227767a34def4",
+   "wasmBytes": 5395165,
+   "inputs": [
+    {
+     "id": "scan-jpeg-baseline-rgb",
+     "sha256": "879abdb67f1632da6051b948cbf4a6b391eb21130e1036181d4dad7e1be427fc",
+     "pages": 3,
+     "bytes": 2843762
+    },
+    {
+     "id": "scan-jpeg-baseline-gray",
+     "sha256": "5271d648731a13d3733224cf5acc983f8a4a9b6b1db699d290749ad5a0d8ee26",
+     "pages": 3,
+     "bytes": 2729588
+    },
+    {
+     "id": "scan-jpeg-progressive-rgb",
+     "sha256": "d9304ebd412d28e89c39f91124ca1f499e2d3b951c019a17f03ee1536364b578",
+     "pages": 3,
+     "bytes": 2452992
+    },
+    {
+     "id": "scan-jpeg-progressive-gray",
+     "sha256": "25b93c13449d6cb5332aa0447a01cb623c4bc4eb4794e614062729274290eccd",
+     "pages": 3,
+     "bytes": 2437172
+    },
+    {
+     "id": "scan-jbig2",
+     "sha256": "794020ab57067070f9b3378bbc777b70138f0c47548825f82b45ccd605f5bd71",
+     "pages": 3,
+     "bytes": 139170
+    },
+    {
+     "id": "scan-ccitt-g4",
+     "sha256": "9f0da9432fb1cf41410e959fd48a19e8447552cd3bb8ac71111861138d90d8c5",
+     "pages": 3,
+     "bytes": 205176
+    },
+    {
+     "id": "scan-flate-gray",
+     "sha256": "50a514ccdf3a195dab51b8b249f29b973501e8ae545e60a8e9ed2fc2c18fd9a1",
+     "pages": 3,
+     "bytes": 7910192
+    }
+   ],
+   "measurements": [
+    {
+     "op": "renderPage@1.35 first after open",
+     "input": "scan-jpeg-baseline-rgb",
+     "ms": 40.5,
+     "p95": 64.7,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@1.35 repeat",
+     "input": "scan-jpeg-baseline-rgb",
+     "ms": 41,
+     "p95": 44.1,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@3 first after open",
+     "input": "scan-jpeg-baseline-rgb",
+     "ms": 54.7,
+     "p95": 59.3,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@3 repeat",
+     "input": "scan-jpeg-baseline-rgb",
+     "ms": 54.7,
+     "p95": 64.3,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@1.35 first after open",
+     "input": "scan-jpeg-baseline-gray",
+     "ms": 17.8,
+     "p95": 18.5,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@1.35 repeat",
+     "input": "scan-jpeg-baseline-gray",
+     "ms": 17.5,
+     "p95": 18.5,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@3 first after open",
+     "input": "scan-jpeg-baseline-gray",
+     "ms": 27.2,
+     "p95": 29.7,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@3 repeat",
+     "input": "scan-jpeg-baseline-gray",
+     "ms": 27.1,
+     "p95": 28,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@1.35 first after open",
+     "input": "scan-jpeg-progressive-rgb",
+     "ms": 80.3,
+     "p95": 93.5,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@1.35 repeat",
+     "input": "scan-jpeg-progressive-rgb",
+     "ms": 79.9,
+     "p95": 92.5,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@3 first after open",
+     "input": "scan-jpeg-progressive-rgb",
+     "ms": 94.1,
+     "p95": 99.8,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@3 repeat",
+     "input": "scan-jpeg-progressive-rgb",
+     "ms": 94.4,
+     "p95": 108.4,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@1.35 first after open",
+     "input": "scan-jpeg-progressive-gray",
+     "ms": 50.7,
+     "p95": 58.5,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@1.35 repeat",
+     "input": "scan-jpeg-progressive-gray",
+     "ms": 50.5,
+     "p95": 58,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@3 first after open",
+     "input": "scan-jpeg-progressive-gray",
+     "ms": 59.9,
+     "p95": 68.5,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@3 repeat",
+     "input": "scan-jpeg-progressive-gray",
+     "ms": 59.9,
+     "p95": 62.6,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@1.35 first after open",
+     "input": "scan-jbig2",
+     "ms": 21.6,
+     "p95": 35.8,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@1.35 repeat",
+     "input": "scan-jbig2",
+     "ms": 21.5,
+     "p95": 22.4,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@3 first after open",
+     "input": "scan-jbig2",
+     "ms": 31,
+     "p95": 33,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@3 repeat",
+     "input": "scan-jbig2",
+     "ms": 31.1,
+     "p95": 32.5,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@1.35 first after open",
+     "input": "scan-ccitt-g4",
+     "ms": 6.7,
+     "p95": 9.5,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@1.35 repeat",
+     "input": "scan-ccitt-g4",
+     "ms": 6.5,
+     "p95": 6.9,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@3 first after open",
+     "input": "scan-ccitt-g4",
+     "ms": 16.1,
+     "p95": 17,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@3 repeat",
+     "input": "scan-ccitt-g4",
+     "ms": 16.1,
+     "p95": 16.6,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@1.35 first after open",
+     "input": "scan-flate-gray",
+     "ms": 16.8,
+     "p95": 17.1,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@1.35 repeat",
+     "input": "scan-flate-gray",
+     "ms": 16.5,
+     "p95": 17.3,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@3 first after open",
+     "input": "scan-flate-gray",
+     "ms": 26.3,
+     "p95": 27.1,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@3 repeat",
+     "input": "scan-flate-gray",
+     "ms": 26.5,
+     "p95": 27.3,
+     "n": 15,
+     "pages": 3
+    }
+   ]
+  },
+  "sdkAfter": {
+   "engine": "foliark@811b9ce",
+   "browser": "chromium 151.0.7922.34",
+   "wasmSha256": "9d3e0426da2f4ca122428921e7e193099e51bd1153cabb42dd3889bac1ff8ae5",
+   "wasmBytes": 5567809,
+   "inputs": [
+    {
+     "id": "scan-jpeg-baseline-rgb",
+     "sha256": "879abdb67f1632da6051b948cbf4a6b391eb21130e1036181d4dad7e1be427fc",
+     "pages": 3,
+     "bytes": 2843762
+    },
+    {
+     "id": "scan-jpeg-baseline-gray",
+     "sha256": "5271d648731a13d3733224cf5acc983f8a4a9b6b1db699d290749ad5a0d8ee26",
+     "pages": 3,
+     "bytes": 2729588
+    },
+    {
+     "id": "scan-jpeg-progressive-rgb",
+     "sha256": "d9304ebd412d28e89c39f91124ca1f499e2d3b951c019a17f03ee1536364b578",
+     "pages": 3,
+     "bytes": 2452992
+    },
+    {
+     "id": "scan-jpeg-progressive-gray",
+     "sha256": "25b93c13449d6cb5332aa0447a01cb623c4bc4eb4794e614062729274290eccd",
+     "pages": 3,
+     "bytes": 2437172
+    },
+    {
+     "id": "scan-jbig2",
+     "sha256": "794020ab57067070f9b3378bbc777b70138f0c47548825f82b45ccd605f5bd71",
+     "pages": 3,
+     "bytes": 139170
+    },
+    {
+     "id": "scan-ccitt-g4",
+     "sha256": "9f0da9432fb1cf41410e959fd48a19e8447552cd3bb8ac71111861138d90d8c5",
+     "pages": 3,
+     "bytes": 205176
+    },
+    {
+     "id": "scan-flate-gray",
+     "sha256": "50a514ccdf3a195dab51b8b249f29b973501e8ae545e60a8e9ed2fc2c18fd9a1",
+     "pages": 3,
+     "bytes": 7910192
+    }
+   ],
+   "measurements": [
+    {
+     "op": "renderPage@1.35 first after open",
+     "input": "scan-jpeg-baseline-rgb",
+     "ms": 41.8,
+     "p95": 57.4,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@1.35 second",
+     "input": "scan-jpeg-baseline-rgb",
+     "ms": 48.9,
+     "p95": 81.7,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@1.35 repeat",
+     "input": "scan-jpeg-baseline-rgb",
+     "ms": 2.2,
+     "p95": 3.2,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@3 first after open",
+     "input": "scan-jpeg-baseline-rgb",
+     "ms": 57.4,
+     "p95": 62.9,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@3 second",
+     "input": "scan-jpeg-baseline-rgb",
+     "ms": 77.5,
+     "p95": 85.5,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@3 repeat",
+     "input": "scan-jpeg-baseline-rgb",
+     "ms": 10.3,
+     "p95": 14.1,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@1.35 first after open",
+     "input": "scan-jpeg-baseline-gray",
+     "ms": 18.2,
+     "p95": 20.4,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@1.35 second",
+     "input": "scan-jpeg-baseline-gray",
+     "ms": 21.1,
+     "p95": 23.2,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@1.35 repeat",
+     "input": "scan-jpeg-baseline-gray",
+     "ms": 1.5,
+     "p95": 1.7,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@3 first after open",
+     "input": "scan-jpeg-baseline-gray",
+     "ms": 27.7,
+     "p95": 31.5,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@3 second",
+     "input": "scan-jpeg-baseline-gray",
+     "ms": 33.3,
+     "p95": 35.3,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@3 repeat",
+     "input": "scan-jpeg-baseline-gray",
+     "ms": 6.4,
+     "p95": 7.2,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@1.35 first after open",
+     "input": "scan-jpeg-progressive-rgb",
+     "ms": 82.5,
+     "p95": 94.7,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@1.35 second",
+     "input": "scan-jpeg-progressive-rgb",
+     "ms": 91,
+     "p95": 98.4,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@1.35 repeat",
+     "input": "scan-jpeg-progressive-rgb",
+     "ms": 2.1,
+     "p95": 2.5,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@3 first after open",
+     "input": "scan-jpeg-progressive-rgb",
+     "ms": 97.8,
+     "p95": 105.7,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@3 second",
+     "input": "scan-jpeg-progressive-rgb",
+     "ms": 118,
+     "p95": 124.7,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@3 repeat",
+     "input": "scan-jpeg-progressive-rgb",
+     "ms": 10.2,
+     "p95": 10.9,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@1.35 first after open",
+     "input": "scan-jpeg-progressive-gray",
+     "ms": 51.3,
+     "p95": 55,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@1.35 second",
+     "input": "scan-jpeg-progressive-gray",
+     "ms": 54.3,
+     "p95": 59.1,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@1.35 repeat",
+     "input": "scan-jpeg-progressive-gray",
+     "ms": 1.3,
+     "p95": 1.4,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@3 first after open",
+     "input": "scan-jpeg-progressive-gray",
+     "ms": 61.3,
+     "p95": 62.3,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@3 second",
+     "input": "scan-jpeg-progressive-gray",
+     "ms": 66.8,
+     "p95": 69,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@3 repeat",
+     "input": "scan-jpeg-progressive-gray",
+     "ms": 6.1,
+     "p95": 6.4,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@1.35 first after open",
+     "input": "scan-jbig2",
+     "ms": 21.4,
+     "p95": 36.3,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@1.35 second",
+     "input": "scan-jbig2",
+     "ms": 24.2,
+     "p95": 24.9,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@1.35 repeat",
+     "input": "scan-jbig2",
+     "ms": 1.3,
+     "p95": 1.6,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@3 first after open",
+     "input": "scan-jbig2",
+     "ms": 30.9,
+     "p95": 32.7,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@3 second",
+     "input": "scan-jbig2",
+     "ms": 37,
+     "p95": 37.9,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@3 repeat",
+     "input": "scan-jbig2",
+     "ms": 6.1,
+     "p95": 6.4,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@1.35 first after open",
+     "input": "scan-ccitt-g4",
+     "ms": 6.7,
+     "p95": 9.3,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@1.35 second",
+     "input": "scan-ccitt-g4",
+     "ms": 9.6,
+     "p95": 10.1,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@1.35 repeat",
+     "input": "scan-ccitt-g4",
+     "ms": 1.2,
+     "p95": 1.4,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@3 first after open",
+     "input": "scan-ccitt-g4",
+     "ms": 16.4,
+     "p95": 16.8,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@3 second",
+     "input": "scan-ccitt-g4",
+     "ms": 22.4,
+     "p95": 23.1,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@3 repeat",
+     "input": "scan-ccitt-g4",
+     "ms": 6.3,
+     "p95": 6.6,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@1.35 first after open",
+     "input": "scan-flate-gray",
+     "ms": 16.7,
+     "p95": 18.1,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@1.35 second",
+     "input": "scan-flate-gray",
+     "ms": 19.5,
+     "p95": 21,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@1.35 repeat",
+     "input": "scan-flate-gray",
+     "ms": 1.2,
+     "p95": 1.9,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@3 first after open",
+     "input": "scan-flate-gray",
+     "ms": 26.4,
+     "p95": 35.3,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@3 second",
+     "input": "scan-flate-gray",
+     "ms": 32.5,
+     "p95": 35.3,
+     "n": 15,
+     "pages": 3
+    },
+    {
+     "op": "renderPage@3 repeat",
+     "input": "scan-flate-gray",
+     "ms": 6.1,
+     "p95": 7.4,
+     "n": 15,
+     "pages": 3
+    }
+   ]
+  },
+  "fidelity": {
+   "note": "native aarch64 scan_bench; pixel diff reduced (3rd draw) vs exact full-size path, 0..255 per channel. PyMuPDF (fitz gray, same scale): exact and reduced have identical mean abs diff to it (0.56 to 3.14 at 1.35, 0.02 to 0.19 at 3)",
+   "pages": {
+    "scan-ccitt-g4": {
+     "3": {
+      "nativeExactMs": 25.8,
+      "native1stMs": 25.7,
+      "native2ndMs": 22.8,
+      "native3rdMs": 7.2,
+      "reducedVsExactMeanAbs": 0,
+      "reducedVsExactMax": 1
+     },
+     "1.35": {
+      "nativeExactMs": 15.4,
+      "native1stMs": 15.5,
+      "native2ndMs": 11.7,
+      "native3rdMs": 1.4,
+      "reducedVsExactMeanAbs": 0.01,
+      "reducedVsExactMax": 1
+     }
+    },
+    "scan-flate-gray": {
+     "3": {
+      "nativeExactMs": 33.1,
+      "native1stMs": 33.2,
+      "native2ndMs": 30.3,
+      "native3rdMs": 7.2,
+      "reducedVsExactMeanAbs": 0.13,
+      "reducedVsExactMax": 1
+     },
+     "1.35": {
+      "nativeExactMs": 23,
+      "native1stMs": 23.1,
+      "native2ndMs": 18.9,
+      "native3rdMs": 1.3,
+      "reducedVsExactMeanAbs": 0.11,
+      "reducedVsExactMax": 1
+     }
+    },
+    "scan-jbig2": {
+     "3": {
+      "nativeExactMs": 37.7,
+      "native1stMs": 37.8,
+      "native2ndMs": 34.8,
+      "native3rdMs": 7.2,
+      "reducedVsExactMeanAbs": 0,
+      "reducedVsExactMax": 1
+     },
+     "1.35": {
+      "nativeExactMs": 27.3,
+      "native1stMs": 27.1,
+      "native2ndMs": 23.5,
+      "native3rdMs": 1.4,
+      "reducedVsExactMeanAbs": 0.01,
+      "reducedVsExactMax": 1
+     }
+    },
+    "scan-jpeg-baseline-gray": {
+     "3": {
+      "nativeExactMs": 34.1,
+      "native1stMs": 34.1,
+      "native2ndMs": 31.1,
+      "native3rdMs": 7.1,
+      "reducedVsExactMeanAbs": 0.03,
+      "reducedVsExactMax": 1
+     },
+     "1.35": {
+      "nativeExactMs": 24,
+      "native1stMs": 23.8,
+      "native2ndMs": 20.2,
+      "native3rdMs": 1.4,
+      "reducedVsExactMeanAbs": 0.03,
+      "reducedVsExactMax": 1
+     }
+    },
+    "scan-jpeg-baseline-rgb": {
+     "3": {
+      "nativeExactMs": 75.8,
+      "native1stMs": 75.7,
+      "native2ndMs": 63.1,
+      "native3rdMs": 12.1,
+      "reducedVsExactMeanAbs": 0.03,
+      "reducedVsExactMax": 1
+     },
+     "1.35": {
+      "nativeExactMs": 49.8,
+      "native1stMs": 49.6,
+      "native2ndMs": 37.4,
+      "native3rdMs": 2.2,
+      "reducedVsExactMeanAbs": 0.03,
+      "reducedVsExactMax": 1
+     }
+    },
+    "scan-jpeg-progressive-gray": {
+     "3": {
+      "nativeExactMs": 47.8,
+      "native1stMs": 47.7,
+      "native2ndMs": 44.9,
+      "native3rdMs": 7.2,
+      "reducedVsExactMeanAbs": 0.03,
+      "reducedVsExactMax": 1
+     },
+     "1.35": {
+      "nativeExactMs": 37.2,
+      "native1stMs": 37.3,
+      "native2ndMs": 33.5,
+      "native3rdMs": 1.4,
+      "reducedVsExactMeanAbs": 0.03,
+      "reducedVsExactMax": 1
+     }
+    },
+    "scan-jpeg-progressive-rgb": {
+     "3": {
+      "nativeExactMs": 84.9,
+      "native1stMs": 84.8,
+      "native2ndMs": 73.2,
+      "native3rdMs": 11.2,
+      "reducedVsExactMeanAbs": 0.03,
+      "reducedVsExactMax": 1
+     },
+     "1.35": {
+      "nativeExactMs": 63.1,
+      "native1stMs": 63.3,
+      "native2ndMs": 50.7,
+      "native3rdMs": 2.2,
+      "reducedVsExactMeanAbs": 0.03,
+      "reducedVsExactMax": 1
+     }
+    }
+   }
+  },
+  "notes": [
+   "HDDN GET_PAGE_PREVIEW = PyMuPDF get_pixmap + PNG encode in Pyodide; SDK = raw RGBA",
+   "HDDN COMMIT_IMPORT is called with allowIncompleteOcr (scanned pages are in the OCR lane); OCR itself is not measured",
+   "SDK 1st = renderPage on a freshly opened document (image left to the renderer, only remembered); 2nd = same page again (image reduced and kept, hayro P17); 3rd and later = decode kept"
+  ]
+ }
 }

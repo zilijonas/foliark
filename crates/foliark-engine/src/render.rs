@@ -61,10 +61,32 @@ pub struct RenderedPage {
 }
 
 impl Document {
+    /// Images are decoded no larger than they are drawn (hayro P17) and the decodes are kept for
+    /// the next render of this document, so this is the preview path. Use [`Self::render_page_exact`]
+    /// where pixels must come from the full-size image.
     pub fn render_page(
         &self,
         index: usize,
         options: RenderOptions,
+    ) -> Result<RenderedPage, PdfError> {
+        self.render(index, options, true)
+    }
+
+    /// As [`Self::render_page`] with every image decoded at full size and resampled by the
+    /// renderer (raster export burns redactions into these pixels).
+    pub fn render_page_exact(
+        &self,
+        index: usize,
+        options: RenderOptions,
+    ) -> Result<RenderedPage, PdfError> {
+        self.render(index, options, false)
+    }
+
+    fn render(
+        &self,
+        index: usize,
+        options: RenderOptions,
+        reduce_images: bool,
     ) -> Result<RenderedPage, PdfError> {
         let invalid = || PdfError::new(ErrorCode::InvalidArgument);
         let RenderOptions {
@@ -123,6 +145,8 @@ impl Document {
                 cancel.load(Ordering::Relaxed) || counted.fetch_add(1, Ordering::Relaxed) >= max_ops
             })),
             max_image_pixels: limits.max_image_pixels.into(),
+            reduce_images,
+            reduced_image_cache: reduce_images.then(|| self.0.images.clone() as _),
             ..Default::default()
         };
         let sink = warnings.clone();

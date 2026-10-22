@@ -34,3 +34,8 @@ Browser runs go through the memory queue (`--need-gb 2`; builds `--need-gb 4`). 
 `docs/performance/comparison.json` and `comparison.md`: full op set (cold init, open+extract, render, search, paragraph edit, native export with N regions, raster export @2, memory) on the same inputs, chromium and webkit.
 `node tools/bench/compare.mjs [--smoke] [--browsers chromium,webkit]`, summary table `node tools/bench/table.mjs docs/performance/comparison.json`.
 SDK part alone: `node tools/bench/sdk.mjs --extended`. Exported PDFs land in `tools/bench/.cache/out` and are re-read by `verify-outputs.py` (PyMuPDF, dev-only). The HDDN dist is found at `.worktrees/hddn-2fe0f9a/dist`, its sibling worktree, or `$HDDN_DIST`.
+
+## Scanned pages (NEW-81)
+Fixtures: `tests/fixtures/generators/scans.py OUTDIR [--pages N]` writes seven synthetic 300 dpi A4 scans (baseline and progressive JPEG in RGB and gray, JBIG2 generic region, CCITT G4, Flate gray; pure Python + Pillow, deterministic). They are not in the fixture manifest (0.4 to 3.5 MB per page, over its 200 KB cap); the bench generates them into `tools/bench/.cache/scans` on first use.
+Runs: `node tools/bench/scans-hddn.mjs --out H.json`, `node tools/bench/scans-sdk.mjs --out S.json` (queue, `--need-gb 2`), merged by `node tools/bench/scans-table.mjs --hddn H.json --before B.json --after S.json --write` into `comparison.json` key `scans`. "Before" is the same script against a build of the commit before the change.
+Native: `cargo run --release -p foliark-engine --example scan_bench -- file.pdf [scale] [rounds] [out-prefix]` (exact vs reduced decode, cached repeat, pixel difference).
