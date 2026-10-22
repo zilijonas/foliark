@@ -47,3 +47,7 @@ tools/bench/.cache/
 .idea/
 .vscode/
 *.swp
+
+# --- Local agent tooling ----------------------------------------------------
+graphify-out/
+.claude/settings.local.json

@@ -30,7 +30,7 @@ multiple-versions = "warn"
 wildcards = "deny"
 allow-wildcard-paths = true
 highlight = "all"
-# C/C++ PDF engines and their bindings. Hard rule (CLAUDE.md): never in the shipped graph.
+# C/C++ PDF engines and their bindings. Hard rule (AGENTS.md): never in the shipped graph.
 deny = [
     { crate = "mupdf", reason = "MuPDF is AGPL/commercial C engine" },
     { crate = "mupdf-sys", reason = "MuPDF C binding" },

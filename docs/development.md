@@ -1,6 +1,6 @@
 # Foliark development
 
-Contract: [docs/spec/v1.md](spec/v1.md) (frozen; changes need an ADR in `docs/adr/`). Rules for agents: `CLAUDE.md`. Board: Workbench project `NEW` (`AGENTS.md`).
+Contract: [docs/spec/v1.md](spec/v1.md) (frozen; changes need an ADR in `docs/adr/`). Rules for agents and the board: `AGENTS.md`.
 
 ## Prerequisites
 - Rust via `rustup`; `rust-toolchain.toml` pins 1.99.1 with `wasm32-unknown-unknown`, clippy, rustfmt. `source ~/.cargo/env` if `cargo` is missing.
