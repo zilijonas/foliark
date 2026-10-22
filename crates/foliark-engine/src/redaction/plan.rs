@@ -542,7 +542,10 @@ impl Scan {
         let mut survivors = self.survivors;
         let removed_streams: BTreeSet<ObjectId> = pages
             .iter()
-            .flat_map(|p| p.clusters.iter().map(|c| c.id.loc.stream))
+            .flat_map(|p| {
+                let images = p.images.iter().map(|i| i.loc.stream);
+                p.clusters.iter().map(|c| c.id.loc.stream).chain(images)
+            })
             .collect();
         RedactionPlan {
             binding,
