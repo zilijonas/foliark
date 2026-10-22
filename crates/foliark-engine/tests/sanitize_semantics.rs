@@ -274,7 +274,7 @@ fn nested_actualtext_alt_and_e_are_stripped_and_counted() {
         &["PUBLIC_VISIBLE", "PUBLIC_TWO"],
         &[],
     );
-    // The tag and the harmless siblings stay.
+    // The tag, structure id and layer name stay; other inline keys go (ADR 0006).
     let (ok, c) = python(&[
         "-c",
         "import fitz,sys;print(fitz.open(sys.argv[1])[0].read_contents().decode())",
@@ -283,7 +283,7 @@ fn nested_actualtext_alt_and_e_are_stripped_and_counted() {
             .unwrap(),
     ]);
     assert!(
-        ok && c.contains("/MCID 0") && c.contains("/Keep 1") && c.contains("/P1 BDC"),
+        ok && c.contains("/MCID 0") && !c.contains("/Keep") && c.contains("/P1 BDC"),
         "{c}"
     );
 }

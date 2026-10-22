@@ -37,7 +37,7 @@ fn emit(data: &[u8], obj: ObjectId, subs: &[(Range<usize>, Vec<u8>)]) -> Result<
     let mut out = Vec::with_capacity(data.len());
     let mut used = vec![false; subs.len()];
     let mut ops = UntypedIter::new(data);
-    while let Some((_, span)) = ops.next_with_span() {
+    while let Some((ins, span)) = ops.next_with_span() {
         let hit = subs
             .iter()
             .position(|(r, _)| r.start < span.end && span.start < r.end);
@@ -51,11 +51,14 @@ fn emit(data: &[u8], obj: ObjectId, subs: &[(Range<usize>, Vec<u8>)]) -> Result<
                 }
             }
             None => {
+                if !OPERATORS.contains(&&**ins.operator) {
+                    continue;
+                }
                 let mark = out.len();
                 normalize(&data[span], &mut out);
-                // Spec 8.2: marked-content property lists keep their tag, not the accessibility
-                // text (ActualText, Alt, E) an inline dictionary can carry.
-                if out.ends_with(b"BDC") {
+                // Spec 8.2 (ADR 0006): marked-content property lists keep their tag and structure
+                // ids, not the text an inline dictionary can carry.
+                if out.ends_with(b"BDC") || out.ends_with(b"DP") {
                     let clean = strip_marked_props(&out[mark..]);
                     out.truncate(mark);
                     out.extend_from_slice(&clean);
@@ -158,68 +161,56 @@ fn normalize(src: &[u8], out: &mut Vec<u8>) {
     }
 }
 
-/// Marked-content property keys that carry document text (spec 8.2).
-const ACCESSIBILITY_KEYS: [&[u8]; 3] = [b"ActualText", b"Alt", b"E"];
+/// Marked-content property keys that survive: structure ids and artifact classification, never text.
+const MARKED_KEYS: [&[u8]; 5] = [b"MCID", b"Type", b"Subtype", b"BBox", b"Attached"];
 
-/// `ins` is one normalized `/Tag << ... >> BDC` instruction: the same instruction without the
-/// accessibility entries of its inline dictionary, at any depth. Anything else is returned
-/// unchanged.
+/// PDF 32000 operators; anything else (inside `BX`/`EX` or not) is dropped with its operands, since
+/// a reader ignores it and its operands can carry anything.
+const OPERATORS: &[&[u8]] = &[
+    b"b", b"B", b"b*", b"B*", b"BDC", b"BI", b"BMC", b"BT", b"BX", b"c", b"cm", b"CS", b"cs", b"d",
+    b"d0", b"d1", b"Do", b"DP", b"EI", b"EMC", b"ET", b"EX", b"f", b"F", b"f*", b"G", b"g", b"gs",
+    b"h", b"i", b"ID", b"j", b"J", b"K", b"k", b"l", b"m", b"M", b"MP", b"n", b"q", b"Q", b"re",
+    b"RG", b"rg", b"ri", b"s", b"S", b"SC", b"sc", b"SCN", b"scn", b"sh", b"T*", b"Tc", b"Td",
+    b"TD", b"Tf", b"Tj", b"TJ", b"TL", b"Tm", b"Tr", b"Ts", b"Tw", b"Tz", b"v", b"w", b"W", b"W*",
+    b"y", b"'", b"\"",
+];
+
+/// `ins` is one normalized `/Tag << ... >> BDC` (or `DP`) instruction with its inline dictionary
+/// cut to [`MARKED_KEYS`] whose values hold no string or dictionary. A named property list
+/// (`/Tag /Name BDC`) is returned unchanged: `/Properties` is sanitized with the resources.
 fn strip_marked_props(ins: &[u8]) -> Vec<u8> {
     let Some(open) = ins.windows(2).position(|w| w == b"<<") else {
         return ins.to_vec();
     };
     let end = value_end(ins, open);
-    [&ins[..open], &strip_value(&ins[open..end], 0), &ins[end..]].concat()
-}
-
-/// Nesting past this is replaced by `null`: nothing deeper is kept.
-const MAX_NEST: usize = 32;
-
-/// One value (`<< >>`, `[ ]` or a scalar) without accessibility entries anywhere inside.
-fn strip_value(v: &[u8], depth: usize) -> Vec<u8> {
-    let dict = v.starts_with(b"<<");
-    if !dict && !v.starts_with(b"[") {
-        return v.to_vec();
-    }
-    if depth >= MAX_NEST {
-        return b"null".to_vec();
-    }
-    let (mut out, close) = if dict {
-        (b"<<".to_vec(), &b" >>"[..])
-    } else {
-        (b"[".to_vec(), &b"]"[..])
-    };
-    let mut i = if dict { 2 } else { 1 };
-    loop {
-        while v.get(i).is_some_and(|b| WS.contains(b)) {
+    let skip = |mut i: usize| {
+        while ins.get(i).is_some_and(|b| WS.contains(b)) {
             i += 1;
         }
-        if i >= v.len() || v[i..].starts_with(b">>") || v[i] == b']' {
+        i
+    };
+    let mut kept = b"<<".to_vec();
+    let mut i = open + 2;
+    loop {
+        i = skip(i);
+        if i >= end || ins[i..].starts_with(b">>") {
             break;
         }
-        let end = value_end(v, i);
-        if dict {
-            let mut at = end;
-            while v.get(at).is_some_and(|b| WS.contains(b)) {
-                at += 1;
-            }
-            let val_end = value_end(v, at);
-            if !ACCESSIBILITY_KEYS.contains(&&v[i + 1..end]) {
-                out.push(b' ');
-                out.extend_from_slice(&v[i..at]);
-                out.extend(strip_value(&v[at..val_end], depth + 1));
-            }
-            i = val_end;
-        } else {
-            if out.len() > 1 {
-                out.push(b' ');
-            }
-            out.extend(strip_value(&v[i..end], depth + 1));
-            i = end;
+        let key_end = value_end(ins, i);
+        let at = skip(key_end);
+        let val_end = value_end(ins, at).max(at + 1).min(ins.len());
+        let value = &ins[at.min(val_end)..val_end];
+        if ins[i] == b'/'
+            && MARKED_KEYS.contains(&&ins[i + 1..key_end])
+            && !value.iter().any(|b| matches!(b, b'(' | b'<'))
+        {
+            kept.push(b' ');
+            kept.extend_from_slice(&ins[i..val_end]);
         }
+        i = val_end.max(i + 1);
     }
-    out.extend_from_slice(close);
-    out
+    kept.extend_from_slice(b" >>");
+    [&ins[..open], &kept, &ins[end.min(ins.len())..]].concat()
 }
 
 /// End (exclusive) of the PDF value starting at `i`: string, hex string, name, number,
@@ -327,14 +318,14 @@ mod tests {
     }
 
     #[test]
-    fn marked_content_keeps_tag_and_layer_but_not_accessibility_text() {
-        let data = b"/Span << /MCID 3 /ActualText <FEFF0053> /Alt (a (b) c) /E (x) /K [1 2] /Lang (en) >> BDC\n\
+    fn marked_content_keeps_tag_and_ids_but_no_text_and_unknown_operators_go() {
+        let data = b"/Span << /MCID 3 /ActualText <FEFF0053> /Alt (a (b) c) /E (x) /K [1 2] /Lang (en) /Type /Pagination /BBox [0 0 1 1] /Subtype (s) >> BDC\n\
 /Span << /ActualText (only) >> BDC /P /MC0 BDC /OC /Ly BDC EMC EMC EMC EMC\n\
-/Span << /K [<< /Alt (n1) /Keep 1 >> [<< /ActualText (n2) >>]] /X << /Y << /E (n3) /Z (ok) >> >> >> BDC EMC";
+/Artifact << /X << /Y (n) >> /Contents (n3) >> BDC EMC /T << /K (dp) >> DP BX /Weird (bx) << /K (bd) >> unknownop EX 1 0 0 1 0 0 cm";
         let out = String::from_utf8(reemit(data, ID, &[]).unwrap()).unwrap();
         assert_eq!(
             out,
-            "/Span << /MCID 3 /K [1 2] /Lang (en) >> BDC\n/Span << >> BDC\n/P /MC0 BDC\n/OC /Ly BDC\nEMC\nEMC\nEMC\nEMC\n/Span << /K [<< /Keep 1 >> [<< >>]] /X << /Y << /Z (ok) >> >> >> BDC\nEMC\n"
+            "/Span << /MCID 3 /Type /Pagination /BBox [0 0 1 1] >> BDC\n/Span << >> BDC\n/P /MC0 BDC\n/OC /Ly BDC\nEMC\nEMC\nEMC\nEMC\n/Artifact << >> BDC\nEMC\n/T << >> DP\nBX\nEX\n1 0 0 1 0 0 cm\n"
         );
     }
 }
