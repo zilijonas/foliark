@@ -11,6 +11,7 @@ exercised against the packed tarball by `tests/package-consumers/run.sh` (vanill
 |---|---|
 | `dist/index.js`, `dist/*.d.ts` | ESM API and declarations (`import { createFoliark } from "@foliark/sdk"`) |
 | `dist/worker.js` | module worker entry (`@foliark/sdk/worker`); imports `../wasm/foliark_wasm.js` |
+| `dist/inline.js` | in-worker entry (`@foliark/sdk/inline`): `createInlineFoliark`, the same client with the engine in the calling thread |
 | `wasm/foliark_wasm_bg.wasm` | the engine (`@foliark/sdk/wasm`), 5.25 MB raw, 2.02 MB gzip, 1.54 MB brotli |
 | `wasm/foliark_wasm.js` | wasm-bindgen glue, used by the worker only |
 | `LICENSE` (placeholder), `NOTICE`, `LICENSE_FOXIT` | notices that must travel with the wasm (embedded Foxit fonts, ICC profiles) |
@@ -39,6 +40,18 @@ on first use, not at page load. Both URLs are explicit; the SDK never guesses a 
   and `publicPath` set to the base, and pass `workerUrl: new URL("./worker.js", import.meta.url)`. TypeScript needs
   `declare module "@foliark/sdk/wasm" { const url: string; export default url; }` (the build tools above provide their own).
 - Other bundlers: any setup that yields two final URLs works; `new URL("...", import.meta.url)` is not required.
+
+## Inside an existing worker (`@foliark/sdk/inline`)
+A host that already runs its own dedicated worker with its own generation and recovery (HDDN) should not nest a second one. Import the inline entry in that worker:
+```ts
+import { createInlineFoliark } from "@foliark/sdk/inline";
+import wasmUrl from "@foliark/sdk/wasm?url"; // the page or worker's bundler resolves it, same asset as above
+const foliark = await createInlineFoliark({ wasmUrl, limits: { maxPages: 30 } }); // or { wasm: bytesOrModule } to fetch nothing
+```
+It returns the same `Foliark` and `DocumentHandle` (same DTOs, same `FoliarkError` codes); only the transport differs (a `MessageChannel` inside the thread, so
+buffers still transfer). No `workerUrl`, no `worker.js` asset. The host owns hang supervision (the watchdog is off: a stuck wasm call blocks the host worker too)
+and, after any `onReset`, must replace its whole worker: a trap or out-of-memory cannot be healed inside the thread that owns the instance, and wasm memory never
+shrinks. Cancel with `AbortSignal` as usual; long ops yield between steps, so a queued cancel is seen.
 
 ## Hosting
 - Serve `.wasm` as `application/wasm` (streaming compile needs it) and `.js` as a JavaScript type. Plain GETs, no cookies, no range requests.

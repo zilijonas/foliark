@@ -12,3 +12,4 @@ __pycache__/
 *.pyc
 .worktrees/
 packages/sdk/LICENSE_FOXIT
+dist-pkg/
