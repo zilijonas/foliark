@@ -67,12 +67,13 @@ pub struct Writer<'d> {
     appended: BTreeMap<usize, Vec<u8>>,
     extras: Vec<Extra>,
     page_fonts: PageFonts,
+    page_xobjects: PageFonts,
     to_unicode: BTreeMap<ObjectId, Vec<u8>>,
     /// Registered font ids already written (`fonts::embed_registered_font`).
     embedded: BTreeSet<String>,
 }
 
-/// Font resources added per page: (resource name, font object).
+/// Resources added per page: (resource name, object).
 pub(crate) type PageFonts = BTreeMap<usize, Vec<(Vec<u8>, Val)>>;
 
 impl<'d> Writer<'d> {
@@ -85,6 +86,7 @@ impl<'d> Writer<'d> {
             appended: BTreeMap::new(),
             extras: Vec::new(),
             page_fonts: BTreeMap::new(),
+            page_xobjects: BTreeMap::new(),
             to_unicode: BTreeMap::new(),
             embedded: BTreeSet::new(),
         }
@@ -146,6 +148,24 @@ impl<'d> Writer<'d> {
         Ok(self)
     }
 
+    /// Make `xobject` (an added object or a source Form, `Val::Src`) usable as `/name Do` on
+    /// page `page`. A name the page already has is refused at `write`.
+    pub fn add_page_xobject(
+        &mut self,
+        page: usize,
+        name: &str,
+        xobject: Val,
+    ) -> Result<&mut Self, PdfError> {
+        if page >= self.doc.page_count() {
+            return Err(PdfError::page_out_of_range(page));
+        }
+        self.page_xobjects
+            .entry(page)
+            .or_default()
+            .push((name.as_bytes().to_vec(), xobject));
+        Ok(self)
+    }
+
     /// Use `cmap` (plain CMap text) as the ToUnicode of the source font dictionary `font`.
     pub fn set_to_unicode(&mut self, font: ObjectId, cmap: Vec<u8>) -> &mut Self {
         self.to_unicode.insert(font, cmap);
@@ -171,7 +191,7 @@ impl<'d> Writer<'d> {
             &self.spans,
             (&self.extras, &self.to_unicode),
         );
-        let pages = walk.build(&self.appended, &self.page_fonts)?;
+        let pages = walk.build(&self.appended, &self.page_fonts, &self.page_xobjects)?;
         let max = u64::from(self.limits.max_output_bytes);
         let over = |actual: usize| PdfError::limit("maxOutputBytes", actual as u64, max);
         let mut pdf = Pdf::new();

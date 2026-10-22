@@ -3,11 +3,12 @@
 //! refusal with no bytes:
 //!
 //! 1. raster mode: `CONSENT_REQUIRED` without acknowledgment, else refused until NEW-54;
-//! 2. preflight ([`preflight`]): widget / annotation flattening (NEW-42), optional-content
+//! 2. preflight ([`preflight`]): `FORM_APPEARANCE_MISSING` / `XFA_UNSUPPORTED`, optional-content
 //!    flattening (NEW-43), signed input policy, image erasure (NEW-34/35) and vector cutting
-//!    (NEW-36/37) refuse by name. `annotations: remove` is built (the allowlist writer drops
-//!    every annotation), so it needs no flattening stage;
-//! 3. text redaction (`redact_text`) and region fills, through the writer;
+//!    (NEW-36/37) refuse by name;
+//! 3. visible annotations and all widgets drawn as Forms on their pages
+//!    ([`crate::sanitize::interactive`]), then text redaction (`redact_text`) and region fills,
+//!    through the writer, so redaction treats the flattened appearances as page content;
 //! 4. sanitization: the allowlist writer plus the counts of [`crate::sanitize::document`];
 //! 5. write; 6. verify (§5.7): strict reparse, page count, no cluster meeting rule 1.
 use crate::Document;
@@ -16,6 +17,7 @@ use crate::engine::not_built;
 use crate::redaction::plan::{RedactionPlan, bounds_of, text_coverage};
 use crate::redaction::text::redact_text;
 use crate::sanitize::document::scan;
+use crate::sanitize::interactive;
 use crate::writer::Writer;
 use foliark_model::{
     Capabilities, Capability, CapabilityReason, CapabilityStatus, EditsReport, ErrorCode,
@@ -145,9 +147,9 @@ pub fn prepare(
     }
     let reader = doc.reader();
     let removals = scan(reader)?;
-    let annots = preflight::annotations(reader);
+    let inter = interactive::scan(reader, policy);
     if let Some(b) =
-        preflight::document_blockers(reader, policy, &annots, removals.signatures).first()
+        preflight::document_blockers(reader, policy, &inter, removals.signatures).first()
     {
         return Err(b.error());
     }
@@ -157,6 +159,7 @@ pub fn prepare(
     }
 
     let mut w = Writer::new(reader, limits.clone());
+    inter.apply(&mut w)?;
     let text = redact_text(doc, &plan, &mut w)?;
     for (page, ops) in fills(doc, committed)? {
         w.append_page_content(page as usize, ops.as_bytes())?;
@@ -166,9 +169,15 @@ pub fn prepare(
     let invisible = verify(&bytes, pages, committed, limits)?;
 
     let mut removed = removals.removed;
-    if annots.total > 0 {
-        removed.insert(SanitizedItem::Annotations, annots.total);
+    for (item, n) in [
+        (SanitizedItem::Annotations, inter.annotations),
+        (SanitizedItem::Widgets, inter.widgets),
+    ] {
+        if n > 0 {
+            removed.insert(item, n);
+        }
     }
+    let (flat_annots, flat_widgets) = inter.flattened();
     let mut losses = removals.losses;
     let mut add = |code, count| {
         if count > 0 {
@@ -182,10 +191,10 @@ pub fn prepare(
             );
         }
     };
-    add(LossCode::LinksRemoved, annots.links);
-    if policy.annotations == foliark_model::AnnotationPolicy::Remove {
-        add(LossCode::AnnotationsRemoved, annots.visible);
-    }
+    add(LossCode::LinksRemoved, inter.links);
+    add(LossCode::AnnotationsFlattened, flat_annots);
+    add(LossCode::AnnotationsRemoved, inter.removed_visible);
+    add(LossCode::FormsFlattened, flat_widgets);
     let mut inventory: Vec<String> = text
         .fonts_with_glyph_inventory
         .into_iter()
@@ -206,8 +215,8 @@ pub fn prepare(
         output_bytes,
         removed,
         flattened: Flattened {
-            annotations: 0,
-            widgets: 0,
+            annotations: flat_annots,
+            widgets: flat_widgets,
             ocg_layers: 0,
         },
         redaction,
@@ -250,7 +259,7 @@ pub(crate) fn capabilities(
     let reader = doc.reader();
     let policy = ExportPolicy::default();
     let mut blockers =
-        preflight::document_blockers(reader, &policy, &preflight::annotations(reader), 0);
+        preflight::document_blockers(reader, &policy, &interactive::scan(reader, &policy), 0);
     let redact = if committed.redactions.is_empty() {
         capability(Unknown, &[])
     } else {

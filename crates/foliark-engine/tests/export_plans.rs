@@ -241,25 +241,18 @@ fn stages_this_build_cannot_run_refuse_by_name_with_no_bytes() {
         let caps = e.capabilities(&doc, false);
         (err, run(&mut e, caps).unwrap())
     };
-    let (err, caps) = refuse("hddn/acroform.pdf", ExportPolicy::default());
-    assert_eq!(
-        (err.code, feature(&err)),
-        (ErrorCode::InvalidArgument, Some("flattenWidgets"))
-    );
+    let (err, caps) = refuse("generated/ocg-hidden-text.pdf", ExportPolicy::default());
+    assert_eq!(err.code, ErrorCode::OptionalContentUnsupported);
     // Capabilities tell native-refused from raster-eligible: the native refusal is known now
     // (with its code), raster is independent and still to be established.
     assert_eq!(caps.export_native.status, CapabilityStatus::Unsupported);
     assert_eq!(
         caps.export_native.reasons[0].code,
-        ErrorCode::InvalidArgument
+        ErrorCode::OptionalContentUnsupported
     );
     assert_eq!(caps.export_raster.status, CapabilityStatus::Unknown);
     assert!(caps.export_raster.reasons.is_empty());
 
-    let (err, _) = refuse("generated/annot-appearance.pdf", ExportPolicy::default());
-    assert_eq!(feature(&err), Some("flattenAnnotations"));
-    let (err, _) = refuse("generated/ocg-hidden-text.pdf", ExportPolicy::default());
-    assert_eq!(err.code, ErrorCode::OptionalContentUnsupported);
     let refuse_signed = ExportPolicy {
         signed_input: foliark_model::SignedInputPolicy::Refuse,
         invisible_text: foliark_model::InvisibleTextPolicy::Remove,

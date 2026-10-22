@@ -85,14 +85,14 @@ describe("text redaction and sanitized native export", () => {
 
   it("an unsupported stage refuses with a typed code and the document stays usable", async () => {
     const f = await client();
-    const doc = await f.open(fixture("hddn/acroform.pdf"));
+    const doc = await f.open(fixture("generated/ocg-hidden-text.pdf"));
     const caps = await doc.capabilities();
     expect([caps.exportNative.status, caps.exportRaster.status]).toEqual(["unsupported", "unknown"]);
     try {
       await doc.prepareExport({ mode: "native" });
       throw new Error("expected a refusal");
     } catch (e) {
-      expect([(e as FoliarkError).code, (e as FoliarkError).details?.feature]).toEqual(["INVALID_ARGUMENT", "flattenWidgets"]);
+      expect([(e as FoliarkError).code, (e as FoliarkError).details?.feature]).toEqual(["OPTIONAL_CONTENT_UNSUPPORTED", "flattenOptionalContent"]);
     }
     expect(await code(doc.prepareExport({ mode: "raster" }))).toBe("CONSENT_REQUIRED");
     expect((await doc.extractText(0)).pageIndex).toBe(0);

@@ -1,8 +1,9 @@
 //! Fresh native writer (NEW-24, spec §8.1): every fixture is rewritten, reopened by the
 //! strict reader and judged by the independent Python oracles (tests/oracles).
 use foliark_engine::Document;
+use foliark_engine::sanitize::interactive;
 use foliark_engine::writer::{NewStream, Val, Writer};
-use foliark_model::{ErrorCode, Limits, ObjectId, PdfError};
+use foliark_model::{ErrorCode, ExportPolicy, Limits, ObjectId, PdfError};
 use pdf_writer::{Finish, Name, Pdf, Rect, Ref};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -34,15 +35,10 @@ const REFUSED_LAYERS: &[&str] = &[
 /// in tests/sanitize_document.rs.
 const ACCESSIBILITY_STRIPPED: &[&str] = &["hddn/actualtext.pdf"];
 
-/// Visible annotations and widgets are not allowlisted, so they are gone from the rewrite until
-/// annotation flattening (spec 8.2, later task) draws them as Forms before writing. For these
-/// the appearance oracle is expected to see the loss; the object oracle must still pass.
-const FLATTEN_PENDING: &[&str] = &[
-    "hddn/annotation-comment.pdf",
-    "hddn/acroform.pdf",
-    "generated/acroform-values.pdf",
-    "generated/annot-appearance.pdf",
-];
+/// Annotations and widgets with an appearance are flattened (spec 8.2) and pass like any other
+/// fixture. This one has an annotation with no /AP (MuPDF invents a comment icon): nothing is
+/// drawable, so the appearance oracle is expected to see the loss; the object oracle must pass.
+const FLATTEN_PENDING: &[&str] = &["hddn/annotation-comment.pdf"];
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -94,8 +90,11 @@ fn python(args: &[&str]) -> (bool, String) {
     (ok, std::fs::read_to_string(log).unwrap_or_default())
 }
 
+/// Annotations and widgets are flattened first, as native export does.
 fn write(doc: &Document, limits: Limits) -> Result<Vec<u8>, PdfError> {
-    Writer::new(doc.reader(), limits).write()
+    let mut w = Writer::new(doc.reader(), limits);
+    interactive::scan(doc.reader(), &ExportPolicy::default()).apply(&mut w)?;
+    w.write()
 }
 
 #[test]

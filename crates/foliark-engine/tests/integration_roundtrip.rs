@@ -4,9 +4,10 @@
 //! objects.py, fidelity.py, PyMuPDF and pypdf words). Per-feature behaviour lives in
 //! native_graphics_roundtrip.rs and native_text_roundtrip.rs; this file only proves the chain holds.
 //! One row per fixture is printed in the docs/evidence/native-roundtrip.md table format.
+use foliark_engine::sanitize::interactive;
 use foliark_engine::writer::Writer;
 use foliark_engine::{Document, RenderOptions};
-use foliark_model::{ErrorCode, ExtractOptions, Limits, PdfError};
+use foliark_model::{ErrorCode, ExportPolicy, ExtractOptions, Limits, PdfError};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -38,15 +39,20 @@ const REFUSED: &[(&str, ErrorCode)] = &[
 /// in tests/sanitize_document.rs.
 const ACCESSIBILITY_STRIPPED: &[&str] = &["hddn/actualtext.pdf"];
 
-/// Visible annotations and widgets are not allowlisted: they vanish until flattening (spec 8.2).
-/// The round trip is judged on page content only (render without annotations); the oracles must
-/// still see the loss, so it is never reported as a pass.
-const FLATTEN_PENDING: &[&str] = &[
-    "hddn/annotation-comment.pdf",
-    "hddn/acroform.pdf",
-    "generated/acroform-values.pdf",
-    "generated/annot-appearance.pdf",
-];
+/// Visible annotations and widgets with an appearance are flattened (spec 8.2) and pass like any
+/// other fixture. These have an annotation with no /AP (a comment icon MuPDF invents): nothing
+/// is drawable, the annotation is removed, and the round trip is judged on page content only
+/// (render without annotations); the oracles must still see the loss, so it is never a pass.
+const FLATTEN_PENDING: &[&str] = &["hddn/annotation-comment.pdf"];
+
+/// The writer with annotations and widgets flattened, the first stage of native export.
+fn flattened(doc: &Document) -> Writer<'_> {
+    let mut w = Writer::new(doc.reader(), Limits::default());
+    interactive::scan(doc.reader(), &ExportPolicy::default())
+        .apply(&mut w)
+        .unwrap();
+    w
+}
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -63,7 +69,7 @@ fn refusal(input: &[u8], password: Option<&str>) -> Option<(&'static str, PdfErr
             return Some(("model", e));
         }
     }
-    if let Err(e) = Writer::new(doc.reader(), Limits::default()).write() {
+    if let Err(e) = flattened(&doc).write() {
         return Some(("write", e));
     }
     for p in 0..doc.page_count() {
@@ -228,18 +234,14 @@ fn native_round_trip_chain_holds_on_every_fixture() {
                     .unwrap_or(usize::MAX)
             })
             .sum();
-        let out = match Writer::new(doc.reader(), Limits::default()).write() {
+        let out = match flattened(&doc).write() {
             Ok(o) => o,
             Err(e) => {
                 fail(format!("write refused: {e:?}"));
                 continue;
             }
         };
-        if Writer::new(doc.reader(), Limits::default())
-            .write()
-            .unwrap()
-            != out
-        {
+        if flattened(&doc).write().unwrap() != out {
             fail("writer output is not deterministic".into());
         }
         let reopened = match Document::open(out.clone(), None) {
@@ -284,6 +286,8 @@ fn native_round_trip_chain_holds_on_every_fixture() {
         }
         if is_pending {
             cmd.arg("--pending");
+        } else if input.windows(7).any(|w| w == b"/Annots") {
+            cmd.arg("--flatten");
         }
         let run = cmd.output().unwrap();
         let stdout = String::from_utf8_lossy(&run.stdout);
