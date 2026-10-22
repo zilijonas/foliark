@@ -99,9 +99,10 @@ impl<'a> Dict<'a> {
     pub fn entries(&self) -> impl Iterator<Item = (Name<'a>, MaybeRef<Object<'a>>)> + '_ {
         let mut sorted_keys = self.keys().collect::<Vec<_>>();
         sorted_keys.sort_by(|n1, n2| n1.as_ref().cmp(n2.as_ref()));
-        sorted_keys.into_iter().map(|k| {
-            let obj = self.get_raw(k.deref()).unwrap();
-            (k, obj)
+        // A value that no longer re-reads (see `ArrayIter::next`) is skipped, not a panic.
+        sorted_keys.into_iter().filter_map(|k| {
+            let obj = self.get_raw(k.deref())?;
+            Some((k, obj))
         })
     }
 

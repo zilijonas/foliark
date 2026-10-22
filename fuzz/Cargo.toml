@@ -1,0 +1,74 @@
+[package]
+name = "foliark-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# Own workspace: normal builds never see this crate and never need nightly.
+[workspace]
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+foliark-engine = { path = "../crates/foliark-engine" }
+foliark-model = { path = "../crates/foliark-model" }
+
+# Same fork of hayro as the main workspace (patches/hayro/README.md).
+[patch.crates-io]
+hayro-syntax = { path = "../vendor/hayro-syntax" }
+hayro-interpret = { path = "../vendor/hayro-interpret" }
+
+[profile.release]
+debug = 1
+overflow-checks = true
+
+[[bin]]
+name = "open"
+path = "fuzz_targets/open.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "page_model"
+path = "fuzz_targets/page_model.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "extract"
+path = "fuzz_targets/extract.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "render"
+path = "fuzz_targets/render.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "roundtrip"
+path = "fuzz_targets/roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "content_reemit"
+path = "fuzz_targets/content_reemit.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "geometry"
+path = "fuzz_targets/geometry.rs"
+test = false
+doc = false
+bench = false

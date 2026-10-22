@@ -1,0 +1,82 @@
+{
+  "purpose": "Minimized fuzz findings (tools/fuzz-smoke, fuzz/). Synthetic, derived from fuzzing synthetic seeds; no third-party bytes. crates/foliark-engine/tests/regressions.rs runs every file.",
+  "files": [
+    {
+      "path": "open-1.pdf",
+      "target": "open",
+      "kind": "panic",
+      "cause": "hayro ArrayIter::next unwrap on re-read of an array holding a stream-like dict (also hit by page_model and render)",
+      "fix": "vendor/hayro-syntax array.rs: iteration ends instead of panicking (P13)",
+      "sha256": "6498d080acc7b77bc5241ebeaf1c2d93df435f42f69851866236be80a07ed344",
+      "bytes": 66,
+      "origin": "synthetic, minimized by cargo fuzz tmin from a fuzz-smoke finding",
+      "license": "synthetic, generated (Foliark, owner-authored)"
+    },
+    {
+      "path": "roundtrip-1.pdf",
+      "target": "roundtrip",
+      "kind": "panic",
+      "cause": "hayro Dict::entries unwrap on a value that no longer re-reads (writer copy path)",
+      "fix": "vendor/hayro-syntax dict.rs: entry skipped (P13)",
+      "sha256": "97ad49190bfc59add4c232e4111ae6153fbab62b2437b421721687263d935633",
+      "bytes": 66,
+      "origin": "synthetic, minimized by cargo fuzz tmin from a fuzz-smoke finding",
+      "license": "synthetic, generated (Foliark, owner-authored)"
+    },
+    {
+      "path": "content_reemit-1.bin",
+      "target": "content_reemit",
+      "kind": "non-idempotent output",
+      "cause": "unterminated inline image: every re-emission appended another newline",
+      "fix": "writer/content.rs: newline added only if missing",
+      "sha256": "c4ae32820259d50c9b1061384443e7ab809effa8206797d9d79731d4e46331a1",
+      "bytes": 12,
+      "origin": "synthetic, minimized by cargo fuzz tmin from a fuzz-smoke finding",
+      "license": "synthetic, generated (Foliark, owner-authored)"
+    },
+    {
+      "path": "geometry-1.bin",
+      "target": "geometry",
+      "kind": "invariant (zero-size page accepted)",
+      "cause": "tiny UserUnit underflows a positive box to width 0 and the geometry was returned",
+      "fix": "foliark-model geometry.rs: width/height > 0 checked after scaling, MALFORMED_PDF",
+      "sha256": "7d6f24cdab1239781128cdb94c4b21a6d20a896d0aa65d1b841062ecdc83fdf7",
+      "bytes": 72,
+      "origin": "synthetic, minimized by cargo fuzz tmin from a fuzz-smoke finding",
+      "license": "synthetic, generated (Foliark, owner-authored)"
+    },
+    {
+      "path": "render-1.pdf",
+      "target": "render",
+      "kind": "allocation beyond limit (30 GB malloc)",
+      "cause": "1e9-pixel image reached the renderer past the budget scan; hayro decoded it uncapped",
+      "fix": "vendor/hayro-interpret max_image_pixels + ImageTooLarge (P14); render_page returns LIMIT_EXCEEDED maxImagePixels",
+      "sha256": "1057bf332bf5f5eefa077d97a57e3f085ddb01265cfac02303e54b366f752912",
+      "bytes": 258,
+      "origin": "synthetic, minimized by cargo fuzz tmin from a fuzz-smoke finding",
+      "license": "synthetic, generated (Foliark, owner-authored)"
+    },
+    {
+      "path": "content_reemit-2.bin",
+      "target": "content_reemit",
+      "kind": "non-idempotent output",
+      "cause": "inline image data that contains EI but no real terminator was cut at the last EI (trailing bytes dropped), so re-emission was not stable",
+      "fix": "writer/content.rs: copy the reader's whole inline-image span; also refuse (MALFORMED_PDF) any instruction that does not read back as one instruction",
+      "sha256": "475ef36f3f777c4984be83ae5bc05f061fa69260cadb1df7a0ff7e12030ec13e",
+      "bytes": 19,
+      "origin": "synthetic, minimized by cargo fuzz tmin from a fuzz-smoke finding",
+      "license": "synthetic, generated (Foliark, owner-authored)"
+    },
+    {
+      "path": "content_reemit-3.bin",
+      "target": "content_reemit",
+      "kind": "non-idempotent output",
+      "cause": "nested garbage inline images (BI ID ... BI ID, EI inside data) re-emit differently on the second pass",
+      "fix": "writer/content.rs: output must be a fixed point of re-emission, else MALFORMED_PDF (ADR 0002)",
+      "sha256": "acd95cfbacc5742095966049fbb4b19894e8510310d4dd0e3a5734f216e7c11a",
+      "bytes": 14,
+      "origin": "synthetic, minimized by cargo fuzz tmin from a fuzz-smoke finding",
+      "license": "synthetic, generated (Foliark, owner-authored)"
+    }
+  ]
+}

@@ -113,6 +113,7 @@ impl Document {
         let mut settings = InterpreterSettings {
             render_annotations: annotations,
             report_font_substitution: true,
+            max_image_pixels: limits.max_image_pixels.into(),
             ..Default::default()
         };
         let sink = warnings.clone();
@@ -146,6 +147,8 @@ impl Document {
             }
             found
         });
+        let too_large = Arc::new(Mutex::new(None::<u64>));
+        let on_too_large = too_large.clone();
         let on_event = warn.clone();
         let substituted = Arc::new(Mutex::new(Vec::new()));
         let on_substituted = {
@@ -166,6 +169,9 @@ impl Document {
                 "appearance stream unreadable".into(),
             ),
             InterpreterWarning::FontSubstituted(obj) => on_substituted(obj),
+            InterpreterWarning::ImageTooLarge(w, h) => {
+                *on_too_large.lock().unwrap() = Some(u64::from(w) * u64::from(h));
+            }
             InterpreterWarning::UnsupportedFont => on_event(
                 RenderWarningCode::CmapMissing,
                 "CID font with an unsupported encoding".into(),
@@ -214,6 +220,14 @@ impl Document {
             &mut ctx,
             Affine::new([a, b, c, d, e, f]),
         );
+        // Inline images and images the budget scan did not see are refused at draw time.
+        if let Some(pixels) = *too_large.lock().unwrap() {
+            return Err(PdfError::limit(
+                "maxImagePixels",
+                pixels,
+                limits.max_image_pixels.into(),
+            ));
+        }
         ctx.flush();
         let mut pixmap = Pixmap::new(ctx.width(), ctx.height());
         ctx.render_with(
