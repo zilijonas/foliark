@@ -1,19 +1,65 @@
 <!doctype html><meta charset="utf-8"><title>sdk bench</title>
 <script type="module">
   import { createFoliark } from "/packages/sdk/dist/index.js";
+  const now = () => performance.now();
+  const b64 = (u8) => { let s = ""; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode(...u8.subarray(i, i + 0x8000)); return btoa(s); };
   window.initSdk = async () => {
-    const t0 = performance.now();
-    window.F = await createFoliark({ wasmUrl: "/packages/sdk/wasm/foliark_wasm_bg.wasm", workerUrl: "/packages/sdk/dist/worker.js" });
-    return performance.now() - t0;
+    const t0 = now();
+    window.F = await createFoliark({ wasmUrl: "/packages/sdk/wasm/foliark_wasm_bg.wasm", workerUrl: "/__bench/sdk-worker.js" });
+    return now() - t0;
   };
   window.sdkOpen = async (b64) => {
     const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-    const t0 = performance.now();
+    const t0 = now();
     window.D = await F.open(bytes);
-    return { ms: performance.now() - t0, pages: D.pageCount };
+    return { ms: now() - t0, pages: (await D.info()).pageCount };
   };
-  window.sdkRender = async (p, scale) => { const t0 = performance.now(); const r = await D.renderPage(p, { scale }); return { ms: performance.now() - t0, w: r.width, h: r.height }; };
-  window.sdkClose = async () => { const t0 = performance.now(); await D.close(); return performance.now() - t0; };
+  window.sdkRender = async (p, scale) => { const t0 = now(); const r = await D.renderPage(p, { scale }); return { ms: now() - t0, w: r.width, h: r.height }; };
+  window.sdkClose = async () => { const t0 = now(); await D.close(); return now() - t0; };
   window.sdkDispose = () => F.dispose();
+  window.sdkExtractAll = async () => {
+    const t0 = now(); let words = 0, chars = 0;
+    const n = (await D.info()).pageCount;
+    for (let p = 0; p < n; p++) { const t = await D.extractText(p); words += t.words.length; chars += t.text.length; }
+    return { ms: now() - t0, words, chars };
+  };
+  window.sdkSearch = async (q) => { const t0 = now(); const h = await D.search(q); return { ms: now() - t0, hits: h.length }; };
+  // The first n text lines of page 0 as display-space rects (union of their words), in reading order.
+  window.sdkLines = async (n) => {
+    const t = await D.extractText(0), by = new Map();
+    for (const w of t.words) { const k = `${w.blockIndex}:${w.lineIndex}`; const l = by.get(k); const { x, y, width, height } = w.box;
+      if (!l) by.set(k, { x, y, x2: x + width, y2: y + height, text: w.text }); else { l.x = Math.min(l.x, x); l.y = Math.min(l.y, y); l.x2 = Math.max(l.x2, x + width); l.y2 = Math.max(l.y2, y + height); l.text += " " + w.text; } }
+    const pg = (await D.pages())[0];
+    return [...by.values()].slice(0, n).map((l) => ({ x: l.x, y: l.y, width: l.x2 - l.x, height: l.y2 - l.y, text: l.text, pageW: pg.width, pageH: pg.height }));
+  };
+  const strip = ({ text, pageW, pageH, ...r }) => r;
+  // The font HDDN lazily fetches as its edit fallback (Liberation Sans); the SDK takes registered faces only.
+  window.sdkRegisterFont = async (url) => {
+    const bytes = new Uint8Array(await (await fetch(url)).arrayBuffer());
+    const t0 = now(); const [f] = await F.registerFonts([{ bytes, family: "Liberation Sans", weight: 400, style: "normal" }]);
+    window.fontId = f.id; return { ms: now() - t0, bytes: bytes.length };
+  };
+  window.sdkParaEdit = async (line) => {
+    const rect = strip(line), text = line.text.slice(0, -1);
+    const t0 = now(); await D.prepareParagraph(0, [rect], { font: fontId }); const t1 = now();
+    const r = await D.applyChanges({ baseRevision: D.revision, textEdits: [{ id: "e", pageIndex: 0, rects: [rect], text, font: fontId }] }); const t2 = now();
+    if (!r.accepted) return { err: JSON.stringify(r.rejected).slice(0, 300) };
+    await D.applyChanges({ baseRevision: D.revision, textEdits: [] });
+    return { prepareMs: t1 - t0, applyMs: t2 - t1 };
+  };
+  // Redact the given lines (regions), export, then clear the redaction list. mode native | raster (scale 2).
+  window.sdkExport = async (mode, lines) => {
+    const redactions = lines.map((l, i) => ({ kind: "region", id: `r${i}`, pageIndex: 0, rect: strip(l) }));
+    const policy = mode === "raster" ? { raster: { acknowledgeLosses: true, scale: 2 } } : undefined;
+    const t0 = now();
+    const r = await D.applyChanges({ baseRevision: D.revision, redactions }); const t1 = now();
+    if (!r.accepted) return { err: JSON.stringify(r.rejected).slice(0, 300) };
+    let plan, out, t2, t3;
+    try { plan = await D.prepareExport({ mode, policy }); t2 = now(); out = await D.export(plan); t3 = now(); }
+    catch (e) { await D.applyChanges({ baseRevision: D.revision, redactions: [] }); return { err: `${e.code ?? ""} ${e.message}`.slice(0, 300) }; }
+    await D.applyChanges({ baseRevision: D.revision, redactions: [] });
+    return { applyMs: t1 - t0, prepareMs: t2 - t1, exportMs: t3 - t2, bytes: out.length, losses: plan.report.losses?.length ?? 0, removed: plan.report.removed, out: b64(out) };
+  };
+  window.wasmMem = () => new Promise((res) => { const ch = new BroadcastChannel("bench-mem"); ch.onmessage = (e) => { ch.close(); res(e.data); }; ch.postMessage("q"); setTimeout(() => res(null), 3000); });
   window.ready = true;
 </script>

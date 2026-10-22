@@ -1,16 +1,17 @@
 // Shared bench helpers: static server with per-path byte accounting, stats, fixtures, machine info.
 import { createHash } from "node:crypto";
 import { execFileSync, spawnSync } from "node:child_process";
-import { createReadStream } from "node:fs";
+import { createReadStream, existsSync } from "node:fs";
 import { mkdir, readFile, stat } from "node:fs/promises";
 import { createServer } from "node:http";
-import { cpus, totalmem } from "node:os";
+import { cpus, loadavg, totalmem } from "node:os";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 export const BENCH = join(ROOT, "tools/bench");
-export const HDDN_DIST = join(ROOT, ".worktrees/hddn-2fe0f9a/dist");
+// HDDN@2fe0f9a built worktree: $HDDN_DIST, else <root>/.worktrees/hddn-2fe0f9a or the sibling worktree of a linked checkout.
+export const HDDN_DIST = process.env.HDDN_DIST ?? [join(ROOT, ".worktrees/hddn-2fe0f9a/dist"), join(ROOT, "../hddn-2fe0f9a/dist")].find(existsSync) ?? join(ROOT, ".worktrees/hddn-2fe0f9a/dist");
 const MIME = { ".html": "text/html", ".js": "text/javascript", ".mjs": "text/javascript", ".wasm": "application/wasm", ".json": "application/json", ".zip": "application/zip", ".whl": "application/octet-stream", ".ttf": "font/ttf", ".css": "text/css", ".pdf": "application/pdf" };
 
 export const sha256 = (buf) => createHash("sha256").update(buf).digest("hex");
@@ -47,6 +48,7 @@ export function sumBytes(map) {
   return out;
 }
 
+const GENERATED = { generated: { script: "make-native30.py", pages: 30 }, "generated-image": { script: "make-imageheavy.py", pages: 6 } };
 export async function loadFixtures(want) {
   const manifest = JSON.parse(await readFile(join(ROOT, "tests/fixtures/manifest.json"), "utf8"));
   const byId = Object.fromEntries(manifest.files.map((f) => [f.id, f]));
@@ -54,10 +56,10 @@ export async function loadFixtures(want) {
   const out = [];
   for (const [id, source, role] of want) {
     let path = source;
-    if (source === "generated") { path = join(BENCH, ".cache/native-30p.pdf"); execFileSync("python3", [join(BENCH, "make-native30.py"), path]); }
+    if (GENERATED[source]) { path = join(BENCH, `.cache/${id}.pdf`); execFileSync("python3", [join(BENCH, GENERATED[source].script), path]); }
     else path = join(ROOT, "tests/fixtures", byId[source].path);
     const buf = await readFile(path);
-    out.push({ id, role, path, buf, sha256: sha256(buf), bytes: buf.length, pages: source === "generated" ? 30 : byId[source].pages, origin: source === "generated" ? "tools/bench/make-native30.py (PyMuPDF, dev-only)" : `tests/fixtures/${byId[source].path}` });
+    out.push({ id, role, path, buf, sha256: sha256(buf), bytes: buf.length, pages: GENERATED[source]?.pages ?? byId[source].pages, origin: GENERATED[source] ? `tools/bench/${GENERATED[source].script} (PyMuPDF, dev-only)` : `tests/fixtures/${byId[source].path}` });
   }
   return out;
 }
@@ -67,10 +69,12 @@ export const FIXTURES = [
   ["image-heavy", "shared-image", "image-heavy"],
   ["rotation-crop", "rotation-crop", "rotation + crop box"],
 ];
+// comparison.json adds a real image-heavy document (the baseline "image-heavy" is a 61 KB 2-page file)
+export const EXTENDED_FIXTURES = [...FIXTURES, ["image-heavy-6p", "generated-image", "image-heavy 6p 300dpi JPEG"]];
 
 export function machine() {
   const sh = (c, a) => spawnSync(c, a, { encoding: "utf8" }).stdout.trim();
-  return { cpu: cpus()[0].model, cores: cpus().length, ramGB: Math.round(totalmem() / 2 ** 30), macOS: sh("sw_vers", ["-productVersion"]), arch: process.arch };
+  return { cpu: cpus()[0].model, cores: cpus().length, ramGB: Math.round(totalmem() / 2 ** 30), macOS: sh("sw_vers", ["-productVersion"]), arch: process.arch, loadAvg1mAtStart: Math.round(loadavg()[0] * 10) / 10 };
 }
 export const gitSha = () => spawnSync("git", ["-C", ROOT, "rev-parse", "--short", "HEAD"], { encoding: "utf8" }).stdout.trim();
 
@@ -81,3 +85,6 @@ export function treeRssBytes() {
   let total = 0; const walk = (pid) => { for (const [c, rss] of kids.get(pid) ?? []) { total += rss * 1024; walk(c); } };
   walk(process.pid); return total;
 }
+
+export const OUT_DIR = join(BENCH, ".cache/out"); // exported PDFs, checked by verify-outputs.py
+export const EDIT_LINES = 10; // text lines of page 0 used as redaction regions / paragraph edit target

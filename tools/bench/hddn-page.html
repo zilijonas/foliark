@@ -1,6 +1,7 @@
 <!doctype html><meta charset="utf-8"><title>hddn bench</title>
 <script>
 // Drives the real HDDN worker with its own protocol. req() resolves on the terminal response and returns wall ms.
+window.wasmMem = () => new Promise((res) => { const ch = new BroadcastChannel("bench-mem"); ch.onmessage = (e) => { ch.close(); res(e.data); }; ch.postMessage("q"); setTimeout(() => res(null), 3000); });
 window.startWorker = (url) => {
   const w = new Worker(url, { type: "module" });
   const waiting = new Map(); let id = 0;
