@@ -127,6 +127,11 @@ impl Targets {
         Ok(Self { forms, content })
     }
 
+    /// Clones of Form occurrences that [`Targets::apply`] makes.
+    pub fn forms_cloned(&self) -> u32 {
+        self.forms.len() as u32
+    }
+
     /// The stream that an edit of `stream`, drawn on `page` through `path`, must go to.
     pub fn stream(&self, page: u32, path: &[InstanceStep], stream: ObjectId) -> ObjectId {
         let found = match path.last() {

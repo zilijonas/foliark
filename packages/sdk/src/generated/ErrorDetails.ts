@@ -3,4 +3,8 @@
 /**
  * Structured error context. Only `chars` (of a refused edit) may contain document text.
  */
-export type ErrorDetails = { limit?: string, actual?: number, max?: number, feature?: string, pages?: Array<number>, fields?: Array<string>, editId?: string, chars?: string, neededLines?: number, maxLines?: number, objRef?: string, };
+export type ErrorDetails = { limit?: string, actual?: number, max?: number, feature?: string, pages?: Array<number>, fields?: Array<string>, editId?: string, chars?: string, neededLines?: number, maxLines?: number, objRef?: string, 
+/**
+ * Ids of the refused operations (redactions) the error is about.
+ */
+ids?: Array<string>, };

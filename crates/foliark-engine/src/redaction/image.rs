@@ -605,3 +605,56 @@ pub fn redact_images(
     }
     Ok(report)
 }
+
+/// Spec §5.7 on an OUTPUT: how many image occurrences of `plan` (built from the output) still
+/// show unerased samples. Erasing is idempotent, so an occurrence is erased iff re-erasing its
+/// image reproduces the stored samples (and mask). An inline image is never erased.
+pub fn unerased(doc: &Document, plan: &RedactionPlan) -> Result<u32, PdfError> {
+    let r = doc.reader();
+    let mut budget = Budget::new(r.limits());
+    let mut stored = |s: &Stream<'_>, id| -> Result<Vec<u8>, PdfError> {
+        Ok(limits::decode_stream(s, id, r.limits(), &mut budget)?.into_owned())
+    };
+    let mut count = 0;
+    for page in &plan.pages {
+        if page.images.is_empty() {
+            continue;
+        }
+        let model = doc.page_model(page.page_index as usize)?;
+        for pi in &page.images {
+            let Some(obj) = pi.obj else {
+                count += 1;
+                continue;
+            };
+            let item = model
+                .items
+                .iter()
+                .find_map(|it| match &it.kind {
+                    ItemKind::Image(i) if it.loc == pi.loc && it.path == pi.path => Some(i),
+                    _ => None,
+                })
+                .ok_or(PdfError::new(ErrorCode::Internal))?;
+            let m = Affine::new(model.geometry.user_to_display.0) * Affine::new(item.ctm.0);
+            let stream = stream_of(doc, obj)?;
+            let mut again_budget = Budget::new(r.limits());
+            let (enc, _) = encode(
+                &stream,
+                item,
+                obj,
+                m,
+                &rects(pi, &page.regions),
+                r.limits(),
+                &mut again_budget,
+            )?;
+            let mut same = stored(&stream, obj)? == enc.data;
+            if let Some(mask) = &enc.smask {
+                same &= match stream.dict().get::<Stream<'_>>("SMask") {
+                    Some(s) => stored(&s, obj)? == mask.data,
+                    None => false,
+                };
+            }
+            count += u32::from(!same);
+        }
+    }
+    Ok(count)
+}

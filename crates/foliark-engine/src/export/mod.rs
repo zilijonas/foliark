@@ -4,23 +4,30 @@
 //!
 //! 1. raster mode: `CONSENT_REQUIRED` without acknowledgment, else refused until NEW-54;
 //! 2. preflight ([`preflight`]): widget / annotation flattening (NEW-42), optional-content
-//!    flattening (NEW-43), signed input policy, image erasure (NEW-34/35) and vector cutting
-//!    (NEW-36/37) refuse by name. `annotations: remove` is built (the allowlist writer drops
-//!    every annotation), so it needs no flattening stage;
-//! 3. text redaction (`redact_text`) and region fills, through the writer;
+//!    flattening (NEW-43), signed input policy, and redaction the plan cannot execute (pattern
+//!    paint, soft-mask groups) refuse by name, with the redaction ids. `annotations: remove` is
+//!    built (the allowlist writer drops every annotation), so it needs no flattening stage;
+//! 3. removal on one writer ([`crate::redaction::execute`]: Form clones, text, images with
+//!    their masks, vectors), then the region fills painted last, outside every clip. Removal
+//!    never depends on a fill; `fill: null` paints nothing;
 //! 4. sanitization: the allowlist writer plus the counts of [`crate::sanitize::document`];
-//! 5. write; 6. verify (§5.7): strict reparse, page count, no cluster meeting rule 1.
+//! 5. write; 6. verify (§5.7): strict reparse, page count, no cluster meeting rule 1, every
+//!    image under a region erased, no vector geometry under a region (our own fills aside).
+//!
+//! Every requested redaction is applied (listed in [`Prepared::applied`] with its effective
+//! regions) or the whole export is refused: a stage error is attributed to the redactions it
+//! can concern and no bytes leave. Report counts come from what the stages did.
 use crate::Document;
-use crate::document::{Binding, Committed};
+use crate::document::{Binding, Committed, StoredRedaction};
 use crate::engine::not_built;
 use crate::redaction::plan::{RedactionPlan, bounds_of, text_coverage};
-use crate::redaction::text::redact_text;
+use crate::redaction::{Executed, execute, image};
 use crate::sanitize::document::scan;
 use crate::writer::Writer;
 use foliark_model::{
     Capabilities, Capability, CapabilityReason, CapabilityStatus, EditsReport, ErrorCode,
     ExportMode, ExportPolicy, ExportReport, ExtractOptions, Flattened, KeptReport, Limits, Loss,
-    LossCode, PdfError, Point, SanitizedItem,
+    LossCode, PdfError, Point, Rect, RedactionReport, SanitizedItem,
 };
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -40,6 +47,16 @@ pub(crate) struct Held {
 pub struct Prepared {
     pub bytes: Vec<u8>,
     pub report: ExportReport,
+    /// Every committed redaction, applied: its page and the boxes it effectively took out (the
+    /// requested rectangles grown to every whole cluster, image and vector removed for them).
+    pub applied: Vec<AppliedRedaction>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AppliedRedaction {
+    pub id: String,
+    pub page_index: u32,
+    pub effective: Vec<Rect>,
 }
 
 fn verify_failed() -> PdfError {
@@ -63,12 +80,14 @@ fn merge(losses: &mut Vec<Loss>, add: impl IntoIterator<Item = Loss>) {
     }
 }
 
-/// An opaque rectangle per region, painted last on its page (spec §5.5). `fill: None` is black.
+/// An opaque rectangle per region with a fill, painted last on its page (spec §5.5).
 fn fills(doc: &Document, committed: &Committed) -> Result<BTreeMap<u32, String>, PdfError> {
     let mut out: BTreeMap<u32, String> = BTreeMap::new();
     for r in &committed.redactions {
         let geometry = doc.page_geometry(r.page_index as usize)?;
-        let [cr, cg, cb] = r.fill.unwrap_or([0.0; 3]);
+        let Some([cr, cg, cb]) = r.fill else {
+            continue;
+        };
         let ops = out.entry(r.page_index).or_default();
         for q in &r.regions {
             let corners = [
@@ -94,6 +113,10 @@ fn fills(doc: &Document, committed: &Committed) -> Result<BTreeMap<u32, String>,
     Ok(out)
 }
 
+/// How far a region is shrunk for the output re-plan, so that the rectangles a cut leaves next
+/// to it (rounded when written) do not count as geometry under it.
+const SLACK: f64 = 0.01;
+
 /// Spec §5.7 on the output, plus the invisible-cluster count of the report. `Err` = no output.
 fn verify(
     bytes: &[u8],
@@ -112,12 +135,7 @@ fn verify(
     };
     let mut invisible = 0u32;
     for p in 0..pages {
-        let regions: Vec<[f64; 4]> = committed
-            .redactions
-            .iter()
-            .filter(|r| r.page_index as usize == p)
-            .flat_map(|r| r.regions.iter().map(bounds_of))
-            .collect();
+        let regions = page_regions(committed, p, 0.0);
         for c in out.extract_text(p, &opts)?.clusters.iter().flatten() {
             invisible += u32::from(c.flags & 1 != 0);
             if regions.iter().any(|r| text_coverage(&c.quad, *r).is_some()) {
@@ -125,7 +143,122 @@ fn verify(
             }
         }
     }
+    if committed.redactions.is_empty() {
+        return Ok(invisible);
+    }
+    // Images and vectors: plan the same regions (text ranges as plain regions) against the
+    // output. What it still finds under a region must be erased or be one of our fills.
+    let shrunk = Committed {
+        edits: Vec::new(),
+        redactions: committed
+            .redactions
+            .iter()
+            .map(|r| StoredRedaction {
+                regions: r.regions.iter().map(|g| shrink(g, SLACK)).collect(),
+                must_remove: Vec::new(),
+                ..r.clone()
+            })
+            .collect(),
+    };
+    let binding = Binding {
+        doc_id: String::new(),
+        generation: 0,
+        revision: 0,
+    };
+    let after = RedactionPlan::build(&out, &shrunk, binding)?;
+    if image::unerased(&out, &after)? > 0 {
+        return Err(verify_failed());
+    }
+    for page in &after.pages {
+        let ours = page_regions(committed, page.page_index as usize, 0.0);
+        let is_fill = |b: &Rect| {
+            let b = bounds_of(b);
+            ours.iter()
+                .any(|r| r.iter().zip(b).all(|(x, y)| (x - y).abs() < 5.0 * SLACK))
+        };
+        if page.vectors.iter().any(|v| !is_fill(&v.bounds)) {
+            return Err(verify_failed());
+        }
+    }
     Ok(invisible)
+}
+
+fn page_regions(committed: &Committed, page: usize, grow: f64) -> Vec<[f64; 4]> {
+    committed
+        .redactions
+        .iter()
+        .filter(|r| r.page_index as usize == page)
+        .flat_map(|r| r.regions.iter().map(|g| bounds_of(&shrink(g, -grow))))
+        .collect()
+}
+
+fn shrink(r: &Rect, by: f64) -> Rect {
+    if r.width <= 2.0 * by || r.height <= 2.0 * by {
+        return *r;
+    }
+    Rect {
+        x: r.x + by,
+        y: r.y + by,
+        width: r.width - 2.0 * by,
+        height: r.height - 2.0 * by,
+    }
+}
+
+/// A stage error names the redactions it can concern: the ones with planned work on the pages
+/// the error names (all pages if it names none). An error that already names ids keeps them.
+fn attribute(plan: &RedactionPlan, mut e: PdfError) -> PdfError {
+    let d = e.details.get_or_insert_with(Default::default);
+    if d.ids.is_none() {
+        let mut ids: Vec<String> = plan
+            .pages
+            .iter()
+            .filter(|p| d.pages.as_ref().is_none_or(|pg| pg.contains(&p.page_index)))
+            .flat_map(|p| &p.regions)
+            .filter(|r| r.clusters + r.images + r.vectors > 0)
+            .map(|r| r.redaction.clone())
+            .collect();
+        ids.sort_unstable();
+        ids.dedup();
+        d.ids = Some(ids);
+    }
+    e
+}
+
+/// The counts the stages produced must be the counts the plan disclosed: a stage that did less
+/// than planned dropped work silently.
+fn check_stages(plan: &RedactionPlan, x: &Executed) -> Result<(), PdfError> {
+    let p = &plan.report;
+    let ok = x.text.clusters_removed == p.clusters_removed
+        && x.images.images_erased == p.images_erased
+        && x.images.images_cloned == p.images_cloned
+        && x.forms_cloned == p.forms_cloned
+        && x.vectors.subpaths_removed == p.vector_subpaths_removed
+        && x.vectors.rects_cut == p.vector_rects_cut
+        && x.vectors.collateral.len() == p.collateral.len();
+    if ok { Ok(()) } else { Err(verify_failed()) }
+}
+
+fn applied(plan: &RedactionPlan, committed: &Committed) -> Result<Vec<AppliedRedaction>, PdfError> {
+    let mut out: Vec<AppliedRedaction> = Vec::new();
+    for page in &plan.pages {
+        for r in &page.regions {
+            match out
+                .iter_mut()
+                .find(|a| a.id == r.redaction && a.page_index == page.page_index)
+            {
+                Some(a) => a.effective.push(r.effective),
+                None => out.push(AppliedRedaction {
+                    id: r.redaction.clone(),
+                    page_index: page.page_index,
+                    effective: vec![r.effective],
+                }),
+            }
+        }
+    }
+    if out.len() != committed.redactions.len() {
+        return Err(PdfError::new(ErrorCode::Internal));
+    }
+    Ok(out)
 }
 
 /// Run the native pipeline for `doc`, the working copy at `binding`.
@@ -157,13 +290,15 @@ pub fn prepare(
     }
 
     let mut w = Writer::new(reader, limits.clone());
-    let text = redact_text(doc, &plan, &mut w)?;
+    let done = execute(doc, &plan, &mut w).map_err(|e| attribute(&plan, e))?;
+    check_stages(&plan, &done)?;
     for (page, ops) in fills(doc, committed)? {
         w.append_page_content(page as usize, ops.as_bytes())?;
     }
     let bytes = w.write()?;
     let pages = doc.page_count();
     let invisible = verify(&bytes, pages, committed, limits)?;
+    let applied = applied(&plan, committed)?;
 
     let mut removed = removals.removed;
     if annots.total > 0 {
@@ -186,7 +321,8 @@ pub fn prepare(
     if policy.annotations == foliark_model::AnnotationPolicy::Remove {
         add(LossCode::AnnotationsRemoved, annots.visible);
     }
-    let mut inventory: Vec<String> = text
+    let mut inventory: Vec<String> = done
+        .text
         .fonts_with_glyph_inventory
         .into_iter()
         .map(|(_, name)| name)
@@ -194,10 +330,54 @@ pub fn prepare(
     inventory.sort_unstable();
     inventory.dedup();
     add(LossCode::FontGlyphInventoryRetained, inventory.len() as u32);
-    merge(&mut losses, plan.losses.clone());
+    let mut stage_loss = |code, count: u32, pages: Vec<u32>| {
+        if count > 0 {
+            merge(
+                &mut losses,
+                [Loss {
+                    code,
+                    count,
+                    pages: Some(pages),
+                }],
+            );
+        }
+    };
+    let on = |has: fn(&crate::redaction::plan::PagePlan) -> bool| -> Vec<u32> {
+        plan.pages
+            .iter()
+            .filter(|p| has(p))
+            .map(|p| p.page_index)
+            .collect()
+    };
+    stage_loss(
+        LossCode::ImageReencoded,
+        done.images.images_erased,
+        on(|p| !p.images.is_empty()),
+    );
+    let mut collateral_pages: Vec<u32> = done
+        .vectors
+        .collateral
+        .iter()
+        .map(|c| c.page_index)
+        .collect();
+    collateral_pages.dedup();
+    stage_loss(
+        LossCode::VectorCollateral,
+        done.vectors.collateral.len() as u32,
+        collateral_pages,
+    );
 
-    let mut redaction = plan.report.clone();
-    redaction.clusters_removed = text.clusters_removed;
+    let redaction = RedactionReport {
+        regions: plan.report.regions,
+        clusters_removed: done.text.clusters_removed,
+        images_erased: done.images.images_erased,
+        images_cloned: done.images.images_cloned,
+        forms_cloned: done.forms_cloned,
+        vector_subpaths_removed: done.vectors.subpaths_removed,
+        vector_rects_cut: done.vectors.rects_cut,
+        collateral: done.vectors.collateral,
+        shared_survivors: plan.report.shared_survivors.clone(),
+    };
     let output_bytes = u32::try_from(bytes.len())
         .map_err(|_| PdfError::limit("maxOutputBytes", bytes.len() as u64, u64::from(u32::MAX)))?;
     let report = ExportReport {
@@ -221,7 +401,11 @@ pub fn prepare(
         },
         losses,
     };
-    Ok(Prepared { bytes, report })
+    Ok(Prepared {
+        bytes,
+        report,
+        applied,
+    })
 }
 
 fn capability(status: CapabilityStatus, blockers: &[Blocker]) -> Capability {

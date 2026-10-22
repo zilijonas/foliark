@@ -93,6 +93,8 @@ pub struct ErrorDetails {
     pub needed_lines: Option<u32>,
     pub max_lines: Option<u32>,
     pub obj_ref: Option<String>,
+    /// Ids of the refused operations (redactions) the error is about.
+    pub ids: Option<Vec<String>>,
 }
 
 /// The error a Rust op returns across the wasm boundary (`PdfError` plus a message).
@@ -545,18 +547,43 @@ pub enum Redaction {
         id: String,
         page_index: u32,
         rect: Rect,
-        /// Default black.
+        /// Omitted = black; an explicit `null` = no fill (the content is still removed).
+        #[serde(
+            default,
+            with = "fill_or_none",
+            skip_serializing_if = "Option::is_none"
+        )]
         #[ts(type = "[number, number, number] | null", optional)]
-        fill: Option<[f64; 3]>,
+        fill: Option<Option<[f64; 3]>>,
     },
     Text {
         id: String,
         page_index: u32,
         start: u32,
         end: u32,
+        #[serde(
+            default,
+            with = "fill_or_none",
+            skip_serializing_if = "Option::is_none"
+        )]
         #[ts(type = "[number, number, number] | null", optional)]
-        fill: Option<[f64; 3]>,
+        fill: Option<Option<[f64; 3]>>,
     },
+}
+
+/// Tells an omitted `fill` (`None`, black) from an explicit `null` (`Some(None)`, no fill).
+mod fill_or_none {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(
+        d: D,
+    ) -> Result<Option<Option<[f64; 3]>>, D::Error> {
+        <Option<[f64; 3]>>::deserialize(d).map(Some)
+    }
+
+    pub fn serialize<S: Serializer>(v: &Option<Option<[f64; 3]>>, s: S) -> Result<S::Ok, S::Error> {
+        v.flatten().serialize(s)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]

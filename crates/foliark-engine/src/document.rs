@@ -33,7 +33,7 @@ pub struct StoredRedaction {
     pub id: String,
     pub page_index: u32,
     pub regions: Vec<Rect>,
-    /// `None` = black.
+    /// `None` = no fill: the content is removed and nothing is painted over it.
     pub fill: Option<[f64; 3]>,
     pub must_remove: Vec<ClusterId>,
 }
@@ -187,14 +187,14 @@ impl Session {
                 fill,
             } => {
                 self.check_page(*page_index)?;
-                if !rect_ok(rect) || !fill_ok(*fill) {
+                if !rect_ok(rect) || !fill_ok(fill.flatten()) {
                     return Err(invalid());
                 }
                 Ok(StoredRedaction {
                     id: id.clone(),
                     page_index: *page_index,
                     regions: vec![*rect],
-                    fill: *fill,
+                    fill: fill.unwrap_or(Some([0.0; 3])),
                     must_remove: Vec::new(),
                 })
             }
@@ -206,7 +206,7 @@ impl Session {
                 fill,
             } => {
                 self.check_page(*page_index)?;
-                if !fill_ok(*fill) {
+                if !fill_ok(fill.flatten()) {
                     return Err(invalid());
                 }
                 let (regions, must_remove) = self
@@ -220,7 +220,7 @@ impl Session {
                     id: id.clone(),
                     page_index: *page_index,
                     regions,
-                    fill: *fill,
+                    fill: fill.unwrap_or(Some([0.0; 3])),
                     must_remove,
                 })
             }

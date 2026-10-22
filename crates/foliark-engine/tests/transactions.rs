@@ -148,7 +148,7 @@ fn one_bad_item_rejects_the_whole_changeset_and_nothing_changes() {
                 id: "x".into(),
                 page_index: 0,
                 rect: R(0.0, 0.0, 5.0, 5.0),
-                fill: Some([2.0, 0.0, 0.0]),
+                fill: Some(Some([2.0, 0.0, 0.0])),
             },
         ),
         ("past the end", text_red("x", 0, 10, 99)),

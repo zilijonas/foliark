@@ -93,7 +93,7 @@ const isPhase = oneOf(PHASES);
 const isErrorDetails = shape({
   limit: opt(isStr), actual: opt(isNum), max: opt(isNum), feature: opt(isStr), pages: opt(arrayOf(isU32)),
   fields: opt(arrayOf(isStr)), editId: opt(isStr), chars: opt(isStr), neededLines: opt(isU32), maxLines: opt(isU32),
-  objRef: opt(isStr),
+  objRef: opt(isStr), ids: opt(arrayOf(isStr)),
 });
 export const isErrorWire = shape({
   code: isErrorCode, message: isStr, details: opt(isErrorDetails), recoverable: (x) => typeof x === "boolean",

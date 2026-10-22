@@ -295,7 +295,7 @@ fn annotations_remove_policy_drops_them_and_says_so() {
 }
 
 #[test]
-fn redaction_over_an_image_refuses_until_the_image_executor_exists() {
+fn redaction_over_an_image_exports_with_the_image_erased_and_reported() {
     let (mut e, doc) = engine(fixture("hddn/shared-image.pdf"));
     let task = e.apply_changes(
         &doc,
@@ -316,11 +316,17 @@ fn redaction_over_an_image_refuses_until_the_image_executor_exists() {
         },
     );
     assert!(run(&mut e, task).unwrap().accepted);
-    let err = prepare(&mut e, &doc, ExportMode::Native, ExportPolicy::default()).unwrap_err();
-    assert_eq!(feature(&err), Some("redactionImages"));
+    let plan = native(&mut e, &doc);
+    assert!(plan.report.redaction.images_erased > 0);
+    assert!(
+        plan.report
+            .losses
+            .iter()
+            .any(|l| l.code == LossCode::ImageReencoded)
+    );
     let caps = e.capabilities(&doc, false);
     let caps = run(&mut e, caps).unwrap();
-    assert_eq!(caps.redact.status, CapabilityStatus::Unsupported);
+    assert_eq!(caps.redact.status, CapabilityStatus::Supported);
 }
 
 #[test]

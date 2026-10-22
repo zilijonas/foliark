@@ -16,7 +16,7 @@ use foliark_model::{
 use hayro::hayro_interpret::font::{Glyph, GlyphRun};
 use hayro::hayro_interpret::hayro_cmap::BfString;
 use hayro::hayro_interpret::hayro_syntax::object::dict::keys::{PARENT, RESOURCES};
-use hayro::hayro_interpret::hayro_syntax::object::{Dict, ObjRef, Stream};
+use hayro::hayro_interpret::hayro_syntax::object::{Dict, ObjRef, ObjectIdentifier, Stream};
 use hayro::hayro_interpret::hayro_syntax::xref::XRef;
 use hayro::hayro_interpret::pattern::Pattern;
 use hayro::hayro_interpret::{
@@ -44,6 +44,11 @@ pub struct SemanticPage {
     pub diagnostics: Vec<Diagnostic>,
     /// Every Form occurrence the page enters, outermost first.
     pub forms: Vec<FormUse>,
+    /// Indices into `items` of everything drawn under an ExtGState soft mask. The mask group's
+    /// own content is not interpreted into the model (the planner refuses regions over it).
+    pub soft_masked: Vec<usize>,
+    /// User-space `[x0, y0, x1, y1]` of each distinct soft-mask group's BBox.
+    pub soft_mask_groups: Vec<[f64; 4]>,
 }
 
 /// One Form drawn by a `Do`: `path` ends with the Form's own step and `loc` is the `Do`
@@ -194,9 +199,47 @@ struct Builder<'x> {
     /// Set on the first budget failure: the interpreter's `should_stop` (hayro P15) reads it,
     /// so the rest of the page is not walked.
     tripped: Arc<AtomicBool>,
+    /// Open transparency groups, true for those carrying a soft mask.
+    groups: Vec<bool>,
+    /// The draw being reported carries a soft mask in its own properties.
+    props_masked: bool,
+    soft_masked: Vec<usize>,
+    mask_ids: HashSet<ObjectIdentifier>,
+    soft_mask_groups: Vec<[f64; 4]>,
+}
+
+/// Reads the BBox of a soft-mask group: the first clip its content pushes.
+struct BoxProbe(Option<Rect>);
+
+impl Device<'_> for BoxProbe {
+    fn draw_path(&mut self, _: &BezPath, _: DrawProps<'_>, _: &DrawMode) {}
+    fn push_clip_path(&mut self, clip: &ClipPath) {
+        self.0.get_or_insert_with(|| clip.path.bounding_box());
+    }
+    fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask<'_>>, _: BlendMode) {}
+    fn draw_glyph_run(&mut self, _: &GlyphRun<'_, '_>, _: DrawProps<'_>, _: &DrawMode) {}
+    fn draw_image(&mut self, _: Image<'_, '_>, _: ImageDrawProps<'_>) {}
+    fn pop_clip(&mut self) {}
+    fn pop_transparency_group(&mut self) {}
 }
 
 impl Builder<'_> {
+    /// Record a soft mask's group BBox once (the group itself is not part of the model).
+    fn note_mask(&mut self, m: &SoftMask<'_>) {
+        if self.mask_ids.insert(m.id()) && self.charge(1) {
+            let mut probe = BoxProbe(None);
+            m.interpret(&mut probe);
+            // A group whose box cannot be read is the whole page, never nothing.
+            let b = probe.0.unwrap_or(Rect::new(-1e9, -1e9, 1e9, 1e9));
+            self.soft_mask_groups.push([b.x0, b.y0, b.x1, b.y1]);
+        }
+    }
+
+    fn note_props(&mut self, m: &Option<SoftMask<'_>>) -> bool {
+        m.iter().for_each(|m| self.note_mask(m));
+        m.is_some()
+    }
+
     /// Charge work units; the first failure is kept, stops the interpreter and everything
     /// reported before it lands is ignored.
     fn charge(&mut self, units: u64) -> bool {
@@ -219,6 +262,9 @@ impl Builder<'_> {
             let r = rest.iter().fold(*first, |acc, c| acc.intersect(*c));
             [r.x0, r.y0, r.x1, r.y1]
         });
+        if self.props_masked || self.groups.contains(&true) {
+            self.soft_masked.push(self.items.len());
+        }
         let frame = self.stack.last().expect("page frame");
         self.items.push(Item {
             loc: self.loc,
@@ -344,7 +390,9 @@ fn id_to_ref(id: ObjectId) -> ObjRef {
 impl<'a> Device<'a> for Builder<'_> {
     fn draw_path(&mut self, path: &BezPath, props: DrawProps<'a>, mode: &DrawMode) {
         if self.charge(1) {
+            self.props_masked = self.note_props(&props.soft_mask);
             self.path_item(path, &props, mode);
+            self.props_masked = false;
         }
     }
 
@@ -361,7 +409,16 @@ impl<'a> Device<'a> for Builder<'_> {
         }
     }
 
-    fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask<'a>>, _: BlendMode) {}
+    fn push_transparency_group(&mut self, _: f32, mask: Option<SoftMask<'a>>, _: BlendMode) {
+        self.groups.push(mask.is_some());
+        if let Some(m) = mask {
+            self.note_mask(&m);
+        }
+    }
+
+    fn pop_transparency_group(&mut self) {
+        self.groups.pop();
+    }
 
     fn draw_glyph_run(&mut self, run: &GlyphRun<'_, 'a>, props: DrawProps<'a>, mode: &DrawMode) {
         // Modes 2 and 6 draw the run twice (fill, stroke): it is one set of glyphs.
@@ -372,12 +429,14 @@ impl<'a> Device<'a> for Builder<'_> {
             Paint::Color(c) => Some(c.to_rgba().to_rgba8()),
             Paint::Pattern(_) => None,
         };
+        self.props_masked = self.note_props(&props.soft_mask);
         for g in run.glyphs() {
             if !self.charge(1) {
-                return;
+                break;
             }
             self.glyph(g, run.render_mode(), fill, props.transform);
         }
+        self.props_masked = false;
     }
 
     fn draw_image(&mut self, image: Image<'a, '_>, props: ImageDrawProps<'a>) {
@@ -399,6 +458,7 @@ impl<'a> Device<'a> for Builder<'_> {
             Image::Raster(r) => (r.stream(), false),
             Image::Stencil(s) => (s.stream(), true),
         };
+        self.props_masked = self.note_props(&props.soft_mask);
         let (w, h) = (f64::from(image.width()), f64::from(image.height()));
         let id = stream.obj_id();
         let dict = stream.dict();
@@ -412,13 +472,12 @@ impl<'a> Device<'a> for Builder<'_> {
             has_mask: dict.contains_key("Mask"),
             is_stencil,
         }));
+        self.props_masked = false;
     }
 
     fn pop_clip(&mut self) {
         self.clips.pop();
     }
-
-    fn pop_transparency_group(&mut self) {}
 
     fn begin_operator(&mut self, stream: ObjRef, range: Range<usize>) {
         self.charge(1);
@@ -559,6 +618,11 @@ impl Document {
             error: None,
             entered: HashSet::new(),
             tripped,
+            groups: Vec::new(),
+            props_masked: false,
+            soft_masked: Vec::new(),
+            mask_ids: HashSet::new(),
+            soft_mask_groups: Vec::new(),
         };
         interpret_page(page, &mut ctx, &mut device);
         if self.cancelled() {
@@ -601,6 +665,8 @@ impl Document {
             fonts: device.fonts,
             diagnostics,
             forms: device.forms,
+            soft_masked: device.soft_masked,
+            soft_mask_groups: device.soft_mask_groups,
         })
     }
 }

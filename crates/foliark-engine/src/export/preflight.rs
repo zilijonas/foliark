@@ -1,8 +1,8 @@
 //! Export preflight (spec §4, §5, §11): decide, before any byte is written, which pipeline
 //! stages this build cannot run for a revision. A stage that is not built (annotation and widget
-//! flattening NEW-42, optional-content flattening NEW-43, image erasure NEW-34/35, vector
-//! subtraction NEW-36/37) is a typed refusal that names the feature and the pages, never a
-//! silent drop. Also the stable policy hash a plan is bound to.
+//! flattening NEW-42, optional-content flattening NEW-43) or a redaction the plan cannot execute
+//! (pattern paint, soft-mask groups) is a typed refusal that names the feature, the pages and
+//! the redaction ids, never a silent drop. Also the stable policy hash a plan is bound to.
 use crate::reader::Document;
 use crate::redaction::plan::{PagePlan, RedactionPlan};
 use foliark_model::{
@@ -18,6 +18,8 @@ pub struct Blocker {
     pub code: ErrorCode,
     pub feature: &'static str,
     pub pages: Vec<u32>,
+    /// The redactions the stage cannot execute (empty for document-level blockers).
+    pub ids: Vec<String>,
 }
 
 impl Blocker {
@@ -26,6 +28,7 @@ impl Blocker {
             code: ErrorCode::InvalidArgument,
             feature,
             pages,
+            ids: Vec::new(),
         }
     }
 
@@ -35,6 +38,7 @@ impl Blocker {
             ErrorDetails {
                 feature: Some(self.feature.into()),
                 pages: (!self.pages.is_empty()).then(|| self.pages.clone()),
+                ids: (!self.ids.is_empty()).then(|| self.ids.clone()),
                 ..ErrorDetails::default()
             },
         )
@@ -110,6 +114,7 @@ pub fn document_blockers(
             code: ErrorCode::SignedInput,
             feature: "signedInput",
             pages: Vec::new(),
+            ids: Vec::new(),
         });
     }
     let cat = catalog(doc);
@@ -135,6 +140,7 @@ pub fn document_blockers(
             code: ErrorCode::OptionalContentUnsupported,
             feature: "flattenOptionalContent",
             pages: Vec::new(),
+            ids: Vec::new(),
         });
     }
     if policy.invisible_text == InvisibleTextPolicy::Remove {
@@ -143,32 +149,43 @@ pub fn document_blockers(
     out
 }
 
-/// Redaction work the plan found that no executor exists for yet: erasing image pixels and
-/// cutting vectors. Text and region fills run now.
+/// Redaction work the plan found that no executor can carry out: paint of a tiling pattern
+/// over a region (its cell is not interpreted) and content under a soft mask (the mask group is
+/// not in the model). Each names the redactions whose regions reach it: refusing is atomic and
+/// attributable, nothing is skipped.
 pub fn plan_blockers(plan: &RedactionPlan) -> Vec<Blocker> {
-    let pages = |has: fn(&PagePlan) -> bool| {
-        plan.pages
-            .iter()
-            .filter(|p| has(p))
-            .map(|p| p.page_index)
-            .collect::<Vec<_>>()
-    };
+    type Pick = fn(&PagePlan) -> &[u32];
+    let stages: [(ErrorCode, &'static str, Pick); 2] = [
+        (
+            ErrorCode::RedactPatternUnsupported,
+            "redactionPatterns",
+            |p| &p.pattern_regions,
+        ),
+        (ErrorCode::InvalidArgument, "redactionSoftMaskGroup", |p| {
+            &p.soft_masks
+        }),
+    ];
     let mut out = Vec::new();
-    let images = pages(|p| !p.images.is_empty());
-    if !images.is_empty() {
-        out.push(Blocker::not_built("redactionImages", images));
-    }
-    let vectors = pages(|p| !p.vectors.is_empty());
-    if !vectors.is_empty() {
-        out.push(Blocker::not_built("redactionVectors", vectors));
-    }
-    let patterns = pages(|p| !p.patterns.is_empty());
-    if !patterns.is_empty() {
-        out.push(Blocker {
-            code: ErrorCode::RedactPatternUnsupported,
-            feature: "redactionPatterns",
-            pages: patterns,
-        });
+    for (code, feature, pick) in stages {
+        let mut b = Blocker {
+            code,
+            feature,
+            pages: Vec::new(),
+            ids: Vec::new(),
+        };
+        for p in &plan.pages {
+            let hit = pick(p);
+            if !hit.is_empty() {
+                b.pages.push(p.page_index);
+                b.ids
+                    .extend(hit.iter().map(|&i| p.regions[i as usize].redaction.clone()));
+            }
+        }
+        b.ids.sort_unstable();
+        b.ids.dedup();
+        if !b.pages.is_empty() {
+            out.push(b);
+        }
     }
     out
 }

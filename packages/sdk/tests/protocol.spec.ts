@@ -181,7 +181,7 @@ describe("error codes over the wire", () => {
   const codes = Object.keys(ERROR_CODES) as ErrorCode[];
   it("round trips every code with its details through a structured clone", () => {
     expect(codes).toHaveLength(35);
-    const details = { limit: "maxPages", actual: 31, max: 30, pages: [1, 2], fields: ["a"], editId: "e1", chars: "x", neededLines: 3, maxLines: 2, objRef: "12 0", feature: "f" };
+    const details = { limit: "maxPages", actual: 31, max: 30, pages: [1, 2], fields: ["a"], editId: "e1", chars: "x", neededLines: 3, maxLines: 2, objRef: "12 0", feature: "f", ids: ["r1"] };
     for (const code of codes) {
       const c = new Correlator<string>();
       const id = c.register("close", "x");

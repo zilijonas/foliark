@@ -9,7 +9,7 @@
 use crate::Document;
 use crate::document::{Binding, Committed};
 use crate::engine::Engine;
-use crate::interpret::{DiagnosticKind, GlyphItem, ItemKind, PathItem, SemanticPage};
+use crate::interpret::{DiagnosticKind, GlyphItem, Item, ItemKind, PathItem, SemanticPage};
 use crate::text::ClusterId;
 use foliark_model::{
     Collateral, ErrorCode, InstancePath, InstanceStep, Loss, LossCode, Matrix, ObjectId, PdfError,
@@ -58,6 +58,11 @@ pub struct PagePlan {
     /// Tiling-pattern paint under a region. The cell is not interpreted, so whether it holds
     /// text or images (`REDACT_PATTERN_UNSUPPORTED`, §5.4) is for the vector task to decide.
     pub patterns: Vec<Rect>,
+    /// Regions that meet that paint (indices into `regions`).
+    pub pattern_regions: Vec<u32>,
+    /// Regions that meet content drawn under an ExtGState soft mask or that mask group's BBox
+    /// (indices into `regions`). The mask group is not in the model, so nothing executes these.
+    pub soft_masks: Vec<u32>,
 }
 
 /// One region of a redaction and what it effectively takes out: `effective` is the box of the
@@ -631,6 +636,8 @@ fn plan_page(
         forms: Vec::new(),
         annotations: Vec::new(),
         patterns: Vec::new(),
+        pattern_regions: Vec::new(),
+        soft_masks: Vec::new(),
     };
     let mut resolved: HashSet<&ClusterId> = HashSet::new();
     let mut form_seen: HashSet<Vec<InstanceStep>> = HashSet::new();
@@ -761,8 +768,10 @@ fn plan_page(
                 }
                 if pattern_locs.contains(&item.loc) {
                     let b = bounds_of_path(&p.geometry, to_display);
-                    if !hits(b).is_empty() {
+                    let hit = hits(b);
+                    if !hit.is_empty() {
                         plan.patterns.push(rect_of(b));
+                        plan.pattern_regions.extend(hit);
                     }
                 }
             }
@@ -792,12 +801,48 @@ fn plan_page(
         // The ids came from this revision's own text; one that names no glyph is a bug.
         return Err(PdfError::at(ErrorCode::Internal, missing.loc.stream));
     }
+    let groups = model.soft_mask_groups.iter().map(|g| {
+        let q = Quad(
+            [(g[0], g[1]), (g[2], g[1]), (g[2], g[3]), (g[0], g[3])].map(|(x, y)| Point { x, y }),
+        );
+        quad_bounds(&q.map(model.geometry.user_to_display))
+    });
+    let masked = model
+        .soft_masked
+        .iter()
+        .filter_map(|&i| model.items.get(i))
+        .map(|it| item_bounds(it, model, to_display, disp_scale));
+    for b in masked.chain(groups) {
+        plan.soft_masks.extend(hits(b));
+    }
+    plan.soft_masks.sort_unstable();
+    plan.soft_masks.dedup();
     plan.annotations = annotations(doc, model, &boxes)?;
     for (r, e) in regions.iter_mut().zip(effective) {
         r.effective = rect_of(e);
     }
     plan.regions = regions;
     Ok(plan)
+}
+
+/// Display-space bounds of an item, strokes grown by their full width (a bound, not the exact reach).
+fn item_bounds(item: &Item, model: &SemanticPage, to_display: Affine, disp_scale: f64) -> B {
+    let u2d = model.geometry.user_to_display;
+    match &item.kind {
+        ItemKind::Glyph(g) => quad_bounds(&g.quad_user.map(u2d)),
+        ItemKind::Image(i) => {
+            let unit =
+                Quad([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)].map(|(x, y)| Point { x, y }));
+            quad_bounds(&unit.map(i.ctm).map(u2d))
+        }
+        ItemKind::Path(p) | ItemKind::Shading(p) => {
+            let b = bounds_of_path(&p.geometry, to_display);
+            let g = p.stroke.as_ref().map_or(0.0, |s| {
+                f64::from(s.line_width) * p.stroke_scale * disp_scale
+            });
+            [b[0] - g, b[1] - g, b[2] + g, b[3] + g]
+        }
+    }
 }
 
 fn bounds_of_path(path: &BezPath, to_display: Affine) -> B {

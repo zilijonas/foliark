@@ -3,6 +3,6 @@ import type { Rect } from "./Rect";
 
 export type Redaction = { "kind": "region", id: string, pageIndex: number, rect: Rect, 
 /**
- * Default black.
+ * Omitted = black; an explicit `null` = no fill (the content is still removed).
  */
 fill?: [number, number, number] | null, } | { "kind": "text", id: string, pageIndex: number, start: number, end: number, fill?: [number, number, number] | null, };
