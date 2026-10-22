@@ -1,28 +1,28 @@
 # HDDN replacement and rollback acceptance (NEW-76)
 
-Proof that HDDN runs on the pinned private Foliark candidate and no longer has a Python path, and that the pre-Foliark build can be restored.
+Proof that HDDN runs on the pinned private Foliark candidate **rc2** and no longer has a Python path, and that the pre-Foliark build can be restored. rc2 replaces `b47dafd9` (NEW-82 and NEW-83 fixes); every number below was re-measured on rc2.
 Local only: nothing was pushed, deployed or published. HDDN worktree `~/ai/repos/hddn-foliark`, branch `foliark/integration`. The `~/ai/repos/hddn` checkout was not touched.
 
 ## Pinned inputs
 | | |
 |---|---|
-| package | `dist-pkg/foliark-sdk-0.1.0.tgz` sha256 `b47dafd9aa5a46846dfdce4c6c7ed90361c990f4572128cfe2bc8941d3911859` (checked with `shasum -a 256` before install; matches `docs/release/candidate.md`) |
-| installed integrity | `pnpm-lock.yaml` `sha512-6zPLJkHfx5B/V/CwY8bw9wdMeDStyzF8CLqV8y+t92EZcS3Y87fMLu+gkrD78uQ++qRIkfZw6eK3quRP6Cw/fw==`; recomputed independently with `openssl dgst -sha512 -binary \| base64`, identical. Installed wasm sha256 starts `f0a808ae563f719f` (candidate record) |
-| HDDN commits | `f07d35a` pins the tarball (lockfile only; the earlier install lacked `THIRD_PARTY_NOTICES.md`); `3841e17` adds the harness changes in this task |
+| package | `dist-pkg/foliark-sdk-0.1.0.tgz` rc2 sha256 `4ead7f33334259f020d25ebac2c1abae3739fc03b797b039a6c60064a46c4af4`, 2,224,913 B, built from foliark `ca63d50`, recorded in `docs/release/candidate.md` (foliark commit `0b2c947`). Checked with `shasum -a 256` before install |
+| installed integrity | `pnpm-lock.yaml` `sha512-TPDfk9UiLtzDISlE0pi/86/7uJCZSTCl2xmDgk2g0+X8RREfes9lMVba03wp24R2s9jZncp4e7bj4hDNEQ7r0Q==`; recomputed independently with `openssl dgst -sha512 -binary \| base64`, identical. Installed wasm sha256 `4e0b704521a1aa93...` (candidate record). `package.json` already pointed at the same tarball path, so only the lockfile integrity changed |
+| HDDN commits | `57e9d8f` pins rc2 (lockfile only), on top of `b66b5f7` (NEW-82 adapter fixes), `3841e17` (e2e and harness), `f07d35a` (rc1 pin). Branch `foliark/integration`, local only |
 | rollback ref | `codex/hddn-export-buffer` `2fe0f9a`, built in the scratch worktree `~/ai/repos/foliark/.worktrees/hddn-2fe0f9a` |
 | machine | Apple M4 24 GB, macOS arm64, Chromium 151.0.7922.34, Firefox 153, WebKit 26.5 (Playwright; WebKit is not Safari) |
 
 ## Results on the pinned build
 | Suite | Command (all through `~/ai/bin/memory-queue`) | Result |
 |---|---|---|
-| HDDN validate | `pnpm run validate` (lint, format, check, styles, tooling, 62 test files, build) | exit 0, 780 tests, build verification passed |
-| Real-browser UI e2e, Chromium | `E2E_BROWSER=chromium pnpm run test:e2e:foliark` | exit 0, 25/25 |
-| Real-browser UI e2e, Firefox | `E2E_BROWSER=firefox ...` | exit 0, 25/25 |
-| Real-browser UI e2e, WebKit | `E2E_BROWSER=webkit ...` | exit 0, 25/25 |
-| Built-network scan (same runs) | every URL the page asked for | retired-engine (Pyodide, PyMuPDF, MuPDF, wheel) requests: 0 in all three; wasm = Foliark + Tesseract only |
-| Independent export integrity | `tests/oracles/.venv/bin/python tools/hddn-acceptance/check-exports.py <dir> <fixtures>` on files saved by the UI | `check-exports.py` exit 0 on the Chromium exports: native PASS, edit+redact PASS, raster PASS (negative control flagged the input in each) |
-| Isolated actual-worker harness (docker) | `pnpm run test:pdf:isolated` | **FAILS, not accepted.** Run with the harness change below (`PDF_HARNESS_OUTPUT=work/pdf-iso-4`): 21 fixtures x 2 modes, 13 fixtures clean, 8 with findings (list below). Earlier attempts: run 1 failed every flattened mode because the harness did not pass `acknowledgeLosses` (fixed); runs 2 and 3 failed to start (Docker Desktop did not see freshly recreated bind-mount directories, not a product result) |
-| Rollback | `node tools/hddn-acceptance/rollback.mjs` | exit 0 (phases 1 and 2); offline re-preparation after rollback not established, see Rollback |
+| HDDN validate | `pnpm run validate` (lint, format, check, styles, tooling, 62 test files, build) | exit 0, 783 tests, build verification passed |
+| Real-browser UI e2e, Chromium | `E2E_BROWSER=chromium E2E_EXPORT_DIR=<dir> pnpm run test:e2e:foliark` | exit 0, 25/25 |
+| Real-browser UI e2e, Firefox | `E2E_BROWSER=firefox E2E_EXPORT_DIR=<dir> pnpm run test:e2e:foliark` | exit 0, 25/25 |
+| Real-browser UI e2e, WebKit | `E2E_BROWSER=webkit E2E_EXPORT_DIR=<dir> pnpm run test:e2e:foliark` | exit 0, 25/25 |
+| Built-network scan (same runs) | every URL the page asked for | retired-engine (Pyodide, PyMuPDF, MuPDF, wheel) requests: 0 in all three; wasm = Foliark + Tesseract only (124, 124, 225 distinct URLs) |
+| Independent export integrity | `tests/oracles/.venv/bin/python tools/hddn-acceptance/check-exports.py <dir> tests/foliark/fixtures` on the files each browser saved through the UI | exit 0 for Chromium, Firefox and WebKit downloads: native PASS (6 regions, control flagged 11), edit+redact PASS (4 regions, control flagged 7), raster PASS (1 region, control flagged 4) |
+| Isolated actual-worker harness (docker) | `pnpm run test:pdf:isolated` | exit 0: 21 fixtures x 2 modes, 21/21 with 0 findings; privacy expectations unchanged since NEW-82 |
+| Rollback | `node tools/hddn-acceptance/rollback.mjs HDDN_DIST ROLLBACK_DIST multicolumn-unicode.pdf` | exit 0 (phases 1 and 2); offline re-preparation after rollback not established, see Rollback |
 
 The e2e gained one case (25th): `no sanitize-only path`. It also keeps exported files under `E2E_EXPORT_DIR` and records the source URL of every console error.
 
@@ -36,10 +36,9 @@ which never import foliark, and runs the same privacy check on the INPUT as a ne
 | image-only (raster, after consent) | `pattern-secret` | no text layer (`RASTER_TEXT`), email region burned, rest within the raster tolerance (threshold 64, 1% of pixels) | PASS (Chromium files) |
 | sanitize-only | none | **no UI path**: with every marking dismissed HDDN refuses the export ("Confirm or add at least one", no file kept); case `no sanitize-only path` asserts that. Sanitize-only export is proven at SDK level (`docs/evidence/security-acceptance.md`, scenario sanitize, 80 cases) | not a UI flow |
 Oracle findings that were test-side, not product defects, and what was changed: (1) the short needle `34567` also matches a UTF-16 character range inside an embedded TrueType program (`objects.py` STREAM on font bytes), so the check uses the whole phone string; (2) "Confirm all markings" also confirms the auto-detected name, so the name is a declared redaction; (3) raster regions are the real word boxes, not a sampled strip. The extracted-text, pypdf and PyMuPDF checks were clean throughout.
-Only the Chromium exports were judged; Firefox and WebKit run the same cases and assert the same words in the saved file, but their files were not re-judged by the oracles.
 
-### Isolated worker harness findings (8 fixtures, triaged in NEW-82; no privacy expectation weakened)
-`pnpm run test:pdf:isolated` exits 0 on the NEW-82 build (21 fixtures x 2 modes). Every change and its reason is in HDDN `tests/pdf/README.md` ("Isolated worker harness on Foliark").
+### Isolated worker harness findings (8 fixtures, triaged in NEW-82; no privacy expectation weakened; 21/21 clean again on rc2)
+`pnpm run test:pdf:isolated` exits 0 on rc2 (21 fixtures x 2 modes, all 0 findings), as it did on the NEW-82 interim build. Every change and its reason is in HDDN `tests/pdf/README.md` ("Isolated worker harness on Foliark").
 | Fixture | Verdict | What changed |
 |---|---|---|
 | hidden-ocr-text | adapter policy | native export uses `invisibleText: 'remove'`; notice `invisibleRemoved` (scan search layers are not kept in native output) |
@@ -91,14 +90,14 @@ Source of the first table: `docs/performance/comparison.md` (NEW-62, worker-leve
 | `dist` size | 117,564 KB | 83,904 KB | NEW-71 receipt |
 | `/redact` cold load | 26 requests, 7,125,373 B | 26 requests, 6,609,854 B (NEW-71) | |
 
-Fresh on the pinned build, through the HDDN UI (`tools/hddn-acceptance/measure.mjs`, 5 runs, Chromium, localhost, no service worker; UI-level, so not comparable with the worker-level rows above):
-| | HDDN 2fe0f9a (PyMuPDF), `hddn-2fe0f9a/dist` | HDDN pinned Foliark build |
+Fresh on rc2, through the HDDN UI (`tools/hddn-acceptance/measure.mjs`, 5 runs, Chromium, localhost, no service worker, a deterministic 30-page native PDF from `tools/bench/make-native30.py`; UI-level, so not comparable with the worker-level rows above; the NEW-83 export sizes against PyMuPDF are in `docs/performance/comparison.md`):
+| | HDDN 2fe0f9a (PyMuPDF), `hddn-2fe0f9a/dist` | HDDN pinned Foliark rc2 build |
 |---|---|---|
-| `/redact` cold load (median of runs) | 1,346 ms, 31 requests, about 9.8 MB | 615 ms, 26 requests, about 6.3 MB (byte counts vary 6.0 to 6.6 MB between runs because bodies are counted as responses arrive; NEW-71 measured 6,609,854 B exactly) |
-| native 30 pages: choose file to first text span | 2,611 ms | 1,251 ms |
-| native export of the same file with the keyword `alpha` (Export click to file handed over) | 2,171 ms | 1,762 ms |
-| exported file size | 28,926 B | 349,682 B (not investigated; `comparison.md` has the controlled 213,136 B vs 322,769 B) |
-The old build's 28,926 B export for the same steps is much smaller than any controlled export in `comparison.md`; the pages and words of that file were not checked, so no equivalence is claimed for it.
+| `/redact` cold load (median of runs) | 1,348 ms, 31 requests, 10,101,344 B | 617 ms, 26 requests, 6,482,580 B (byte counts vary between runs because bodies are counted as responses arrive; NEW-71 measured 6,609,854 B exactly) |
+| native 30 pages: choose file to first text span | 2,473 ms | 1,280 ms |
+| native export of the same file with the keyword `alpha` (Export click to file handed over) | 2,208 ms | 1,758 ms |
+| exported file size | 28,926 B | **27,533 B** (rc1 build: 349,682 B; NEW-83 removed the overhead; Foliark is now below the PyMuPDF build for the same steps, and equals the controlled `export-size.py` result for this input: 27,500 vs 28,747 B) |
+The old build's export and the rc2 export both came out of the same UI steps; the page and word counts of the old file were not checked, so no equivalence is claimed for it (the rc2 file is judged by the oracles above).
 
 ## Rollback
 ### Procedure (local branches only; nothing was deployed)
@@ -108,6 +107,7 @@ The old build's 28,926 B export for the same steps is much smaller than any cont
 4. Foliark engine files (`_astro/foliark_wasm_bg*.wasm`) are not served by the old build; v16 entries vanish with the cache.
 
 ### Test (`tools/hddn-acceptance/rollback.mjs`, exit 0, Chromium, one persistent profile, one origin)
+- Re-run on rc2 (exit 0): same results as below (v16 127 entries to v15 134 entries, 14 Tesseract entries carried, 2 Pyodide entries, rolled-back build loaded Pyodide and 0 Foliark wasm, 1 page and 17 words before and after); offline after rollback still not established (60 s timeout).
 - Phase 1, pinned build with a prepared-offline profile: caches = `[document-redactor-airplane-v16]` (127 entries), no Pyodide entry; open `multicolumn-unicode`, confirm all, export through the UI download path; saved file judged by PyMuPDF: email gone, 1 page, 17 words.
 - Phase 2, same profile and origin now serving the 2fe0f9a build: after `registration.update()` the caches become `[document-redactor-airplane-v15]` (134 entries, 14 `tesseract/` entries carried over, 2 Pyodide entries precached); the page then loaded the Pyodide engine (2 Pyodide asm/wheel fetches, 0 Foliark wasm fetches), opened the same PDF, exported it through the UI, and the file is equivalent (email gone, 1 page, 17 words).
 - Not established: offline re-preparation after rollback. The old build's offline dialog showed neither "Download tools" nor "Offline mode is ready" within 60 s in the run made, so no offline claim is made for the rolled-back build.
@@ -115,12 +115,13 @@ The old build's 28,926 B export for the same steps is much smaller than any cont
 
 ## Remaining limitations
 - Licence undecided (NEW-73); Foxit font terms beyond the PDFium notice unverified; no advisory check; no SBOM inside the tarball (`docs/release/candidate.md`).
-- Mobile and real Safari not established (NEW-64, NEW-22). One machine; WebKit and Firefox are Playwright builds. Firefox export files were not re-judged by the oracles.
+- Mobile and real Safari not established (NEW-64, NEW-22). One machine; WebKit and Firefox are Playwright builds. The oracles judged the Chromium, Firefox and WebKit downloads (all PASS).
 - Sanitize-only has no HDDN UI path. The oracle results are for the three exported fixtures and their declared secrets, not a privacy certificate; hidden-data coverage beyond that is the SDK acceptance suite's (`docs/evidence/security-acceptance.md`, `Not proven` list).
+- Supported-vs-refused limits that remain on rc2: `cmapsUrl` unsupported (no CMap pack ships, legacy CJK CMaps render with `CMAP_MISSING`; owner decision 17.5); native export refuses (`native-redaction-unsupported`, `errors.nativeSharedContentPages`) while a marked graphic is drawn on an unmarked page (shared-image and shared-vector fixtures; marking that page or image-only exports; shared Forms with hidden text and shared page streams are unchanged); invisible OCR text is removed in HDDN native export (`invisibleText: 'remove'`, notice `invisibleRemoved`), so scanned documents lose their search layer there and PyMuPDF's old refusal is gone; first render of a progressive RGB JPEG scan at scale 1.35 is about 0.9x the PyMuPDF-based HDDN (82.5 vs 76 ms, `docs/performance/comparison.md`), every other scan row is faster; the image-only raster check tolerates a 2 px rasterizer shift.
 - Signature region detection is an HDDN-side TS port; `search`, `quadsFor`, `select` and `cmapsUrl` are not wired.
 - WebKit blob console error from NEW-71: seen once (24/25 in the NEW-71 first WebKit run, in the extra-OCR case), **not reproduced**: 1 full WebKit run plus 3 isolated runs of that case here, all pass, plus NEW-71's own rerun (24/24). Cause not established. Likely area, unverified: a WebKit teardown of an in-flight `blob:` load (preview image or Tesseract worker) when the case navigates a second time. Nothing was changed in the app. The e2e now records the source URL of every console error, so a recurrence names the blob
 
 ## Coordination notes (evidence that now exists; no status was changed)
 - HDDN-11 (sanitize hidden data before every native export): the engine-side evidence is `docs/evidence/security-acceptance.md` (480 results, independent oracles, negative controls 109/109, NEW-80 unused-resource pruning landed) and the UI exports above judged by `objects.py`. It replaces the PyMuPDF `pyodide.ts` sanitizer, which no longer exists on this branch. Its acceptance named PyMuPDF 1.26.3 behavior; that is now moot for the integration branch but the task text is unchanged.
-- HDDN-18 (export-integrity regression gate): this branch has `validate` green, the three-browser UI e2e, the independent oracle run on UI exports, and the isolated worker harness (which currently has the 8 failing fixtures listed above, so HDDN-18 cannot use this branch as a green gate yet). HDDN-18 asks for strict pypdf and Poppler on the historical shared-image fixture; the isolated harness is where Poppler runs, and that comparison against `f4f2aa59...` was not repeated here.
+- HDDN-18 (export-integrity regression gate): this branch has `validate` green (783 tests), the three-browser UI e2e (25/25 each), the independent oracle run on UI exports from all three browsers, and the isolated worker harness (Poppler, docker) 21/21 clean on rc2. HDDN-18 asks for strict pypdf and Poppler on the historical shared-image fixture; the isolated harness covers it (shared-image: native refuses by the shared-graphic rule, image-only and true-redaction checks clean), but the comparison against `f4f2aa59...` was not repeated here. No status was changed.
 - HDDN-47 (cross-browser and constrained-device evidence): desktop Chromium, Firefox and WebKit engine evidence now exists for the Foliark path (25 cases each). Real Safari, iPhone, iPad and Android remain not established (NEW-64); HDDN-47 must not cite this document for them.
