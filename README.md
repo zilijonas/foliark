@@ -7,21 +7,26 @@
 
 <p align="center"><b>A headless PDF engine in Rust and WebAssembly. Extract, search, render, edit, redact and sanitize PDFs in the browser. The document never leaves the device.</b></p>
 
-> **Status:** 0.1.0 release candidate, to be published to npm as `@zilijonas/foliark` by the owner (NEW-91; until the registry lists it, build from source). Licensed AGPL-3.0-only plus separate commercial licensing (see [License](#license)). Exact candidate bytes and checks: [docs/release/candidate.md](docs/release/candidate.md). Real phones and tablets are not yet tested (see the support matrix).
+> **Status:** [`@zilijonas/foliark`](https://www.npmjs.com/package/@zilijonas/foliark) 0.1.1 on npm (0.1.0 was the first public release; 0.1.1 changes the package page and metadata only, the engine is byte-identical). Licensed AGPL-3.0-only plus separate commercial licensing (see [License](#license)). Exact bytes and checks: [docs/release/candidate.md](docs/release/candidate.md). Real phones and tablets are not yet tested (see the support matrix).
 
 Foliark is a TypeScript SDK (`@zilijonas/foliark`) over a Rust engine compiled to WebAssembly. It runs in a worker, fetches only its own
 `.wasm` and worker script, and refuses what it cannot do safely with a typed `FoliarkError` instead of degrading quietly.
-Its first consumer is HDDN, a private PDF redaction app that used PyMuPDF inside Pyodide.
 
-## Why
+## Why I built it
 
-Replacing PyMuPDF in Pyodide with one small engine and a stricter export. Numbers are medians in Chromium 151 on an Apple M4, same input files for both
-engines, from [docs/performance/comparison.md](docs/performance/comparison.md) (WebKit 26.5 shows the same pattern):
+I run HDDN ([hddn.app](https://hddn.app)), a PDF redaction tool that works entirely in the browser. It used PyMuPDF compiled into Pyodide. That worked, but the engine was a 30 MB download, it took about 1.6 seconds just to start, and it kept missing things I needed.
+
+So I wrote a replacement from scratch: a Rust engine compiled to WebAssembly, built on the [hayro](https://github.com/LaurenzV/hayro) PDF crates. It starts in 19 ms, downloads about 2.2 MB gzipped, and the export is rebuilt from an allowlist, so the file is built to carry nothing you removed. HDDN runs on it now.
+
+Foliark is not a fork, port or modified version of PyMuPDF or MuPDF, and contains none of their code. It is not affiliated with or endorsed by Artifex, whose products those are.
+
+Numbers are medians in Chromium 151 on an Apple M4, served from localhost, same input files for both engines, from [docs/performance/comparison.md](docs/performance/comparison.md) (WebKit 26.5 shows the same pattern):
 
 | | HDDN on PyMuPDF + Pyodide | Foliark SDK |
 |---|---|---|
-| Cold start, bytes downloaded | 1,596 ms, 30.4 MB | 19 ms, 5.4 MB (2.05 MB with gzip) |
+| Cold start, bytes downloaded | 1,596 ms, 30.4 MB | 19 ms, 5.4 MB (2.2 MB gzip as shipped) |
 | Open + extract + render every page (30 pages) | 1,001 ms | 223 ms |
+| Paragraph edit apply (30 pages) | 1,004 ms | 69 ms |
 | Native export with 10 redaction regions (30 pages) | 399 ms | 249 ms |
 | Image-only export at 2x (30 pages) | 4,132 ms | 1,029 ms |
 | Wasm linear memory after all operations | 249.7 MB | 74.8 MB |
@@ -30,7 +35,7 @@ engines, from [docs/performance/comparison.md](docs/performance/comparison.md) (
 How to read them:
 - Not like-for-like everywhere: HDDN's render time includes PNG encoding, the SDK returns raw RGBA, and the two raster exports use different rasterizers.
 - One exception where Foliark is **not** faster: first render of a progressive-JPEG RGB scan at scale 1.35 (82.5 ms against 76 ms). JPEG entropy decoding dominates and has no scaled decode upstream.
-  Every other scan type tested is 1.3x to 21x faster, and a repeat render of a page takes 1 to 2 ms.
+  Every other scan type tested is 1.3x to 21x faster (1.3x to 5.7x at scale 1.35), and a repeat render of a page takes 1 to 2 ms.
 - Privacy: native export is a rebuilt, allowlisted file (no incremental updates, metadata, attachments, scripts or orphan objects), checked by independent oracles.
   HDDN on Foliark passes 25 of 25 browser end-to-end cases in Chromium, Firefox and WebKit, with zero requests to the retired engine
   ([docs/integration/hddn-acceptance.md](docs/integration/hddn-acceptance.md)).
@@ -53,13 +58,13 @@ The full matrix, each row with its evidence, is [docs/support-matrix.md](docs/su
 
 ## Quick start
 
-Install the exact version from npm once NEW-91 has published it, or build the tarball from the matching source tag `v0.1.0` ([docs/deployment.md](docs/deployment.md) covers hosting, CSP and offline use):
+Install the exact version from npm, or build the tarball from the matching source tag `v0.1.1` ([docs/deployment.md](docs/deployment.md) covers hosting, CSP and offline use):
 
 ```sh
-npm install @zilijonas/foliark@0.1.0 --save-exact
+npm install @zilijonas/foliark@0.1.1 --save-exact
 # or from source:
 scripts/build-wasm.sh && pnpm build:sdk && tests/package-consumers/pack.sh dist-pkg
-npm install ./dist-pkg/zilijonas-foliark-0.1.0.tgz
+npm install ./dist-pkg/zilijonas-foliark-0.1.1.tgz
 ```
 
 Start the engine in its own worker (both URLs are explicit, nothing is fetched until you call it):

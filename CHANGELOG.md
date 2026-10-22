@@ -4,6 +4,15 @@ All notable changes to `@zilijonas/foliark` (named `@foliark/sdk` before 0.1.0 w
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-22
+
+Documentation and package metadata only. The engine, SDK and CMaps are byte-identical to 0.1.0 (`wasm/` and `dist/` unchanged, verified against the registry tarball). Source: tag `v0.1.1`. Tarball and hashes: `docs/release/candidate.md`.
+
+### Changed
+- npm package page: new `README.md` with the logo, the HDDN story, the measured comparison with its context and caveats, a feature list, quick start, browser support and licensing, and a not-affiliated note for PyMuPDF and MuPDF.
+- `package.json`: new `description` and `keywords`; version 0.1.1.
+- Repository `README.md` carries the same story and pitch; the stale wasm size in the package README is corrected to 5.8 MB raw, 2.2 MB gzip.
+
 ## [0.1.0] - 2026-10-22
 
 First public release, `@zilijonas/foliark`, AGPL-3.0-only with separate commercial licensing (`LICENSING.md`, `COMMERCIAL-LICENSING.md`). Source: tag `v0.1.0` of https://github.com/zilijonas/foliark. Candidate tarball, hashes and checks: `docs/release/candidate.md`.
@@ -37,4 +46,5 @@ First public release, `@zilijonas/foliark`, AGPL-3.0-only with separate commerci
 - See `docs/support-matrix.md` for every row and its evidence.
 
 [Unreleased]: docs/release/process.md
+[0.1.1]: docs/release/candidate.md
 [0.1.0]: docs/release/candidate.md

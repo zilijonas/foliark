@@ -1,4 +1,39 @@
+# Release candidate: @zilijonas/foliark 0.1.1 (docs and metadata only)
+
+Rebuilt on 2026-10-22 on the same Mac mini and toolchain as 0.1.0. Changes the npm package page (`README.md`) and `package.json` (`description`, `keywords`, version) only. No source,
+engine, SDK or CMap change. Not published by an agent: the owner publishes this exact tarball (`npm publish`, local, no provenance, as for 0.1.0). Source correspondence: tag `v0.1.1`
+on the commit that carries this record (it differs from the built commit only by this record). `tools/release/dry-run.sh` reads the first recorded sha256 in this file, so the 0.1.1 hash stays
+in this section, above the 0.1.0 record.
+
+| | |
+|---|---|
+| file | `dist-pkg/zilijonas-foliark-0.1.1.tgz` (gitignored) |
+| sha256 | `49429ab42afbb32511d7e2e5c9efa66676d32e0a9bbd5c83a972b606ec57d424` |
+| size | 3,431,662 B, 276 entries (same entry list as 0.1.0) |
+| built from | foliark `f7a0486` plus the uncommitted 0.1.1 docs changes (the commit adds only those); `scripts/build-wasm.sh && pnpm build:sdk && tests/package-consumers/pack.sh dist-pkg`; packing twice gave the same sha256 |
+| wasm | `wasm/foliark_wasm_bg.wasm` sha256 `0ecce6f8db9d0a1d0f02543ef326a62c3cf70ea20810c243ba54f6fa72f132d2`, identical to 0.1.0 (a fresh rebuild reproduced it on the same machine) |
+| diff vs 0.1.0 | the registry tarball (`npm pack @zilijonas/foliark@0.1.0`, sha256 `7f66ad82...dbcd6`, equal to the recorded candidate) unpacked and compared with `diff -rq`: only `package/README.md` and `package/package.json` differ; `dist/`, `wasm/`, `cmaps/`, licences and notices are byte-identical |
+| package page | the logo is `https://raw.githubusercontent.com/zilijonas/foliark/main/logo.png` (PNG: renders everywhere; the SVG is not used on npm), the comparison table is the one in `docs/performance/comparison.md`, with its caveats and the progressive-JPEG exception named |
+
+Checks (clean checkout apart from the 0.1.1 edits):
+
+| Check | Command | Exit | Result |
+|---|---|---|---|
+| wasm and SDK build | `scripts/build-wasm.sh && pnpm build:sdk` | 0 | wasm sha256 equals 0.1.0 |
+| pack twice | `tests/package-consumers/pack.sh dist-pkg` x2 | 0, 0 | identical sha256 |
+| release dry run | `tools/release/dry-run.sh` | 0 | tarball bytes equal the recorded sha256, 276 entries, manifest 0.1.1, notices, SBOM (102 components), package README names tag `v0.1.1`, `npm publish --dry-run` against an unreachable registry |
+| npm dry run | `npm publish "$PWD/dist-pkg/zilijonas-foliark-0.1.1.tgz" --dry-run --access public` | 0 | `@zilijonas/foliark@0.1.1`, 276 files, 3.4 MB, shasum `a0086c3cff099d0e63212f178acd2e1b69ea9df1`; nothing published |
+| package consumers | `tests/package-consumers/run.sh` | 0 | 6 builds ok (vanilla, Vite, esbuild at `/` and `/app/`), tarball installed, 0 external requests |
+
+Owner publish command, from the repository root:
+`npm publish ./dist-pkg/zilijonas-foliark-0.1.1.tgz --access public`
+(after the `v0.1.1` tag exists on the source commit; rebuild with the commands above if the tarball is gone and compare the sha256).
+
+---
+
 # Release candidate: @zilijonas/foliark 0.1.0 (NEW-90)
+
+Superseded by 0.1.1 above for the npm package page; the engine and wasm are the same.
 
 Licensed public candidate, qualified on 2026-10-22 on the owner's Mac mini (macOS 26.6.2, arm64). AGPL-3.0-only plus separate
 commercial licensing (`LICENSING.md`). Not yet published: NEW-91 publishes exactly this tarball, locally by the owner (`npm publish`,
