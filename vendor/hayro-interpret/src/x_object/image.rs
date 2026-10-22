@@ -6,7 +6,9 @@ use crate::color::ColorSpace;
 use crate::context::Context;
 use crate::device::Device;
 use crate::interpret::state::ActiveTransferFunction;
-use crate::{BlendMode, CacheKey, Image, ImageDrawProps, RasterImage, StencilImage};
+use crate::{
+    BlendMode, CacheKey, Image, ImageDrawProps, InterpreterWarning, RasterImage, StencilImage,
+};
 use hayro_syntax::object::dict::keys::*;
 use hayro_syntax::object::{Name, Object, Stream};
 use kurbo::Affine;
@@ -129,6 +131,14 @@ impl<'a> ImageXObject<'a> {
     }
 
     pub(crate) fn draw<'b>(&self, context: &mut Context<'b>, device: &mut impl Device<'b>) {
+        if u64::from(self.width) * u64::from(self.height) > context.settings.max_image_pixels {
+            (context.settings.warning_sink)(InterpreterWarning::ImageTooLarge(
+                self.width,
+                self.height,
+            ));
+            return;
+        }
+
         if !context.ocg_state.is_visible() {
             return;
         }

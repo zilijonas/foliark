@@ -33,8 +33,28 @@ pub fn reemit(
                 }
             }
             None => {
+                let mark = out.len();
                 normalize(&data[span], &mut out);
-                out.push(b'\n');
+                // Never emit tokens that read back as something else (damaged inline images).
+                let mut back = UntypedIter::new(&out[mark..]);
+                let mut count = 0;
+                while back.next_with_span().is_some() {
+                    count += 1;
+                }
+                if count != 1 {
+                    return Err(err(
+                        ErrorCode::MalformedPdf,
+                        &format!(
+                            "instruction in {} {} R does not re-emit",
+                            obj.num, obj.generation
+                        ),
+                    ));
+                }
+                // An unterminated inline image keeps its trailing newline as data; adding
+                // another one every pass would make re-emission grow.
+                if out.last() != Some(&b'\n') {
+                    out.push(b'\n');
+                }
             }
         }
     }
@@ -99,12 +119,13 @@ fn normalize(src: &[u8], out: &mut Vec<u8>) {
         out.extend_from_slice(token);
         i = end;
         if token == b"ID" && out[start..].starts_with(b"BI") {
-            // One whitespace byte, then binary data up to and including the final `EI`.
+            // One whitespace byte, then the image data up to the final `EI` when only
+            // whitespace follows it, else (no real terminator) the rest of the span untouched.
             let data_start = (i + 1).min(src.len());
-            let ei = src
-                .windows(2)
-                .rposition(|w| w == b"EI")
-                .map_or(src.len(), |p| p + 2);
+            let ei = match src.windows(2).rposition(|w| w == b"EI") {
+                Some(p) if src[p + 2..].iter().all(|b| WS.contains(b)) => p + 2,
+                _ => src.len(),
+            };
             out.push(b' ');
             out.extend_from_slice(&src[data_start.min(ei)..ei]);
             return;

@@ -146,12 +146,12 @@ impl<'a> Iterator for ArrayIter<'a> {
         self.reader.skip_white_spaces_and_comments();
 
         if !self.reader.at_end() {
-            // Objects are already guaranteed to be valid.
-            let item = self
+            // The array was validated when it was first parsed, but nesting depth and
+            // object-stream context can make a later re-read fail: end the iteration
+            // instead of panicking.
+            return self
                 .reader
-                .read_with_context::<MaybeRef<Object<'_>>>(&self.ctx)
-                .unwrap();
-            return Some(item);
+                .read_with_context::<MaybeRef<Object<'_>>>(&self.ctx);
         }
 
         None

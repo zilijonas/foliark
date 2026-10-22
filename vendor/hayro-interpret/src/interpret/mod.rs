@@ -110,6 +110,9 @@ pub struct InterpreterSettings {
     /// Report [`InterpreterWarning::FontSubstituted`] for a simple font that is drawn with a
     /// standard face because the PDF does not embed it.
     pub report_font_substitution: bool,
+    /// Do not draw (or decode) an image or inline image with more pixels than this and report
+    /// [`InterpreterWarning::ImageTooLarge`]. Default `u64::MAX`, so nothing is skipped.
+    pub max_image_pixels: u64,
 }
 
 impl Default for InterpreterSettings {
@@ -131,6 +134,7 @@ impl Default for InterpreterSettings {
             ocg_override: false,
             strict_streams: false,
             report_font_substitution: false,
+            max_image_pixels: u64::MAX,
         }
     }
 }
@@ -157,6 +161,9 @@ pub enum InterpreterWarning {
     /// a standard face instead. Carries the font dictionary's object, if it is indirect. Reported
     /// once per font and render cache.
     FontSubstituted(Option<hayro_syntax::object::ObjRef>),
+    /// An image was not drawn because its width times height is over
+    /// `InterpreterSettings::max_image_pixels`; carries width and height.
+    ImageTooLarge(u32, u32),
 }
 
 /// interpret the contents of the page and render them into the device.

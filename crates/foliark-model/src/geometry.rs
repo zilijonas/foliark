@@ -115,12 +115,13 @@ pub fn page_geometry(
     };
     let user_to_display = Matrix(m.map(|v| v + 0.0));
     let display_to_user = user_to_display.inverse().ok_or_else(malformed)?;
+    // Scaling by a tiny UserUnit can underflow a positive box to zero.
     let finite = [width, height]
         .iter()
         .chain(&user_to_display.0)
         .chain(&display_to_user.0)
         .all(|v| v.is_finite());
-    if !finite {
+    if !(finite && width > 0.0 && height > 0.0) {
         return Err(malformed());
     }
     Ok(PageGeometry {

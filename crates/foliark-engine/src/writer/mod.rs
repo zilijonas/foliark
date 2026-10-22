@@ -8,6 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Range;
 
 mod content;
+pub use content::reemit;
 pub mod fonts;
 mod graph;
 pub mod text;
