@@ -2,14 +2,15 @@
 //! the font registry and the long-op `Task`s. One method per public op, `DocId` strings as
 //! handles. Ops that are not built yet return the typed refusal in [`not_built`].
 use crate::cache::DOC_CACHE_BYTES;
-use crate::document::{Binding, Committed, EditApplier, NotBuilt, Session};
+use crate::document::{Binding, Committed, EditApplier, EditContext, Session};
+use crate::edit::{ParagraphApplier, layout_edit};
 use crate::export::{self, Held};
 use crate::{Document, RenderOptions, RenderedPage};
 use foliark_model::{
-    Capabilities, ChangeResult, ChangeSet, DocumentInfo, ErrorCode, ErrorDetails, ExportMode,
-    ExportPlan, ExportPolicy, ExtractOptions, FontSource, Hit, Limits, PageGeometry, ParagraphInfo,
-    PdfError, Phase, Point, Progress, Rect, RegisteredFont, SearchHit, SearchOptions, TextPage,
-    TextRange,
+    Capabilities, ChangeResult, ChangeSet, DocumentInfo, EditPreview, ErrorCode, ErrorDetails,
+    ExportMode, ExportPlan, ExportPolicy, ExtractOptions, FontMatchRule, FontSource, Hit, Limits,
+    PageGeometry, ParagraphInfo, PdfError, Phase, Point, Progress, Rect, RegisteredFont, SearchHit,
+    SearchOptions, TextPage, TextRange,
 };
 use foliark_text::Registry;
 use std::collections::HashMap;
@@ -83,6 +84,7 @@ pub struct Engine {
     next_doc: u64,
     docs: HashMap<DocId, Session>,
     fonts: Registry,
+    font_match: Vec<FontMatchRule>,
     applier: Box<dyn EditApplier>,
     cancel: Arc<AtomicBool>,
     cache_bytes: usize,
@@ -107,7 +109,8 @@ impl Engine {
             next_doc: 0,
             docs: HashMap::new(),
             fonts: Registry::new(),
-            applier: Box::new(NotBuilt),
+            font_match: Vec::new(),
+            applier: Box::new(ParagraphApplier),
             cancel: Arc::default(),
             cache_bytes: DOC_CACHE_BYTES,
             plan: None,
@@ -129,7 +132,13 @@ impl Engine {
         self.cancel.clone()
     }
 
-    /// Replace the text-edit implementation (default: every edit is refused as not built).
+    /// `fontMatch` of the SDK's `init` (spec §6.4): replaces the default name-to-family table.
+    pub fn with_font_match(mut self, rules: Vec<FontMatchRule>) -> Self {
+        self.font_match = rules;
+        self
+    }
+
+    /// Replace the text-edit implementation (default: [`ParagraphApplier`]).
     pub fn with_edit_applier(mut self, applier: Box<dyn EditApplier>) -> Self {
         self.applier = applier;
         self
@@ -390,15 +399,69 @@ impl Engine {
         })
     }
 
+    /// Spec §1.5, §6: the selection `rects` make on the working copy and the budget around it.
     pub fn prepare_paragraph(
         &mut self,
-        _doc: &str,
-        _page: u32,
-        _rects: Vec<Rect>,
-        _font: Option<String>,
-        _editor_face: bool,
+        doc: &str,
+        page: u32,
+        rects: Vec<Rect>,
+        font: Option<String>,
+        editor_face: bool,
     ) -> Result<ParagraphInfo, PdfError> {
-        Err(not_built("prepareParagraph"))
+        let flat: Vec<f64> = rects
+            .iter()
+            .flat_map(|r| [r.x, r.y, r.width, r.height])
+            .collect();
+        finite(&flat)?;
+        let s = self.get(doc)?;
+        let mut info = s.doc().prepare_paragraph(
+            page as usize,
+            &rects,
+            font.as_deref(),
+            editor_face,
+            &self.fonts,
+            &self.font_match,
+        )?;
+        info.doc_id = doc.to_owned();
+        info.revision = s.revision;
+        Ok(info)
+    }
+
+    /// ADR 0004: the layout `apply_changes` would commit for one edit of the selection `rects`
+    /// make, with nothing committed or changed. Refuses as `apply_changes` would, except that
+    /// text that does not fit comes back with `fits: false`.
+    pub fn layout_edit(
+        &self,
+        doc: &str,
+        page: u32,
+        rects: Vec<Rect>,
+        text: &str,
+        font: Option<String>,
+        glyphs: bool,
+    ) -> Result<EditPreview, PdfError> {
+        let flat: Vec<f64> = rects
+            .iter()
+            .flat_map(|r| [r.x, r.y, r.width, r.height])
+            .collect();
+        finite(&flat)?;
+        let s = self.get(doc)?;
+        let ctx = EditContext {
+            limits: &self.limits,
+            fonts: &self.fonts,
+            font_match: &self.font_match,
+        };
+        let mut p = layout_edit(
+            s.doc(),
+            page as usize,
+            &rects,
+            font.as_deref(),
+            text,
+            glyphs,
+            &ctx,
+        )?;
+        p.doc_id = doc.to_owned();
+        p.revision = s.revision;
+        Ok(p)
     }
 
     /// Spec §4: atomic at `changes.base_revision`. A stale base is `STALE_REVISION`; item
@@ -410,7 +473,12 @@ impl Engine {
                 .docs
                 .get_mut(&doc)
                 .ok_or(PdfError::new(ErrorCode::DocumentGone))?;
-            let result = s.apply(changes, &e.limits, &*e.applier)?;
+            let ctx = EditContext {
+                limits: &e.limits,
+                fonts: &e.fonts,
+                font_match: &e.font_match,
+            };
+            let result = s.apply(changes, &ctx, &*e.applier)?;
             if result.accepted {
                 e.plan = None;
             }
@@ -443,7 +511,7 @@ impl Engine {
             e.plan = None;
             let binding = e.binding(&doc)?;
             let s = e.get(&doc)?;
-            let out = export::prepare(
+            let mut out = export::prepare(
                 s.doc(),
                 &s.committed,
                 binding.clone(),
@@ -451,6 +519,7 @@ impl Engine {
                 &policy,
                 &e.limits,
             )?;
+            out.report.edits.approximate = s.approximate;
             Ok(e.hold(doc, binding, mode, &policy, out))
         })
     }
@@ -591,7 +660,10 @@ impl Task for RasterTask {
             .as_mut()
             .ok_or(PdfError::new(ErrorCode::Internal))?;
         let out = match job.step(e.get(&self.doc)?.doc(), &e.limits, budget)? {
-            Some(out) => out,
+            Some(mut out) => {
+                out.report.edits.approximate = e.get(&self.doc)?.approximate;
+                out
+            }
             None => {
                 let (done, total) = job.progress();
                 return Ok(Step::Pending(Progress {

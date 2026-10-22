@@ -245,7 +245,7 @@ describe("ops that are not built yet", () => {
       const e = await rejects(p);
       expect([e.code, e.details?.feature]).toEqual(["INVALID_ARGUMENT", feature]);
     };
-    await refused(doc.prepareParagraph(0, [{ x: 0, y: 0, width: 10, height: 10 }]), "prepareParagraph");
+    await refused(doc.prepareExport({ mode: "native", policy: { invisibleText: "remove" } }), "invisibleTextRemove");
     expect(doc.revision).toBe(0);
     expect((await doc.extractText(0)).pageIndex).toBe(0);
   });

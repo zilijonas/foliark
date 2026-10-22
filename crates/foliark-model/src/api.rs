@@ -628,6 +628,8 @@ pub struct EditLayout {
     pub id: String,
     pub lines: u32,
     pub approximate: bool,
+    /// Hash of the layout inputs; a preview (ADR 0004) with the same inputs has the same one.
+    pub fingerprint: String,
     pub runs: Vec<LayoutRun>,
 }
 
@@ -641,6 +643,55 @@ pub struct ChangeResult {
     pub rejected: Vec<RejectedChange>,
     pub changed_pages: Vec<u32>,
     pub layouts: Vec<EditLayout>,
+}
+
+/// One line of an [`EditPreview`]: `text` is the normalized text it shows, `x` the origin of its
+/// first glyph and `baseline` its baseline, in display points.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct PreviewLine {
+    pub text: String,
+    pub baseline: f64,
+    pub x: f64,
+    pub width: f64,
+}
+
+/// A positioned glyph in display space: its pen starts at `x` on line `line`, spans `width`, and
+/// stands for UTF-16 offsets `start..end` of the normalized text (a ligature spans several).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct PreviewGlyph {
+    pub line: u32,
+    pub font: String,
+    pub gid: u32,
+    pub start: u32,
+    pub end: u32,
+    pub x: f64,
+    pub width: f64,
+}
+
+/// ADR 0004: the layout `applyChanges` would commit for one text edit, without committing.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields)]
+pub struct EditPreview {
+    pub doc_id: String,
+    /// The revision it was laid out on; stale once the document's revision differs.
+    pub revision: u32,
+    /// Stale once the font registry version differs.
+    pub font_registry_version: u32,
+    pub font_size: f64,
+    pub lines: Vec<PreviewLine>,
+    pub needed_lines: u32,
+    pub max_lines: u32,
+    /// False: `applyChanges` would refuse with `EDIT_NO_FIT`.
+    pub fits: bool,
+    pub approximate: bool,
+    pub runs: Vec<LayoutRun>,
+    /// Equals `ChangeResult.layouts[].fingerprint` for the same inputs.
+    pub fingerprint: String,
+    /// Only when asked for.
+    pub glyphs: Option<Vec<PreviewGlyph>>,
 }
 
 // ---- §1.6 export --------------------------------------------------------------------------------
@@ -874,6 +925,7 @@ pub enum OpName {
     Search,
     RenderPage,
     PrepareParagraph,
+    LayoutEdit,
     ApplyChanges,
     PrepareExport,
     Export,

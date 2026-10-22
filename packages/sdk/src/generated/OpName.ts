@@ -3,4 +3,4 @@
 /**
  * One entry per public op, plus `init` (carries `wasmUrl`, starts the generation).
  */
-export type OpName = "init" | "open" | "info" | "pages" | "capabilities" | "extractText" | "hitTest" | "select" | "quadsFor" | "search" | "renderPage" | "prepareParagraph" | "applyChanges" | "prepareExport" | "export" | "registerFonts" | "close";
+export type OpName = "init" | "open" | "info" | "pages" | "capabilities" | "extractText" | "hitTest" | "select" | "quadsFor" | "search" | "renderPage" | "prepareParagraph" | "layoutEdit" | "applyChanges" | "prepareExport" | "export" | "registerFonts" | "close";

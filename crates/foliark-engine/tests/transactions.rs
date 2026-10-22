@@ -2,7 +2,9 @@
 //! replace/keep/undo, text redactions resolved to per-line regions, revision stamping.
 mod common;
 use common::{Font, close, pdf_bytes};
-use foliark_engine::{Applied, BoxTask, EditApplier, Engine, Step};
+use foliark_engine::{
+    Applied, BoxTask, Document, EditApplier, EditContext, Engine, NotBuilt, Step,
+};
 use foliark_model::{
     ChangeResult, ChangeSet, ErrorCode, ExtractOptions, Limits, PdfError, Rect, Redaction,
     RejectedChange, TextEdit,
@@ -131,7 +133,7 @@ fn a_stale_base_is_refused_and_a_committed_changeset_cannot_commit_twice() {
 
 #[test]
 fn one_bad_item_rejects_the_whole_changeset_and_nothing_changes() {
-    let mut e = Engine::new(Limits::default());
+    let mut e = Engine::new(Limits::default()).with_edit_applier(Box::new(NotBuilt));
     let doc = open(&mut e);
     let good = region("keep", 0, R(0.0, 0.0, 10.0, 10.0));
     apply(&mut e, &doc, reds(0, vec![good.clone()])).unwrap();
@@ -188,7 +190,7 @@ fn one_bad_item_rejects_the_whole_changeset_and_nothing_changes() {
     assert!(!apply(&mut e, &doc, cross).unwrap().accepted);
     assert_eq!(*e.committed(&doc).unwrap(), before);
 
-    // With the default applier every edit is refused as not built, and that rejects the
+    // With the NotBuilt applier every edit is refused as not built, and that rejects the
     // redaction submitted with it too.
     let both = ChangeSet {
         base_revision: 1,
@@ -310,9 +312,9 @@ struct Swap;
 impl EditApplier for Swap {
     fn apply(
         &self,
-        _: &[u8],
+        _: &Document,
         edits: &[TextEdit],
-        _: &Limits,
+        _: &EditContext<'_>,
     ) -> Result<Applied, Vec<RejectedChange>> {
         if let Some(e) = edits.iter().find(|e| e.id == "no") {
             return Err(vec![RejectedChange {
@@ -364,32 +366,54 @@ fn edits_swap_the_working_copy_atomically_and_revisions_follow_the_commit() {
         (ErrorCode::Internal, 0)
     );
 
-    // Accepted: extract reads the working copy and carries the new revision. The text
-    // redaction in the same ChangeSet resolved against the BASE text (x 20..35 "one").
-    let cs = with(0, Some(vec![edit("e")]), Some(vec![text_red("t", 0, 0, 3)]));
-    let r = apply(&mut e, &doc, cs).unwrap();
+    // A text redaction resolves against the BASE text ("one"). This working copy no longer has
+    // those clusters, so submitting both together is refused whole rather than dropped.
+    let both = with(0, Some(vec![edit("e")]), Some(vec![text_red("t", 0, 0, 3)]));
+    let r = apply(&mut e, &doc, both).unwrap();
+    let feature = r.rejected[0]
+        .details
+        .as_ref()
+        .and_then(|d| d.feature.as_deref());
+    assert_eq!(
+        (r.accepted, r.revision, r.rejected[0].id.as_str(), feature),
+        (false, 0, "t", Some("redactionTargetEdited"))
+    );
+
+    // Accepted: extract reads the working copy and carries the new revision.
+    let r = apply(&mut e, &doc, with(0, Some(vec![edit("e")]), None)).unwrap();
     assert_eq!(
         (r.accepted, r.revision, r.changed_pages),
         (true, 1, vec![0])
     );
     assert_eq!(text(&mut e, &doc, 0), (1, "zzz".into()));
-    let c = e.committed(&doc).unwrap();
-    assert_eq!(
-        (c.edits.len(), close(c.redactions[0].regions[0].x, 20.0)),
-        (1, true)
-    );
-    assert_eq!(ids(&e, &doc), ["e", "t"]);
+    assert_eq!(e.committed(&doc).unwrap().edits.len(), 1);
+    assert_eq!(ids(&e, &doc), ["e"]);
     // A render does not move the revision.
     let task = e.render(&doc, 0, Default::default());
     run(&mut e, task).unwrap();
     assert_eq!(e.revision(&doc).unwrap(), 1);
 
-    // Clearing the edits (undo) brings the source back as the working copy at revision 2,
-    // and the redaction list stays.
-    let r = apply(&mut e, &doc, with(1, Some(vec![]), None)).unwrap();
-    assert_eq!((r.accepted, r.revision), (true, 2));
-    assert_eq!(text(&mut e, &doc, 0), (2, "one two afib end".into()));
-    assert_eq!(ids(&e, &doc), ["t"]);
+    // A redaction of the new text (x 100) is stored; clearing the edits would take its target
+    // away, so that is refused until the redaction goes too.
+    let r = apply(
+        &mut e,
+        &doc,
+        with(1, None, Some(vec![text_red("t", 0, 0, 3)])),
+    )
+    .unwrap();
+    assert!(r.accepted && close(e.committed(&doc).unwrap().redactions[0].regions[0].x, 100.0));
+    let r = apply(&mut e, &doc, with(2, Some(vec![]), None)).unwrap();
+    assert_eq!(
+        (r.accepted, r.revision, r.rejected[0].id.as_str()),
+        (false, 2, "t")
+    );
+    assert_eq!(text(&mut e, &doc, 0), (2, "zzz".into()));
+
+    // Clearing both brings the source back as the working copy at revision 3.
+    let r = apply(&mut e, &doc, with(2, Some(vec![]), Some(vec![]))).unwrap();
+    assert_eq!((r.accepted, r.revision), (true, 3));
+    assert_eq!(text(&mut e, &doc, 0), (3, "one two afib end".into()));
+    assert!(ids(&e, &doc).is_empty());
 }
 
 #[test]

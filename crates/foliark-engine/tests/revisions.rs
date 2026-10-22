@@ -3,7 +3,7 @@
 //! cache stays under its byte cap without changing any result.
 mod common;
 use common::{Font, pdf_bytes};
-use foliark_engine::{Applied, BoxTask, EditApplier, Engine, Step};
+use foliark_engine::{Applied, BoxTask, Document, EditApplier, EditContext, Engine, Step};
 use foliark_model::{
     ChangeSet, ErrorCode, ExtractOptions, Limits, PdfError, Rect, Redaction, RejectedChange,
     SearchOptions, TextEdit,
@@ -62,7 +62,12 @@ fn text(e: &mut Engine, doc: &str, page: u32) -> (u32, String) {
 struct Swap;
 
 impl EditApplier for Swap {
-    fn apply(&self, _: &[u8], _: &[TextEdit], _: &Limits) -> Result<Applied, Vec<RejectedChange>> {
+    fn apply(
+        &self,
+        _: &Document,
+        _: &[TextEdit],
+        _: &EditContext<'_>,
+    ) -> Result<Applied, Vec<RejectedChange>> {
         let page = "BT /F1 10 Tf 1 0 0 1 100 200 Tm (zzz) Tj ET";
         Ok(Applied {
             bytes: pdf_bytes(&[page, page, page], &Font::default(), 0),

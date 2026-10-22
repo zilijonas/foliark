@@ -83,7 +83,7 @@ export function createWorkerCore(host: WorkerHost, stepBudget = STEP_BUDGET) {
         throw new FoliarkError("ASSET_LOAD_FAILED", e instanceof Error ? e.message : String(e));
       });
       engine?.free();
-      engine = new wasm.Engine(a.limits, generation!);
+      engine = new wasm.Engine(a.limits, generation!, a.fontMatch);
       return { result: null };
     }
     const e = need();
@@ -106,8 +106,14 @@ export function createWorkerCore(host: WorkerHost, stepBudget = STEP_BUDGET) {
         return { result: null };
       case "registerFonts":
         return { result: e.registerFonts(a.fonts.map((f: Args) => ({ ...f, bytes: new Uint8Array(f.bytes) }))) };
-      case "prepareParagraph":
-        return { result: e.prepareParagraph(d, a.page, a.rects, a.font, a.editorFace) };
+      case "prepareParagraph": {
+        const r = e.prepareParagraph(d, a.page, a.rects, a.font, a.editorFace);
+        if (!r.editorFace) return { result: r };
+        r.editorFace.bytes = ownBuffer(r.editorFace.bytes);
+        return { result: r, transfer: [r.editorFace.bytes] };
+      }
+      case "layoutEdit":
+        return { result: e.layoutEdit(d, a.page, a.rects, a.text, a.font, a.glyphs) };
       case "export": {
         const bytes = ownBuffer(e.takeExport(d, a.planId));
         return { result: bytes, transfer: [bytes] };

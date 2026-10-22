@@ -7,6 +7,7 @@ import type { DocumentInfo } from "./generated/DocumentInfo.js";
 import type { ExportMode } from "./generated/ExportMode.js";
 import type { ExportPlan } from "./generated/ExportPlan.js";
 import type { ExportPolicy } from "./generated/ExportPolicy.js";
+import type { EditPreview } from "./generated/EditPreview.js";
 import type { ExtractOptions } from "./generated/ExtractOptions.js";
 import type { Hit } from "./generated/Hit.js";
 import type { OpName } from "./generated/OpName.js";
@@ -67,6 +68,11 @@ export interface DocumentHandle {
   search(query: string, o?: SearchOptions): Promise<SearchHit[]>;
   renderPage(page: number, o?: RenderOptions): Promise<RenderedPage>;
   prepareParagraph(page: number, rects: Rect[], o?: { font?: string; editorFace?: boolean }): Promise<ParagraphInfo>;
+  /**
+   * ADR 0004: the layout `applyChanges` would commit for one edit, nothing committed. Cheap enough for every
+   * keystroke. Rejects as `applyChanges` would (EDIT_*), except that overflow is `fits: false`.
+   */
+  layoutEdit(page: number, rects: Rect[], text: string, o?: { font?: string; glyphs?: boolean }): Promise<EditPreview>;
   applyChanges(cs: ChangeSet, o?: Signal): Promise<ChangeResult>;
   prepareExport(o: ExportOptions): Promise<ExportPlan>;
   /** Single-use byte handoff: the plan is freed. */
@@ -155,7 +161,14 @@ export function makeHandle(link: Link, id: string, info: DocumentInfo): Document
       return { ...r, data: new Uint8ClampedArray(r.data) };
     },
     async prepareParagraph(p, rects, o) {
-      return call("prepareParagraph", { page: page(p), rects, font: o?.font, editorFace: o?.editorFace });
+      const r = await call<ParagraphInfo>("prepareParagraph", { page: page(p), rects, font: o?.font, editorFace: o?.editorFace });
+      // The face crosses the worker boundary as a transferred ArrayBuffer.
+      if (r.editorFace) r.editorFace.bytes = new Uint8Array(r.editorFace.bytes as unknown as ArrayBuffer);
+      return r;
+    },
+    async layoutEdit(p, rects, text, o) {
+      if (typeof text !== "string") throw invalid("text must be a string");
+      return call("layoutEdit", { page: page(p), rects, text, font: o?.font, glyphs: o?.glyphs });
     },
     async applyChanges(changes, o) {
       const r = await call<ChangeResult>("applyChanges", { changes }, o?.signal);

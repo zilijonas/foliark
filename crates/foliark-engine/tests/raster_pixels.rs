@@ -3,7 +3,7 @@
 //! revision. Geometry (CropBox, /Rotate, /UserUnit) is placed by a MuPDF render of the SOURCE.
 mod common;
 use common::{Font, pdf_bytes, python, run, tmp};
-use foliark_engine::{Applied, EditApplier, Engine, RenderOptions};
+use foliark_engine::{Applied, Document, EditApplier, EditContext, Engine, RenderOptions};
 use foliark_model::{
     ChangeSet, ExportMode, ExportPolicy, ExtractOptions, Limits, Rect, Redaction, RejectedChange,
     TextEdit,
@@ -239,7 +239,12 @@ const EDITED: &str = "BT /F1 20 Tf 1 0 0 1 20 300 Tm (EDITED text) Tj ET";
 const ORIGINAL: &str = "BT /F1 20 Tf 1 0 0 1 20 300 Tm (ORIGINAL xx) Tj ET";
 
 impl EditApplier for Edited {
-    fn apply(&self, _: &[u8], _: &[TextEdit], _: &Limits) -> Result<Applied, Vec<RejectedChange>> {
+    fn apply(
+        &self,
+        _: &Document,
+        _: &[TextEdit],
+        _: &EditContext<'_>,
+    ) -> Result<Applied, Vec<RejectedChange>> {
         Ok(Applied {
             bytes: pdf_bytes(&[EDITED], &Font::default(), 0),
             layouts: vec![],

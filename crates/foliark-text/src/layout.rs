@@ -195,6 +195,7 @@ impl LayoutPlan {
             id: id.into(),
             lines: self.lines.len() as u32,
             approximate: self.approximate,
+            fingerprint: self.fingerprint.clone(),
             runs,
         }
     }
@@ -331,12 +332,58 @@ fn segments(sh: &Shaper, body: &[Cluster]) -> Result<Vec<Segment>, PdfError> {
     Ok(segs)
 }
 
-/// §6.3 greedy layout of `text` at a fixed size.
+/// A laid-out paragraph before the budget check: `plan` holds every line, even past `max_lines`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Laid {
+    pub plan: LayoutPlan,
+    pub max_lines: u32,
+    /// A word is wider than its line, so no number of lines fits it.
+    pub too_wide: bool,
+}
+
+impl Laid {
+    /// Lines the text takes; one more than `max_lines` at least when a word is too wide.
+    pub fn needed_lines(&self) -> u32 {
+        let n = self.plan.lines.len() as u32;
+        if self.too_wide {
+            n.max(self.max_lines + 1)
+        } else {
+            n
+        }
+    }
+
+    pub fn fits(&self) -> bool {
+        !self.too_wide && self.needed_lines() <= self.max_lines
+    }
+
+    /// The plan, or `EDIT_NO_FIT` with the counts (§6.3).
+    pub fn fit(self) -> Result<LayoutPlan, PdfError> {
+        if self.fits() {
+            return Ok(self.plan);
+        }
+        Err(refuse(
+            ErrorCode::EditNoFit,
+            ErrorDetails {
+                needed_lines: Some(self.needed_lines()),
+                max_lines: Some(self.max_lines),
+                ..Default::default()
+            },
+        ))
+    }
+}
+
+/// §6.3 greedy layout of `text` at a fixed size; `EDIT_NO_FIT` when it does not fit.
 pub fn layout_paragraph(
     text: &str,
     p: &LayoutParams,
     ladder: &Ladder,
 ) -> Result<LayoutPlan, PdfError> {
+    layout_unbounded(text, p, ladder)?.fit()
+}
+
+/// [`layout_paragraph`] without the budget check, for previews: the same lines and fingerprint
+/// the commit would have, and whether they fit. Missing glyphs and bad text still refuse.
+pub fn layout_unbounded(text: &str, p: &LayoutParams, ladder: &Ladder) -> Result<Laid, PdfError> {
     const EPS: f64 = 1e-6;
     let text = normalize(text)?;
     let cands = ladder.candidates()?;
@@ -434,22 +481,6 @@ pub fn layout_paragraph(
         lines.push((x, cur));
     }
 
-    let needed = lines.len() as u32;
-    if too_wide || needed > p.max_lines {
-        return Err(refuse(
-            ErrorCode::EditNoFit,
-            ErrorDetails {
-                needed_lines: Some(if too_wide {
-                    needed.max(p.max_lines + 1)
-                } else {
-                    needed
-                }),
-                max_lines: Some(p.max_lines),
-                ..Default::default()
-            },
-        ));
-    }
-
     let plan_lines = lines
         .into_iter()
         .enumerate()
@@ -505,9 +536,13 @@ pub fn layout_paragraph(
     for r in ladder.font_match {
         h.field(r.pattern.as_bytes()).field(r.family.as_bytes());
     }
-    Ok(LayoutPlan {
-        lines: plan_lines,
-        approximate,
-        fingerprint: h.hex(),
+    Ok(Laid {
+        plan: LayoutPlan {
+            lines: plan_lines,
+            approximate,
+            fingerprint: h.hex(),
+        },
+        max_lines: p.max_lines,
+        too_wide,
     })
 }

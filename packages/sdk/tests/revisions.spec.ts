@@ -1,7 +1,7 @@
 // Revision binding (spec 4): every text result carries the revision it was computed at, a stale base or a task
 // that straddles a commit is a typed STALE_REVISION, and cached text survives only commits that cannot change it.
-// Text edits are not built yet (NEW-51), so commits here are redaction lists; edit commits are covered in Rust
-// (crates/foliark-engine/tests/revisions.rs) with a stand-in applier.
+// Commits here are redaction lists; edit commits are covered by paragraph.spec.ts and, in Rust, by
+// crates/foliark-engine/tests/revisions.rs with a stand-in applier.
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
 import init, * as wasm from "../wasm/foliark_wasm.js";

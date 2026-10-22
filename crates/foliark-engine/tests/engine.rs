@@ -219,17 +219,3 @@ fn font_registration_is_all_or_nothing_and_counted() {
         ErrorCode::LimitExceeded
     );
 }
-
-#[test]
-fn ops_that_are_not_built_refuse_with_their_feature_name() {
-    let mut e = Engine::new(Limits::default());
-    let (d, _) = e.open(pdf(&["x"]), None, false).unwrap();
-    let feature = |r: Result<(), PdfError>| {
-        let err = r.err().unwrap();
-        (err.code, err.details.unwrap().feature.unwrap())
-    };
-    assert_eq!(
-        feature(e.prepare_paragraph(&d, 0, vec![], None, false).map(|_| ())),
-        (ErrorCode::InvalidArgument, "prepareParagraph".into())
-    );
-}

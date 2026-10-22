@@ -82,7 +82,7 @@ const PHASES = { open: true, extract: true, render: true, layout: true, export: 
 /** `needsDoc`: whether the op addresses an open document through `Req.doc`. */
 export const OPS = {
   init: false, open: false, info: true, pages: true, capabilities: true, extractText: true, hitTest: true, select: true,
-  quadsFor: true, search: true, renderPage: true, prepareParagraph: true, applyChanges: true, prepareExport: true,
+  quadsFor: true, search: true, renderPage: true, prepareParagraph: true, layoutEdit: true, applyChanges: true, prepareExport: true,
   export: true, registerFonts: false, close: true,
 } as const satisfies Record<OpName, boolean>;
 
@@ -193,9 +193,15 @@ const isRedaction = (x: unknown) =>
   shape({ id: isStr, pageIndex: isU32, fill: optNull(isRgb) })(x) &&
   ((x as Rec).kind === "region" ? isRect((x as Rec).rect) : (x as Rec).kind === "text" && isU32((x as Rec).start) && isU32((x as Rec).end));
 const isChangeSet = shape({ baseRevision: isU32, textEdits: opt(arrayOf(isTextEdit)), redactions: opt(arrayOf(isRedaction)) });
+const isLayoutRun = shape({ source: (x) => x === "embedded" || x === "registered", font: isStr, clusters: isU32 });
 const isEditLayout = shape({
-  id: isStr, lines: isU32, approximate: isBool,
-  runs: arrayOf(shape({ source: (x) => x === "embedded" || x === "registered", font: isStr, clusters: isU32 })),
+  id: isStr, lines: isU32, approximate: isBool, fingerprint: isStr, runs: arrayOf(isLayoutRun),
+});
+const isEditPreview = shape({
+  docId: isStr, revision: isU32, fontRegistryVersion: isU32, fontSize: isNum,
+  lines: arrayOf(shape({ text: isStr, baseline: isNum, x: isNum, width: isNum })),
+  neededLines: isU32, maxLines: isU32, fits: isBool, approximate: isBool, runs: arrayOf(isLayoutRun), fingerprint: isStr,
+  glyphs: opt(arrayOf(shape({ line: isU32, font: isStr, gid: isU32, start: isU32, end: isU32, x: isNum, width: isNum }))),
 });
 const isChangeResult = shape({
   accepted: isBool, revision: isU32,
@@ -221,6 +227,7 @@ export const argsGuards = (maxBytes = DEFAULT_MAX_BUFFER_BYTES): Partial<Record<
     page: isU32, scale: opt((x) => isNum(x) && x > 0), clip: opt(isRect), annotations: opt(isBool), background: opt(tuple(4)),
   }),
   prepareParagraph: shape({ page: isU32, rects: arrayOf(isRect), font: opt(isStr), editorFace: opt(isBool) }),
+  layoutEdit: shape({ page: isU32, rects: arrayOf(isRect), text: isStr, font: opt(isStr), glyphs: opt(isBool) }),
   applyChanges: shape({ changes: isChangeSet }),
   prepareExport: shape({ mode: isMode, policy: opt(isRec) }),
   export: shape({ planId: isStr }),
@@ -249,6 +256,7 @@ export const resultGuards = (maxBytes = DEFAULT_MAX_BUFFER_BYTES): Partial<Recor
     isBuffer((x as Rec).data, maxBytes, 1) &&
     ((x as Rec).data as ArrayBuffer).byteLength === x.width * x.height * 4,
   prepareParagraph: shape({ docId: isStr, revision: isU32, pageIndex: isU32, bounds: isRect, font: isRec }),
+  layoutEdit: isEditPreview,
   applyChanges: isChangeResult,
   prepareExport: shape({
     planId: isStr, docId: isStr, generation: isU32, revision: isU32, mode: isMode, policyHash: isStr,
