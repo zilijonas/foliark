@@ -1,5 +1,6 @@
 //! Strict, fallible reader (spec §0.1): every failure is a typed error with the object it
 //! happened in. Nothing is silently skipped, emptied or repaired.
+use crate::cache::{DOC_CACHE_BYTES, ImageStore};
 use crate::limits::{self, Budget};
 use foliark_model::{ErrorCode, Limits, ObjectId, PageGeometry, PdfError, page_geometry};
 use hayro::hayro_syntax::content::TypedIter;
@@ -35,6 +36,8 @@ pub struct Document {
     scanned: OnceCell<Result<(), PdfError>>,
     /// Set by the host to stop the interpreter mid-page (hayro P15); see [`Self::with_cancel`].
     cancel: Arc<AtomicBool>,
+    /// Reduced image decodes shared by this document's renders (hayro P17).
+    pub(crate) images: Arc<ImageStore>,
 }
 
 impl Document {
@@ -93,6 +96,7 @@ impl Document {
             limits,
             scanned: OnceCell::new(),
             cancel: Arc::default(),
+            images: Arc::new(ImageStore::new(DOC_CACHE_BYTES)),
         };
         doc.check_repaired()?;
         Ok(doc)

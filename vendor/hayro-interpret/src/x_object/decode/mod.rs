@@ -1,5 +1,6 @@
 mod image;
 mod mask;
+pub(crate) mod reduce;
 
 pub(crate) use image::{DecodedImage, decode_image};
 pub(crate) use mask::{DecodedMask, decode_mask};

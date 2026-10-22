@@ -174,9 +174,10 @@ impl Engine {
         self.docs.values().fold(seed, |mut s, d| {
             s.documents += 1;
             s.source_bytes += d.source_len();
-            s.cache_entries += d.index.len();
-            s.cache_bytes += d.index.bytes();
-            s.cache_evictions += d.index.evictions();
+            let (image_bytes, image_entries, image_evictions) = d.image_usage();
+            s.cache_entries += d.index.len() + image_entries;
+            s.cache_bytes += d.index.bytes() + image_bytes;
+            s.cache_evictions += d.index.evictions() + image_evictions;
             s
         })
     }

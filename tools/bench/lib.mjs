@@ -56,13 +56,21 @@ export async function loadFixtures(want) {
   const out = [];
   for (const [id, source, role] of want) {
     let path = source;
-    if (GENERATED[source]) { path = join(BENCH, `.cache/${id}.pdf`); execFileSync("python3", [join(BENCH, GENERATED[source].script), path]); }
+    const scan = source.startsWith("scan:") ? source.slice(5) : null;
+    if (scan) {
+      path = join(SCANS, `scan-${scan}.pdf`);
+      if (!existsSync(path)) execFileSync(join(ROOT, "tests/oracles/.venv/bin/python"), [join(ROOT, "tests/fixtures/generators/scans.py"), SCANS]);
+    } else if (GENERATED[source]) { path = join(BENCH, `.cache/${id}.pdf`); execFileSync("python3", [join(BENCH, GENERATED[source].script), path]); }
     else path = join(ROOT, "tests/fixtures", byId[source].path);
     const buf = await readFile(path);
-    out.push({ id, role, path, buf, sha256: sha256(buf), bytes: buf.length, pages: GENERATED[source]?.pages ?? byId[source].pages, origin: GENERATED[source] ? `tools/bench/${GENERATED[source].script} (PyMuPDF, dev-only)` : `tests/fixtures/${byId[source].path}` });
+    out.push({ id, role, path, buf, sha256: sha256(buf), bytes: buf.length, pages: scan ? SCAN_PAGES : GENERATED[source]?.pages ?? byId[source].pages, origin: scan ? "tests/fixtures/generators/scans.py (Pillow, synthetic)" : GENERATED[source] ? `tools/bench/${GENERATED[source].script} (PyMuPDF, dev-only)` : `tests/fixtures/${byId[source].path}` });
   }
   return out;
 }
+const SCANS = join(BENCH, ".cache/scans");
+const SCAN_PAGES = 3;
+// NEW-81: synthetic 300 dpi A4 scans, one image codec each (tests/fixtures/generators/scans.py)
+export const SCAN_FIXTURES = ["jpeg-baseline-rgb", "jpeg-baseline-gray", "jpeg-progressive-rgb", "jpeg-progressive-gray", "jbig2", "ccitt-g4", "flate-gray"].map((k) => [`scan-${k}`, `scan:${k}`, "scanned page"]);
 export const FIXTURES = [
   ["native-small", "metadata-xmp", "small native text"],
   ["native-30p", "generated", "30-page native text"],

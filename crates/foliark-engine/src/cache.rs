@@ -3,8 +3,10 @@
 //! point is a bound that scales with page content instead of with how many pages were visited.
 //! Nothing here is persistent or shared: a cache dies with its document, and
 //! `close`/`reset` free it (spec §10.2: no physical wipe is promised).
-use std::collections::HashMap;
+use hayro::hayro_interpret::{ImageData, ReducedImageCache, ReducedImageKey};
+use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
+use std::sync::Mutex;
 
 /// Per document. With `maxOpenDocuments` 4 the worst case is 4 x 16 MiB plus one oversized page each.
 pub(crate) const DOC_CACHE_BYTES: usize = 16 << 20;
@@ -77,6 +79,11 @@ impl<K: Eq + Hash + Clone, V> Lru<K, V> {
         }
     }
 
+    /// Change the cap; entries over the new one go at the next insert.
+    pub fn set_cap(&mut self, cap: usize) {
+        self.cap = cap;
+    }
+
     pub fn values_mut(&mut self) -> impl Iterator<Item = &mut V> {
         self.slots.values_mut().map(|s| &mut s.value)
     }
@@ -97,6 +104,59 @@ impl<K: Eq + Hash + Clone, V> Lru<K, V> {
     /// Entries dropped to stay under the cap since creation (not counting `clear`).
     pub fn evictions(&self) -> u64 {
         self.evictions
+    }
+}
+
+/// Reduced image decodes of one document (hayro P17), shared by every render of it, so a page drawn
+/// again at the same size skips the decode and the downscale. Filled by the renderer through the
+/// [`ReducedImageCache`] hook; never holds anything an export reads.
+pub(crate) struct ImageStore(Mutex<(Lru<ReducedImageKey, ImageData>, HashSet<ReducedImageKey>)>);
+
+/// Keys remembered as drawn once; a document draws far fewer images than this.
+const SEEN_KEYS: usize = 4096;
+
+impl ImageStore {
+    pub(crate) fn new(cap: usize) -> Self {
+        Self(Mutex::new((Lru::new(cap), HashSet::new())))
+    }
+
+    pub(crate) fn set_cap(&self, cap: usize) {
+        if let Ok(mut s) = self.0.lock() {
+            s.0.set_cap(cap);
+        }
+    }
+
+    /// (bytes, entries, evictions)
+    pub(crate) fn usage(&self) -> (usize, usize, u64) {
+        self.0
+            .lock()
+            .map_or((0, 0, 0), |s| (s.0.bytes(), s.0.len(), s.0.evictions()))
+    }
+}
+
+impl ReducedImageCache for ImageStore {
+    fn get(&self, key: &ReducedImageKey) -> Option<ImageData> {
+        self.0.lock().ok()?.0.get(key).cloned()
+    }
+
+    fn seen(&self, key: &ReducedImageKey) -> bool {
+        let Ok(mut s) = self.0.lock() else {
+            return false;
+        };
+        if s.1.len() >= SEEN_KEYS {
+            s.1.clear();
+        }
+        !s.1.insert(*key)
+    }
+
+    fn insert(&self, key: ReducedImageKey, image: &ImageData) {
+        let bytes = match image {
+            ImageData::Luma(d) => d.data.len(),
+            ImageData::Rgb(d) => d.data.len(),
+        };
+        if let Ok(mut s) = self.0.lock() {
+            s.0.insert(key, image.clone(), bytes);
+        }
     }
 }
 

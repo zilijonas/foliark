@@ -46,7 +46,7 @@ pub fn render(
     index: usize,
     spec: &PageSpec,
 ) -> Result<Pixels, PdfError> {
-    let page = doc.render_page(
+    let page = doc.render_page_exact(
         index,
         RenderOptions {
             annotations: plan.annotations,

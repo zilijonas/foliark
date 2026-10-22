@@ -134,6 +134,8 @@ pub(crate) struct Session {
     pub(crate) approximate: u32,
     /// Lazily built page layouts, byte-bounded and bound to `revision` (spec §4).
     pub(crate) index: TextIndex,
+    /// The byte budget of the caches above and of each document's image store.
+    cache_bytes: usize,
 }
 
 impl Session {
@@ -144,8 +146,10 @@ impl Session {
         info: DocumentInfo,
         cache_bytes: usize,
     ) -> Self {
+        source.0.images.set_cap(cache_bytes);
         Self {
             index: TextIndex::new(id, cache_bytes),
+            cache_bytes,
             source,
             source_bytes,
             working: None,
@@ -154,6 +158,15 @@ impl Session {
             committed: Committed::default(),
             approximate: 0,
         }
+    }
+
+    /// (bytes, entries, evictions) of the reduced-image stores of the source and the working copy.
+    pub(crate) fn image_usage(&self) -> (usize, usize, u64) {
+        [Some(&self.source), self.working.as_ref()]
+            .into_iter()
+            .flatten()
+            .map(|d| d.0.images.usage())
+            .fold((0, 0, 0), |a, b| (a.0 + b.0, a.1 + b.1, a.2 + b.2))
     }
 
     /// Bytes of the input this session keeps (the source is held a second time, parsed).
@@ -298,6 +311,7 @@ impl Session {
                 Ok(a) => {
                     let doc = Document::open_with_limits(a.bytes, None, false, ctx.limits.clone())?
                         .with_cancel(self.source.cancel_handle());
+                    doc.0.images.set_cap(self.cache_bytes);
                     if doc.page_count() != self.source.page_count() {
                         return Err(PdfError::new(ErrorCode::Internal));
                     }
