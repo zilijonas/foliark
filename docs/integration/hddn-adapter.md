@@ -46,8 +46,14 @@ Accepted differences:
 Scanned-page OCR is wired through the same `renderPng(...,true)` seam but has no scanned fixture here; signature regions return none under Foliark;
 the offline precache lists the wasm but the service-worker cache name was not bumped (NEW-70).
 
+## NEW-67: signatures, OCR, selection, search, browser proof (HDDN `foliark/integration`)
+- Signature scan: `detect_signature_regions` ported to TS (`src/workers/lib/signature-regions.ts`) over `renderRgba(page, 1.5)` from the active Foliark handle (gray like MuPDF `csGRAY`, same 540 px grid, thresholds and text-overlap veto). Parity vs PyMuPDF on 4 fixtures at both vertical gates: same region counts, boxes within 0.02; ranking by ink area can swap near-ties by 1 px between rasterizers, so tests compare by position.
+- OCR: already routed through `renderPng(page, ocrScale, true)` (NEW-66); now proven in a real browser on a scanned and a mixed fixture. OCR spans merge unchanged (`source:'ocr'`).
+- Selection: HDDN selection is DOM word spans placed from span boxes (no engine call), so equivalence is the word-box parity (0.211 pt worst). Search: HDDN has no document search (the watchlist is JS regex over `textContent` + span offsets). SDK `search`/`quadsFor`/`select` are verified on the multi-column Unicode fixture (diacritic folding with `diacriticSensitive:false`, UTF-16 range to word quad, column drag stays on its line) but NOT wired into the UI: nothing there would improve.
+- Real-browser proof: `pnpm run test:e2e:foliark` (6 cases, chromium, built `/redact`), see `tests/pdf/README.md` in HDDN.
+- Findings: Tesseract start-up failure (unreadable or unreachable language data) makes HDDN's `errorHandler` throw in the worker: UI shows the worker-crash/recovery banner and the import is lost (engine independent, tesseract.ts). Page-level OCR failure behaves as designed (warning, manual-review gate).
+
 ## Next
-- NEW-67: `detectSignatures` over `renderPage`, OCR text-layer merge, selection/search on `quadsFor`/`search`; add a scanned fixture to the oracle.
 - NEW-68: `PREPARE_PARAGRAPH_EDIT` / `SET_TEXT_EDITS` on `prepareParagraph`, `layoutEdit`, `applyChanges`; re-extract `changedPages`; keep the generation/revision binding.
 - NEW-69: `APPLY_REDACTIONS` on `prepareExport` / `export`; map `FORM_APPEARANCE_MISSING`, `OPTIONAL_CONTENT_UNSUPPORTED` etc. to the `native-*` codes; delete `export-renderer.ts`.
 - NEW-70: service-worker cache name, `onReset` -> recovery replay, offline gate. NEW-71: remove Pyodide once 67-69 land.
