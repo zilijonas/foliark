@@ -93,6 +93,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build:sdk
       - run: pnpm exec playwright install --with-deps chromium firefox webkit
+        timeout-minutes: 15
       - run: pnpm smoke webkit
       - run: tests/browser/run.sh
       - run: tests/package-consumers/run.sh
