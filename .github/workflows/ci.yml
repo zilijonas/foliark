@@ -1,9 +1,10 @@
-# Pull-request CI on Linux runners (macOS minutes cost 10x on private repos). Work is batched into one PR per wave;
-# merges to main do not re-run CI (the PR head already passed), which saves Actions minutes.
+# Push and pull-request CI on Linux runners (macOS minutes cost 10x on private repos). Work lands as one batched PR per wave.
 # Heavy suites (WebKit smoke, the three-browser deployment specs, the package-consumer matrix) run only on a manual
 # dispatch: Actions > ci > Run workflow. Acceptance, fuzz and the timing-budget bench stay local (docs/development.md).
 name: ci
 on:
+  push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
     inputs:
