@@ -1,0 +1,14 @@
+[package]
+name = "foliark-text"
+description = "Font registry and authoritative paragraph layout (spec §1.4, §6)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+foliark-model = { path = "../foliark-model" }
+harfrust = "=0.14.0"
+skrifa = "=0.46.2"
+unicode-normalization = "=0.1.25"
