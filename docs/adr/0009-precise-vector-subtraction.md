@@ -1,6 +1,6 @@
 # ADR 0009: Precise bounded vector subtraction for redaction (NEW-85)
 
-Status: Proposed, 2026-10-22. Design only; no engine code changed. Amends spec 5.4 (frozen: a change needs an ADR), 12, 16 and 17.3. Implemented by NEW-86 (fills) then NEW-87 (strokes).
+Status: Accepted, 2026-10-22. Fills and clip outlines implemented by NEW-86 (see Implementation notes); strokes follow in NEW-87. Amends spec 5.4 (frozen: a change needs an ADR), 12, 16 and 17.3. Implemented by NEW-86 (fills) then NEW-87 (strokes).
 
 ## Context
 Spec 5.4 (NEW-36/37) cuts only a lone axis-aligned fill rectangle exactly. Every other crossing path (curves, circles, rings, rotated shapes, even-odd stars, any stroke) is removed whole and disclosed as `VECTOR_COLLATERAL`. Owner requirement: precise cutting with no whole-shape collateral deletion; protected geometry inside a region unrecoverable from the output; public geometry outside preserved within a stated tolerance; bounded work; explicit refusal where unproven; pure Rust, permissive licence, wasm32, no C/C++.
@@ -120,3 +120,14 @@ Spec 16: delete "exact curve/stroke boolean subtraction (winding, dashes, caps, 
 - Refusals are by design for inherited stroke colour and unequal stroke/fill alpha; raster export stays the escape hatch.
 - Not measured: cut quality on real documents, boolean time at the vertex cap (NEW-86 measures), shipped-build wasm size (scratch estimate above).
 - Upgrade path: `linesweeper` once it leaves beta, behind the same `geometry` interface, would keep curves.
+
+## Implementation notes (NEW-86, fills and clips)
+Deviations from the design above, each tested in `tests/redact_fills.rs`:
+- Regions are not pre-unioned: they go to `i_overlay` as one clip set under non-zero (all rectangles wind alike, so overlaps stay in); an even-odd path is resolved with `simplify_shape(EvenOdd)` first. Only regions whose bounds touch the group are passed.
+- Subpaths are grouped by touching display bounds (sweep plus union-find). A group's winding cannot depend on another group, so only groups whose ink really meets a region are replaced; the rest keep their operators byte for byte. A cut group is written under the path's own paint operator (disjoint contours, holes wind against their outer, valid under either fill rule), not `f*`.
+- A group is "touched" when an edge meets a grown region or a region lies inside the ink (judged on the flattened polygons, independent of `i_overlay`); otherwise nothing is rewritten.
+- The stream-to-display affine is fitted from the stream's own vertices against the model's (best conditioned triple, verified on every pair) instead of adding `PathItem.ctm`; a path whose ink meets a region while the fit is impossible is `INTERNAL`.
+- Clips (lead amendment): the outline of every `W`/`W*` path (painted or `W n`) is cut like ink, but only when its outline meets a region (a clip that merely encloses a region holds none of it). A clip wholly inside the regions becomes `0 0 0 0 re W n`. A painted path's clip is written after its paint. BBox clips of Forms and patterns have no `n` in the stream and are not planned.
+- The plan only knows which paths may reach a region: `vectorPathsCut` in `plan.report` is a bound, the export report counts what the stages did; `check_stages` requires every planned entry to be accounted for as removed, cut or untouched.
+- `REDACT_VECTOR_UNSUPPORTED` is not used by fills (nothing to refuse beyond the caps); NEW-87 introduces it.
+- Measured: one saw polygon of 249,000 vertices crossing one region, whole `redact_vectors` call, native release build on the Mac mini: 717 ms.

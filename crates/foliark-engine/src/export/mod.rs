@@ -195,7 +195,15 @@ fn verify(
             ours.iter()
                 .any(|r| r.iter().zip(b).all(|(x, y)| (x - y).abs() < 5.0 * SLACK))
         };
-        if page.vectors.iter().any(|v| !is_fill(&v.bounds)) {
+        // A filled path or clip outline that merely overlaps a region by bounds is judged on its
+        // geometry; anything else planned (a stroke, ink wholly inside) must not exist.
+        let class = |v: &&crate::redaction::plan::PlannedVector| {
+            v.class != crate::redaction::plan::VectorClass::Cut && !is_fill(&v.bounds)
+        };
+        if page.vectors.iter().any(|v| class(&v)) {
+            return Err(verify_failed());
+        }
+        if crate::redaction::vector::page_leaks(&out, page, &is_fill)? {
             return Err(verify_failed());
         }
     }
@@ -251,8 +259,10 @@ fn check_stages(plan: &RedactionPlan, x: &Executed) -> Result<(), PdfError> {
         && x.images.images_erased == p.images_erased
         && x.images.images_cloned == p.images_cloned
         && x.forms_cloned == p.forms_cloned
-        && x.vectors.subpaths_removed == p.vector_subpaths_removed
-        && x.vectors.rects_cut == p.vector_rects_cut
+        // A planned cut may find its ink clear of the regions (`untouched`): every planned
+        // entry must still be accounted for.
+        && x.vectors.subpaths_removed + x.vectors.paths_cut + x.vectors.untouched
+            == p.vector_subpaths_removed + p.vector_paths_cut
         && x.vectors.collateral.len() == p.collateral.len();
     if ok { Ok(()) } else { Err(verify_failed()) }
 }
@@ -491,6 +501,11 @@ pub fn prepare(
         done.vectors.collateral.len() as u32,
         collateral_pages,
     );
+    stage_loss(
+        LossCode::VectorCutApproximated,
+        done.vectors.approximated,
+        on(|p| !p.vectors.is_empty()),
+    );
 
     let redaction = RedactionReport {
         regions: plan.report.regions,
@@ -499,7 +514,7 @@ pub fn prepare(
         images_cloned: done.images.images_cloned,
         forms_cloned: done.forms_cloned,
         vector_subpaths_removed: done.vectors.subpaths_removed,
-        vector_rects_cut: done.vectors.rects_cut,
+        vector_paths_cut: done.vectors.paths_cut,
         collateral: done.vectors.collateral,
         shared_survivors: plan.report.shared_survivors.clone(),
     };

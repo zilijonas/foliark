@@ -11,6 +11,7 @@ publish.workspace = true
 foliark-model = { path = "../foliark-model" }
 foliark-text = { path = "../foliark-text" }
 hayro.workspace = true
+i_overlay.workspace = true
 pdf-writer.workspace = true
 skrifa = "=0.46.2"
 subsetter = { version = "=0.2.6", default-features = false }

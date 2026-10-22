@@ -28,7 +28,7 @@ fn a_mitered_spike_reaching_into_the_region_removes_the_whole_stroke() {
                    2 w 20 20 m 60 40 l S";
     let (input, regions) = reg(content, &[[205.0, 295.0, 230.0, 315.0]]);
     let r = run("miter", input, &regions);
-    assert_eq!((r.report.subpaths_removed, r.report.rects_cut), (1, 0));
+    assert_eq!((r.report.subpaths_removed, r.report.paths_cut), (1, 0));
     assert_eq!(r.report.collateral.len(), 1);
     r.assert_region_blank(0);
     r.assert_rest_unchanged();
@@ -86,7 +86,7 @@ fn a_stroked_rectangle_is_never_cut_but_its_fill_only_sibling_is() {
         &[[120.0, 140.0, 170.0, 160.0], [200.0, 270.0, 230.0, 290.0]],
     );
     let r = run("fill-stroke", input, &regions);
-    assert_eq!((r.report.subpaths_removed, r.report.rects_cut), (1, 1));
+    assert_eq!((r.report.subpaths_removed, r.report.paths_cut), (1, 1));
     assert_eq!(r.report.collateral.len(), 1);
     r.assert_region_blank(0);
     r.assert_region_blank(1);

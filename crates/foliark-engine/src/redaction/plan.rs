@@ -127,9 +127,11 @@ pub struct PlannedImage {
 pub enum VectorClass {
     /// (a) inside the union of regions: removed.
     Inside,
-    /// (b) crossing an axis-aligned, fill-only rectangle: replaced by the rectangle difference.
-    RectCut,
-    /// (c) crossing anything else: removed whole, reported as collateral.
+    /// (b) a filled path or a clip outline whose bounds reach a region: the geometry stage
+    /// decides (untouched, removed, or replaced by its difference with the regions).
+    Cut,
+    /// (c) a stroked subpath crossing a region: removed whole, reported as collateral (the
+    /// stroke cut is a later task).
     Collateral,
 }
 
@@ -139,6 +141,7 @@ pub struct PlannedVector {
     pub path: InstancePath,
     /// Index of the subpath inside the painted path.
     pub subpath: u32,
+    /// A filled path or clip outline is one entry (`subpath` 0); a stroked path has one per subpath.
     pub class: VectorClass,
     /// Display bounds, expanded by half the stroke width times the miter limit when stroked.
     pub bounds: Rect,
@@ -327,7 +330,7 @@ pub(crate) fn text_coverage(q: &Quad, r: B) -> Option<f64> {
 
 /// Whether the box `b` lies inside the union of `regions`: every cell of the grid that `b` and
 /// the region edges cut it into has its centre in some region.
-fn covered(b: B, regions: &[B]) -> bool {
+pub(super) fn covered(b: B, regions: &[B]) -> bool {
     let samples = |lo: f64, hi: f64, cuts: &mut Vec<f64>| {
         if lo >= hi {
             return vec![lo];
@@ -375,27 +378,6 @@ pub(super) fn subpaths(path: &BezPath) -> Vec<BezPath> {
         }
     }
     out
-}
-
-/// A closed polyline of four axis-aligned sides (what `re` makes), in display space.
-fn is_axis_rect(p: &BezPath) -> bool {
-    let mut pts: Vec<(f64, f64)> = Vec::new();
-    for el in p.elements() {
-        match el {
-            PathEl::MoveTo(q) | PathEl::LineTo(q) => pts.push((q.x, q.y)),
-            PathEl::ClosePath => {}
-            _ => return false,
-        }
-    }
-    if pts.len() == 5 && pts[0] == pts[4] {
-        pts.pop();
-    }
-    let same = |a: f64, b: f64| (a - b).abs() < 1e-6;
-    pts.len() == 4
-        && (0..4).all(|i| {
-            let (a, b) = (pts[i], pts[(i + 1) % 4]);
-            same(a.0, b.0) != same(a.1, b.1)
-        })
 }
 
 // ---- scanning ---------------------------------------------------------------------------------
@@ -465,7 +447,7 @@ impl Scan {
             images_cloned: 0,
             forms_cloned: 0,
             vector_subpaths_removed: 0,
-            vector_rects_cut: 0,
+            vector_paths_cut: 0,
             collateral: Vec::new(),
             shared_survivors: Vec::new(),
         };
@@ -493,7 +475,7 @@ impl Scan {
             }
             for v in &p.vectors {
                 match v.class {
-                    VectorClass::RectCut => report.vector_rects_cut += 1,
+                    VectorClass::Cut => report.vector_paths_cut += 1,
                     VectorClass::Inside => report.vector_subpaths_removed += 1,
                     VectorClass::Collateral => {
                         report.vector_subpaths_removed += 1;
@@ -763,7 +745,10 @@ fn plan_page(
                     changed = true;
                 }
             }
-            ItemKind::Path(p) if !p.clip_only && (p.fill.is_some() || p.stroke.is_some()) => {
+            ItemKind::Path(p)
+                if (p.clip_only && clip_from_stream(item))
+                    || (!p.clip_only && (p.fill.is_some() || p.stroke.is_some())) =>
+            {
                 let found = plan_vectors(item.loc, &item.path, p, to_display, disp_scale, &boxes);
                 changed = !found.is_empty();
                 if p.stroke.is_some() {
@@ -870,6 +855,12 @@ fn bounds_of_path(path: &BezPath, to_display: Affine) -> B {
     [r.x0, r.y0, r.x1, r.y1]
 }
 
+/// A clip-only item written by a `W n` of the stream it names, not the BBox clip of a Form or
+/// pattern (the interpreter reports those at the `Do` that draws them, in the parent's stream).
+fn clip_from_stream(item: &Item) -> bool {
+    item.loc.stream.num != 0 && item.path.0.last().is_none_or(|s| s.form == item.loc.stream)
+}
+
 fn plan_vectors(
     loc: SourceLoc,
     path: &InstancePath,
@@ -878,6 +869,32 @@ fn plan_vectors(
     disp_scale: f64,
     boxes: &[B],
 ) -> Vec<PlannedVector> {
+    let shape = to_display * item.geometry.clone();
+    if item.stroke.is_none() {
+        // One unit: fill rules act across subpaths, so only the geometry stage can tell what
+        // the cut leaves.
+        let r = shape.bounding_box();
+        let b = [r.x0, r.y0, r.x1, r.y1];
+        let hit: Vec<u32> = (0..boxes.len() as u32)
+            .filter(|&i| overlap(b, boxes[i as usize]))
+            .collect();
+        if hit.is_empty() {
+            return Vec::new();
+        }
+        let class = if !item.clip_only && covered(b, boxes) {
+            VectorClass::Inside
+        } else {
+            VectorClass::Cut
+        };
+        return vec![PlannedVector {
+            loc,
+            path: path.clone(),
+            subpath: 0,
+            class,
+            bounds: rect_of(b),
+            regions: hit,
+        }];
+    }
     // Half the width times the miter limit (spec §5.4), at least the square-cap corner, along
     // the CTM's widest axis (`stroke_scale`).
     let grow = item.stroke.as_ref().map_or(0.0, |s| {
@@ -892,33 +909,18 @@ fn plan_vectors(
             * 0.5
             * f64::from(s.miter_limit).max(1.0).max(cap)
     });
-    let shapes = subpaths(&(to_display * item.geometry.clone()));
-    let subs: Vec<B> = shapes
-        .iter()
-        .map(|sub| {
-            let r = sub.bounding_box();
-            [r.x0, r.y0, r.x1, r.y1]
-        })
-        .collect();
     let mut out = Vec::new();
-    for (n, r) in subs.iter().enumerate() {
-        let b = [r[0] - grow, r[1] - grow, r[2] + grow, r[3] + grow];
+    for (n, sub) in subpaths(&shape).iter().enumerate() {
+        let r = sub.bounding_box();
+        let b = [r.x0 - grow, r.y0 - grow, r.x1 + grow, r.y1 + grow];
         let hit: Vec<u32> = (0..boxes.len() as u32)
             .filter(|&i| overlap(b, boxes[i as usize]))
             .collect();
         if hit.is_empty() {
             continue;
         }
-        // A rectangle is cut only when it is the whole story of its area: another subpath over
-        // it (a hole, a winding or even-odd interaction) makes the cut ambiguous, so it goes whole.
-        let alone = !subs
-            .iter()
-            .enumerate()
-            .any(|(m, o)| m != n && overlap(b, *o));
         let class = if covered(b, boxes) {
             VectorClass::Inside
-        } else if item.stroke.is_none() && is_axis_rect(&shapes[n]) && alone {
-            VectorClass::RectCut
         } else {
             VectorClass::Collateral
         };

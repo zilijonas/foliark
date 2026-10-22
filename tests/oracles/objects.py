@@ -435,6 +435,21 @@ def inside(poly, pt):
     return c
 
 
+def filled(pl, pt, even_odd):
+    """Is pt inked by the contours pl under the even-odd or the nonzero rule?"""
+    if even_odd:
+        return sum(inside(poly, pt) for poly in pl) % 2 == 1
+    w, (x, y) = 0, pt
+    for poly in pl:
+        for (x0, y0), (x1, y1) in zip(poly, poly[1:] + poly[:1]):
+            side = (x1 - x0) * (y - y0) - (x - x0) * (y1 - y0)
+            if y0 <= y < y1 and side > 0:
+                w += 1
+            elif y1 <= y < y0 and side < 0:
+                w -= 1
+    return w != 0
+
+
 def path_hits(d, reg, tol):
     """Does painted geometry of drawing d reach into reg (shrunk by tol)? Fills: polygon vs rect. Strokes: segments vs rect grown by half width."""
     core = grow(reg, -tol)
@@ -443,8 +458,15 @@ def path_hits(d, reg, tol):
     pl = polys(d["items"])
     if d.get("fill") is not None and "f" in d["type"]:
         for poly in pl:
-            if any(core.contains(fitz.Point(p)) for p in poly) or any(seg_hits(a, b, core) for a, b in zip(poly, poly[1:] + poly[:1])) \
-                    or any(inside(poly, c) for c in ((core.x0, core.y0), (core.x1, core.y0), (core.x0, core.y1), (core.x1, core.y1))):
+            if any(core.contains(fitz.Point(p)) for p in poly) or any(seg_hits(a, b, core) for a, b in zip(poly, poly[1:] + poly[:1])):
+                return True
+        # No edge reaches the region: it is inked only if it lies inside the fill. The rule acts across all contours of
+        # the path (a hole winds against its outer), so judge the contours together, not one by one.
+        # get_drawings reports a four-sided subpath as a `re`/`qu` item and drops its winding direction, so a nonzero path
+        # holding one is judged by parity (a hole winds against its outer); vector_cut.py judges the true direction.
+        eo = d.get("even_odd") or any(it[0] in ("re", "qu") for it in d["items"])
+        for c in ((core.x0, core.y0), (core.x1, core.y0), (core.x0, core.y1), (core.x1, core.y1)):
+            if filled(pl, c, eo):
                 return True
     if d.get("color") is not None and "s" in d["type"]:
         g = grow(core, d["width"] / 2)
