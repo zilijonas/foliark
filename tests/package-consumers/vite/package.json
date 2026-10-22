@@ -1,0 +1,6 @@
+{
+  "name": "consumer-vite",
+  "private": true,
+  "type": "module",
+  "devDependencies": { "typescript": "5.9.3", "vite": "8.3.5" }
+}

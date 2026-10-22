@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Foliark vanilla example</title>
+<!-- Host the installed package's dist/ and wasm/ next to this page as sdk/ (docs/deployment.md). No build step, no inline script. -->
+<style>
+  body { font: 16px/1.4 system-ui, sans-serif; max-width: 44rem; margin: 1rem auto; padding: 0 1rem; }
+  canvas { max-width: 100%; border: 1px solid #888; }
+  pre { white-space: pre-wrap; background: #f2f2f2; padding: .5rem; }
+</style>
+<h1>Foliark</h1>
+<p><label>PDF <input id="file" type="file" accept="application/pdf"></label></p>
+<p id="status" role="status">Choose a PDF. Nothing is loaded until you do.</p>
+<canvas id="page" width="1" height="1"></canvas>
+<pre id="text"></pre>
+<p>
+  <label>Word to redact <input id="word"></label>
+  <button id="redact" disabled>Redact and export</button>
+  <a id="download" hidden download="redacted.pdf">Download redacted.pdf</a>
+</p>
+<script type="module" src="./main.js"></script>
+</html>

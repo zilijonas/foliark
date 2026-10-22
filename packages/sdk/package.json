@@ -1,13 +1,32 @@
 {
   "name": "@foliark/sdk",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
+  "description": "Headless Rust/WASM PDF SDK: extract, render, redact, edit and export in a worker, nothing leaves the device.",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "license": "SEE LICENSE IN LICENSE",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
+    "./worker": { "types": "./dist/worker.d.ts", "default": "./dist/worker.js" },
+    "./wasm": "./wasm/foliark_wasm_bg.wasm",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "wasm",
+    "LICENSE",
+    "LICENSE_FOXIT",
+    "NOTICE"
+  ],
+  "sideEffects": [
+    "./dist/worker.js"
+  ],
   "scripts": {
     "build": "tsc -p .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepack": "cp ../../vendor/hayro-interpret/assets/LICENSE_FOXIT LICENSE_FOXIT && test -f wasm/foliark_wasm_bg.wasm && test -f dist/index.js"
   },
   "devDependencies": {
     "typescript": "5.9.3",
