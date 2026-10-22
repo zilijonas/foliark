@@ -52,7 +52,7 @@ pub(super) struct Targets {
 }
 
 /// The streams of a page's `/Contents`, without decoding them.
-fn content_ids(doc: &Document, page: usize) -> Result<Vec<ObjectId>, PdfError> {
+pub(super) fn content_ids(doc: &Document, page: usize) -> Result<Vec<ObjectId>, PdfError> {
     let dict = doc.reader().page(page)?.raw();
     let xref = doc.reader().pdf().xref();
     let refs = |a: &hayro::hayro_syntax::object::Array<'_>| -> Vec<ObjectId> {

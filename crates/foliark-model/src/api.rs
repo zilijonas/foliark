@@ -64,6 +64,7 @@ pub enum ErrorCode {
     OptionalContentUnsupported,
     SignedInput,
     RedactPatternUnsupported,
+    RedactVectorUnsupported,
     RedactVerifyFailed,
     RenderIncomplete,
     ConsentRequired,

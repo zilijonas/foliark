@@ -312,6 +312,10 @@ impl<'a, T: Device<'a>> Device<'a> for StencilPatternDevice<'a, '_, T> {
         self.inner.oc_state(visible);
     }
 
+    fn path_alpha(&mut self, stroke: f32, fill: f32) {
+        self.inner.path_alpha(stroke, fill);
+    }
+
     fn draw_path(&mut self, path: &BezPath, props: DrawProps<'a>, draw_mode: &DrawMode) {
         let props = DrawProps {
             paint: self.paint.clone(),

@@ -64,7 +64,7 @@ pub fn plan_for(doc: &Document, regions: &[Rect]) -> RedactionPlan {
     try_plan(doc, regions).unwrap()
 }
 
-fn try_plan(doc: &Document, regions: &[Rect]) -> Result<RedactionPlan, PdfError> {
+pub fn try_plan(doc: &Document, regions: &[Rect]) -> Result<RedactionPlan, PdfError> {
     let committed = Committed {
         edits: vec![],
         redactions: regions
@@ -107,10 +107,6 @@ pub fn run(name: &str, input: Vec<u8>, regions: &[Rect]) -> Run {
         report.subpaths_removed + report.paths_cut + report.untouched,
         plan.report.vector_subpaths_removed + plan.report.vector_paths_cut,
         "{name}: accounting"
-    );
-    assert_eq!(
-        report.collateral, plan.report.collateral,
-        "{name}: collateral"
     );
     let output = w.write().unwrap();
     Document::open(output.clone(), None).unwrap();
@@ -187,21 +183,20 @@ impl Run {
         );
     }
 
-    /// fidelity.py: everything outside the regions and the declared collateral renders alike.
+    /// fidelity.py: everything outside the regions renders alike.
     pub fn assert_rest_unchanged(&self) {
         let (i, o) = self.files();
         let mut rects: Vec<String> = self
             .regions
             .iter()
-            .map(|r| (r.x, r.y, r.width, r.height))
-            .chain(
-                self.report
-                    .collateral
-                    .iter()
-                    .map(|c| (c.bounds.x, c.bounds.y, c.bounds.width, c.bounds.height)),
-            )
-            .map(|(x, y, w, h)| {
-                format!("0:{},{},{},{}", x - 0.5, y - 0.5, x + w + 0.5, y + h + 0.5)
+            .map(|r| {
+                format!(
+                    "0:{},{},{},{}",
+                    r.x - 0.5,
+                    r.y - 0.5,
+                    r.x + r.width + 0.5,
+                    r.y + r.height + 0.5
+                )
             })
             .collect();
         let mut args = vec![
@@ -252,11 +247,6 @@ impl Run {
     /// fidelity.py at 144 dpi with only the regions (0.25 pt margin) excluded: no collateral
     /// exclusion exists, so every outline, border and adjacent pixel outside must render alike.
     pub fn assert_rest_unchanged_tight(&self) {
-        assert!(
-            self.report.collateral.is_empty(),
-            "{}: collateral",
-            self.name
-        );
         let (i, o) = self.files();
         let changed: Vec<String> = self
             .region_boxes()
