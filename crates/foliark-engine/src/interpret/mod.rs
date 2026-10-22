@@ -117,8 +117,9 @@ pub struct PathItem {
     /// The fill rule, or the clip rule of a clip-only item.
     pub fill: Option<FillRule>,
     pub stroke: Option<StrokeProps>,
-    /// Factor from the stroke's line width (the CTM's user units) to page user space:
-    /// `sqrt(|det CTM|)`. 1 for a clip-only item.
+    /// Factor from the stroke's line width (the CTM's user units) to page user space: the
+    /// CTM's largest singular value, so a non-uniform scale cannot under-state how far a
+    /// stroke reaches. 1 for a clip-only item.
     pub stroke_scale: f64,
     pub clip_only: bool,
 }
@@ -302,7 +303,7 @@ impl Builder<'_> {
             geometry: props.transform * path.clone(),
             fill,
             stroke,
-            stroke_scale: props.transform.determinant().abs().sqrt(),
+            stroke_scale: widest_axis(props.transform),
             clip_only: false,
         };
         match &props.paint {
@@ -316,6 +317,13 @@ impl Builder<'_> {
             Paint::Color(_) => self.push(ItemKind::Path(item)),
         }
     }
+}
+
+/// The largest singular value of the linear part of `m`.
+fn widest_axis(m: Affine) -> f64 {
+    let [a, b, c, d, ..] = m.as_coeffs();
+    let (p, q, r) = (a * a + b * b, c * c + d * d, a * c + b * d);
+    (((p + q) + ((p - q).powi(2) + 4.0 * r * r).sqrt()) / 2.0).sqrt()
 }
 
 fn id_to_ref(id: ObjectId) -> ObjRef {

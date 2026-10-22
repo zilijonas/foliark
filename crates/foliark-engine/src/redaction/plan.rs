@@ -16,7 +16,7 @@ use foliark_model::{
     Point, Quad, Rect, RedactionReport, SharedKind, SharedSurvivor, SourceLoc,
 };
 use hayro::hayro_syntax::object::{Array, Dict, Name};
-use hayro::vello_cpu::peniko::kurbo::{Affine, BezPath, PathEl, Shape};
+use hayro::vello_cpu::peniko::kurbo::{Affine, BezPath, Cap, PathEl, Shape};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 /// Spec §5.1: a cluster goes when this share of its quad lies in a region.
@@ -732,6 +732,20 @@ fn plan_page(
             ItemKind::Path(p) if !p.clip_only && (p.fill.is_some() || p.stroke.is_some()) => {
                 let found = plan_vectors(item.loc, &item.path, p, to_display, disp_scale, &boxes);
                 changed = !found.is_empty();
+                if p.stroke.is_some() {
+                    // `B` reaches the model as a fill item, then a stroke item whose larger box
+                    // decides: the fill item's entries (a rectangle cut) are replaced.
+                    let (stale, keep): (Vec<_>, Vec<_>) = plan
+                        .vectors
+                        .drain(..)
+                        .partition(|v| v.loc == item.loc && v.path == item.path);
+                    plan.vectors = keep;
+                    for v in stale {
+                        for &i in &v.regions {
+                            regions[i as usize].vectors -= 1;
+                        }
+                    }
+                }
                 for v in found {
                     affect(&mut regions, &v.regions, bounds_of(&v.bounds), |r| {
                         r.vectors += 1
@@ -786,9 +800,19 @@ fn plan_vectors(
     disp_scale: f64,
     boxes: &[B],
 ) -> Vec<PlannedVector> {
+    // Half the width times the miter limit (spec §5.4), at least the square-cap corner, along
+    // the CTM's widest axis (`stroke_scale`).
     let grow = item.stroke.as_ref().map_or(0.0, |s| {
-        f64::from(s.line_width) * item.stroke_scale * disp_scale / 2.0
-            * f64::from(s.miter_limit).max(1.0)
+        let cap = if matches!(s.line_cap, Cap::Square) {
+            std::f64::consts::SQRT_2
+        } else {
+            1.0
+        };
+        f64::from(s.line_width)
+            * item.stroke_scale
+            * disp_scale
+            * 0.5
+            * f64::from(s.miter_limit).max(1.0).max(cap)
     });
     let shapes = subpaths(&(to_display * item.geometry.clone()));
     let subs: Vec<B> = shapes

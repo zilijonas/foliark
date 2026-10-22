@@ -6,7 +6,7 @@
 mod support;
 use foliark_engine::Document;
 use foliark_model::{ErrorCode, Limits};
-use support::{circle, page, refusal, region, run};
+use support::{PATH_CELL, TEXT_CELL, circle, page, refusal, region, run, tiled};
 
 fn reg(content: &str, rotate: i32, boxes: &[[f64; 4]]) -> (Vec<u8>, Vec<foliark_model::Rect>) {
     let input = page(content, rotate);
@@ -149,55 +149,6 @@ fn clip_only_paths_stay_and_a_fully_removed_path_keeps_its_clip() {
 }
 
 // ---- tiling patterns ------------------------------------------------------------------------------
-
-fn assemble(objs: &[&str]) -> Vec<u8> {
-    let mut out = b"%PDF-1.7\n".to_vec();
-    let mut offsets = Vec::new();
-    for (i, o) in objs.iter().enumerate() {
-        offsets.push(out.len());
-        out.extend_from_slice(format!("{} 0 obj\n{o}\nendobj\n", i + 1).as_bytes());
-    }
-    let xref = out.len();
-    out.extend_from_slice(format!("xref\n0 {}\n0000000000 65535 f \n", objs.len() + 1).as_bytes());
-    for o in offsets {
-        out.extend_from_slice(format!("{o:010} 00000 n \n").as_bytes());
-    }
-    out.extend_from_slice(
-        format!(
-            "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n",
-            objs.len() + 1
-        )
-        .as_bytes(),
-    );
-    out
-}
-
-fn tiled(content: &str, cell1: &str, cell2: &str) -> Vec<u8> {
-    let stream = |dict: &str, data: &str| {
-        format!(
-            "<< {dict} /Length {} >>\nstream\n{data}\nendstream",
-            data.len()
-        )
-    };
-    let pattern = |cell: &str| {
-        stream(
-            "/PatternType 1 /PaintType 1 /TilingType 1 /BBox [0 0 20 20] /XStep 20 /YStep 20 /Resources << /Font << /F1 5 0 R >> >>",
-            cell,
-        )
-    };
-    assemble(&[
-        "<< /Type /Catalog /Pages 2 0 R >>",
-        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Contents 4 0 R /Resources << /Pattern << /P1 6 0 R /P2 7 0 R >> /Font << /F1 5 0 R >> >> >>",
-        &stream("", content),
-        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-        &pattern(cell1),
-        &pattern(cell2),
-    ])
-}
-
-const TEXT_CELL: &str = "BT /F1 8 Tf 2 2 Td (SECRET) Tj ET";
-const PATH_CELL: &str = "0 0 10 10 re f";
 
 #[test]
 fn a_tiling_pattern_with_text_in_its_cell_under_a_region_is_refused() {
