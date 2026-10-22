@@ -71,6 +71,7 @@ pub struct Item {
     /// True for content that optional content hides (it is interpreted anyway).
     pub ocg_hidden: bool,
     /// User-space bounds `[x0, y0, x1, y1]` of the active clips intersected; `None` = unclipped.
+    /// Clips with nothing in common give an inverted rectangle (`x0 > x1` or `y0 > y1`).
     /// Decide off-page or clipped-out visibility against it.
     pub clip: Option<[f64; 4]>,
     pub kind: ItemKind,
@@ -258,9 +259,18 @@ impl Builder<'_> {
     }
 
     fn push(&mut self, kind: ItemKind) {
+        // Not `Rect::intersect`, which clamps disjoint clips to a thin rectangle: an empty
+        // intersection stays inverted (`x0 > x1` or `y0 > y1`).
         let clip = self.clips.split_first().map(|(first, rest)| {
-            let r = rest.iter().fold(*first, |acc, c| acc.intersect(*c));
-            [r.x0, r.y0, r.x1, r.y1]
+            let whole = [first.x0, first.y0, first.x1, first.y1];
+            rest.iter().fold(whole, |a, c| {
+                [
+                    a[0].max(c.x0),
+                    a[1].max(c.y0),
+                    a[2].min(c.x1),
+                    a[3].min(c.y1),
+                ]
+            })
         });
         if self.props_masked || self.groups.contains(&true) {
             self.soft_masked.push(self.items.len());

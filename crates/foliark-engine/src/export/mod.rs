@@ -5,15 +5,17 @@
 //! 1. raster mode leaves the native pipeline here: [`raster`] (eligibility `raster_plan`, pixels
 //!    `raster_pixels`, file `raster_write`) depends on rendering only, never on the native
 //!    stages below, and a native refusal never falls back to it;
-//! 2. preflight ([`preflight`]): widget / annotation flattening (NEW-42), optional-content
-//!    flattening (NEW-43), signed input policy, and redaction the plan cannot execute (pattern
-//!    paint, soft-mask groups) refuse by name, with the redaction ids. `annotations: remove` is
-//!    built (the allowlist writer drops every annotation), so it needs no flattening stage;
-//! 3. removal on one writer ([`crate::redaction::execute`]: Form clones, text, images with
+//! 2. preflight ([`preflight`]): `FORM_APPEARANCE_MISSING` / `XFA_UNSUPPORTED`, unevaluable
+//!    optional content, signed input policy, and redaction the plan cannot execute (pattern
+//!    paint, soft-mask groups) refuse by name, with the redaction ids;
+//! 3. visible annotations and all widgets drawn as Forms on their pages
+//!    ([`crate::sanitize::interactive`]), hidden layers and off-page or clipped-out content
+//!    removed ([`crate::sanitize::visibility`]);
+//! 4. removal on one writer ([`crate::redaction::execute`]: Form clones, text, images with
 //!    their masks, vectors), then the region fills painted last, outside every clip. Removal
 //!    never depends on a fill; `fill: null` paints nothing;
-//! 4. sanitization: the allowlist writer plus the counts of [`crate::sanitize::document`];
-//! 5. write; 6. verify (§5.7): strict reparse, page count, no cluster meeting rule 1, every
+//! 5. sanitization: the allowlist writer plus the counts of [`crate::sanitize::document`];
+//! 6. write; 7. verify (§5.7): strict reparse, page count, no cluster meeting rule 1, every
 //!    image under a region erased, no vector geometry under a region (our own fills aside).
 //!
 //! Every requested redaction is applied (listed in [`Prepared::applied`] with its effective
@@ -24,6 +26,7 @@ use crate::document::{Binding, Committed, StoredRedaction};
 use crate::redaction::plan::{RedactionPlan, bounds_of, text_coverage};
 use crate::redaction::{Executed, execute, image};
 use crate::sanitize::document::scan;
+use crate::sanitize::{interactive, visibility};
 use crate::writer::Writer;
 use foliark_model::{
     Capabilities, Capability, CapabilityReason, CapabilityStatus, EditsReport, ErrorCode,
@@ -280,9 +283,9 @@ pub fn prepare(
     }
     let reader = doc.reader();
     let removals = scan(reader)?;
-    let annots = preflight::annotations(reader);
-    if let Some(b) =
-        preflight::document_blockers(reader, policy, &annots, removals.signatures).first()
+    let inter = interactive::scan(reader, policy);
+    let vis = visibility::scan(reader)?;
+    if let Some(b) = preflight::document_blockers(policy, &inter, &vis, removals.signatures).first()
     {
         return Err(b.error());
     }
@@ -292,6 +295,8 @@ pub fn prepare(
     }
 
     let mut w = Writer::new(reader, limits.clone());
+    inter.apply(&mut w)?;
+    vis.apply(&mut w);
     let done = execute(doc, &plan, &mut w).map_err(|e| attribute(&plan, e))?;
     check_stages(&plan, &done)?;
     for (page, ops) in fills(doc, committed)? {
@@ -303,9 +308,17 @@ pub fn prepare(
     let applied = applied(&plan, committed)?;
 
     let mut removed = removals.removed;
-    if annots.total > 0 {
-        removed.insert(SanitizedItem::Annotations, annots.total);
+    for (item, n) in [
+        (SanitizedItem::Annotations, inter.annotations),
+        (SanitizedItem::Widgets, inter.widgets),
+        (SanitizedItem::OcgContent, vis.hidden_ops + inter.oc_hidden),
+        (SanitizedItem::OffPage, vis.off_page_ops),
+    ] {
+        if n > 0 {
+            removed.insert(item, n);
+        }
     }
+    let (flat_annots, flat_widgets) = inter.flattened();
     let mut losses = removals.losses;
     let mut add = |code, count| {
         if count > 0 {
@@ -319,10 +332,11 @@ pub fn prepare(
             );
         }
     };
-    add(LossCode::LinksRemoved, annots.links);
-    if policy.annotations == foliark_model::AnnotationPolicy::Remove {
-        add(LossCode::AnnotationsRemoved, annots.visible);
-    }
+    add(LossCode::LinksRemoved, inter.links);
+    add(LossCode::AnnotationsFlattened, flat_annots);
+    add(LossCode::AnnotationsRemoved, inter.removed_visible);
+    add(LossCode::FormsFlattened, flat_widgets);
+    add(LossCode::LayersFlattened, vis.layers);
     let mut inventory: Vec<String> = done
         .text
         .fonts_with_glyph_inventory
@@ -388,9 +402,9 @@ pub fn prepare(
         output_bytes,
         removed,
         flattened: Flattened {
-            annotations: 0,
-            widgets: 0,
-            ocg_layers: 0,
+            annotations: flat_annots,
+            widgets: flat_widgets,
+            ocg_layers: vis.layers,
         },
         redaction,
         edits: EditsReport {
@@ -435,8 +449,13 @@ pub(crate) fn capabilities(
     use CapabilityStatus::{Supported, Unknown, Unsupported};
     let reader = doc.reader();
     let policy = ExportPolicy::default();
+    let layers = if visibility::present(reader) {
+        visibility::scan(reader)?
+    } else {
+        visibility::Scan::default()
+    };
     let mut blockers =
-        preflight::document_blockers(reader, &policy, &preflight::annotations(reader), 0);
+        preflight::document_blockers(&policy, &interactive::scan(reader, &policy), &layers, 0);
     let redact = if committed.redactions.is_empty() {
         capability(Unknown, &[])
     } else {

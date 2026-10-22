@@ -88,6 +88,7 @@ pub struct Writer<'d> {
     /// Registered font ids already written (`fonts::embed_registered_font`).
     embedded: BTreeSet<String>,
     redirects: Redirects,
+    layers_resolved: bool,
 }
 
 /// Resources added per page: (resource name, object).
@@ -108,7 +109,16 @@ impl<'d> Writer<'d> {
             to_unicode: BTreeMap::new(),
             embedded: BTreeSet::new(),
             redirects: Redirects::default(),
+            layers_resolved: false,
         }
+    }
+
+    /// The caller has flattened optional content ([`crate::sanitize::visibility`]): hidden
+    /// layers no longer make `write` refuse, and the layer entries of `/Properties` are not
+    /// copied.
+    pub fn resolve_layers(&mut self) -> &mut Self {
+        self.layers_resolved = true;
+        self
     }
 
     /// Replace every instruction of the decoded content stream `stream` that the byte `range`
@@ -167,9 +177,9 @@ impl<'d> Writer<'d> {
         Ok(self)
     }
 
-    /// Make `xobject` (from `add_object`) usable as `/name Do` on page `page`. A name the page
-    /// already has is refused at `write`. Only page content: a Form's own resources are not
-    /// reachable here.
+    /// Make `xobject` (an added object or a source Form, `Val::Src`) usable as `/name Do` on
+    /// page `page`. A name the page already has is refused at `write`. Only page content: a
+    /// Form's own resources are not reachable here.
     pub fn add_page_xobject(
         &mut self,
         page: usize,
@@ -270,6 +280,7 @@ impl<'d> Writer<'d> {
             (&self.extras, &self.to_unicode),
             &self.redirects,
         );
+        walk.layers_resolved = self.layers_resolved;
         let pages = walk.build(
             &self.appended,
             [&self.page_fonts, &self.page_xobjects],

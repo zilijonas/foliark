@@ -87,8 +87,15 @@ fn pages_with_fonts(stand_in: &[bool]) -> Vec<u8> {
 
 #[test]
 fn a_document_native_export_refuses_is_still_raster_eligible_and_never_falls_back() {
-    // OCG layers: native refuses by code. The raster export draws what is visible.
-    let (mut e, doc) = engine(fixture("generated/ocg-hidden-text.pdf"), Limits::default());
+    // A layer the native stage cannot decide (same-length patch: the page draws a layer name its
+    // /Properties no longer defines): native refuses by code. Raster draws what is visible.
+    let mut undecidable = fixture("generated/ocg-hidden-text.pdf");
+    let at = undecidable
+        .windows(10)
+        .position(|w| w == b"/oc2 7 0 R")
+        .unwrap();
+    undecidable[at + 3] = b'X';
+    let (mut e, doc) = engine(undecidable, Limits::default());
     let err = prepare(&mut e, &doc, ExportMode::Native, consenting()).unwrap_err();
     assert_eq!(err.code, ErrorCode::OptionalContentUnsupported);
     // The refusal held nothing and asked nobody to rasterize: no plan, raster still unproven.

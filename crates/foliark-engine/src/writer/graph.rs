@@ -404,6 +404,8 @@ pub(crate) struct Walk<'a> {
     queue: VecDeque<(ObjectId, Class, Ref)>,
     next: i32,
     bytes: usize,
+    /// Optional content was flattened by the caller (`Writer::resolve_layers`).
+    pub layers_resolved: bool,
 }
 
 fn name_val(n: &[u8]) -> Val {
@@ -440,6 +442,7 @@ impl<'a> Walk<'a> {
             queue: VecDeque::new(),
             next: 1,
             bytes: 0,
+            layers_resolved: false,
         }
     }
 
@@ -602,7 +605,11 @@ impl<'a> Walk<'a> {
             }
             (Map(c), Val::Dict(e)) => {
                 let mut out = Vec::new();
-                for (k, x) in e.iter().filter(|(_, x)| *x != Val::Null) {
+                for (k, x) in e {
+                    let layer = c == C::PropList && self.layers_resolved && self.is_layer(x);
+                    if *x == Val::Null || layer {
+                        continue;
+                    }
                     out.push((k.clone(), self.emit(x, One(c), d)?));
                 }
                 Val::Dict(out)
@@ -906,6 +913,15 @@ impl<'a> Walk<'a> {
         }
     }
 
+    /// An optional-content group or membership dictionary (`/Properties` entry).
+    fn is_layer(&self, v: &Val) -> bool {
+        let d = match v {
+            Val::Src(id) => self.load(*id).ok().map(|(v, _)| v),
+            other => Some(other.clone()),
+        };
+        matches!(d, Some(Val::Dict(e)) if matches!(get(&e, "Type"), Some(Val::Name(n)) if n == b"OCG" || n == b"OCMD"))
+    }
+
     /// Hidden layers would turn visible once `/OCProperties` is dropped (flattening is a later
     /// task, spec 8.2): refuse instead.
     fn refuse_hidden_layers(&self) -> Result<(), PdfError> {
@@ -962,7 +978,9 @@ impl<'a> Walk<'a> {
     ) -> Result<Vec<Ref>, PdfError> {
         self.alloc()?;
         let pages = self.alloc()?;
-        self.refuse_hidden_layers()?;
+        if !self.layers_resolved {
+            self.refuse_hidden_layers()?;
+        }
         let refs = (0..self.doc.page_count())
             .map(|_| self.alloc())
             .collect::<Result<Vec<_>, _>>()?;

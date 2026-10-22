@@ -234,38 +234,40 @@ fn sanitize_only_export_without_redactions_is_valid_and_reports_removals() {
 
 #[test]
 fn stages_this_build_cannot_run_refuse_by_name_with_no_bytes() {
-    let refuse = |name: &str, policy: ExportPolicy| {
-        let (mut e, doc) = engine(fixture(name));
+    let refuse = |bytes: Vec<u8>, policy: ExportPolicy| {
+        let (mut e, doc) = engine(bytes);
         let err = prepare(&mut e, &doc, ExportMode::Native, policy).unwrap_err();
-        assert_eq!(e.stats().plan_bytes, 0, "{name} held bytes after a refusal");
+        assert_eq!(e.stats().plan_bytes, 0, "held bytes after a refusal");
         let caps = e.capabilities(&doc, false);
         (err, run(&mut e, caps).unwrap())
     };
-    let (err, caps) = refuse("hddn/acroform.pdf", ExportPolicy::default());
-    assert_eq!(
-        (err.code, feature(&err)),
-        (ErrorCode::InvalidArgument, Some("flattenWidgets"))
-    );
+    // Layer flattening runs now; what it cannot decide still refuses. Same length, so the xref
+    // stays valid: the page draws a layer name its /Properties no longer defines.
+    let mut undecidable = fixture("generated/ocg-hidden-text.pdf");
+    let at = undecidable
+        .windows(10)
+        .position(|w| w == b"/oc2 7 0 R")
+        .unwrap();
+    undecidable[at + 3] = b'X';
+    let (err, caps) = refuse(undecidable, ExportPolicy::default());
+    assert_eq!(err.code, ErrorCode::OptionalContentUnsupported);
+    assert_eq!(feature(&err), Some("flattenOptionalContent"));
     // Capabilities tell native-refused from raster-eligible: the native refusal is known now
     // (with its code), raster is independent and still to be established.
     assert_eq!(caps.export_native.status, CapabilityStatus::Unsupported);
     assert_eq!(
         caps.export_native.reasons[0].code,
-        ErrorCode::InvalidArgument
+        ErrorCode::OptionalContentUnsupported
     );
     assert_eq!(caps.export_raster.status, CapabilityStatus::Unknown);
     assert!(caps.export_raster.reasons.is_empty());
 
-    let (err, _) = refuse("generated/annot-appearance.pdf", ExportPolicy::default());
-    assert_eq!(feature(&err), Some("flattenAnnotations"));
-    let (err, _) = refuse("generated/ocg-hidden-text.pdf", ExportPolicy::default());
-    assert_eq!(err.code, ErrorCode::OptionalContentUnsupported);
     let refuse_signed = ExportPolicy {
         signed_input: foliark_model::SignedInputPolicy::Refuse,
         invisible_text: foliark_model::InvisibleTextPolicy::Remove,
         ..ExportPolicy::default()
     };
-    let (err, _) = refuse("generated/ocr-over-image.pdf", refuse_signed);
+    let (err, _) = refuse(fixture("generated/ocr-over-image.pdf"), refuse_signed);
     assert_eq!(feature(&err), Some("invisibleTextRemove"));
 }
 

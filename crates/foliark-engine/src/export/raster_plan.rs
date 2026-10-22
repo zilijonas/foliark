@@ -8,7 +8,6 @@
 //! (policy `refuse`), `LIMIT_EXCEEDED` (a page at `scale` over the render side or pixel limit).
 //! `RENDER_INCOMPLETE {pages}` is the fifth: completeness is a property of the drawing, so the
 //! pixel job reports it page by page ([`incomplete`]).
-use super::preflight::{self, Annots};
 use crate::Document;
 use crate::document::{Binding, Committed};
 use crate::limits;
@@ -52,6 +51,47 @@ pub struct RasterPlan {
     pub annots: Annots,
     pub widgets: u32,
     pub ocg_layers: u32,
+}
+
+/// What the pages' annotation arrays hold, by the action spec §8.2 takes on each.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct Annots {
+    /// Non-widget annotations (the fresh file carries none).
+    pub total: u32,
+    pub links: u32,
+    /// Visible with a normal appearance: `flatten` draws them, `remove` drops them.
+    pub visible: u32,
+}
+
+const HIDDEN: u32 = 2;
+const NO_VIEW: u32 = 32;
+
+fn annotations(doc: &crate::reader::Document) -> Annots {
+    let mut out = Annots::default();
+    for page in doc.pdf().pages().iter() {
+        let Some(list) = page.raw().get::<Array<'_>>("Annots") else {
+            continue;
+        };
+        let raw = list.raw_iter().count() as u32;
+        let mut widgets = 0u32;
+        for a in list.iter::<Dict<'_>>() {
+            let kind = a.get::<Name<'_>>("Subtype");
+            match kind.as_ref().map(|n| n.as_str()) {
+                Some("Widget") => widgets += 1,
+                Some("Link") => out.links += 1,
+                Some("Popup") => {}
+                _ => {
+                    let shown = a.get::<u32>("F").unwrap_or(0) & (HIDDEN | NO_VIEW) == 0;
+                    let drawn = a
+                        .get::<Dict<'_>>("AP")
+                        .is_some_and(|ap| ap.contains_key("N"));
+                    out.visible += u32::from(shown && drawn);
+                }
+            }
+        }
+        out.total += raw.saturating_sub(widgets);
+    }
+    out
 }
 
 fn byte(c: f64) -> u8 {
@@ -166,7 +206,7 @@ impl RasterPlan {
                 .map(|r| r.regions.len() as u32)
                 .sum(),
             burns,
-            annots: preflight::annotations(doc.reader()),
+            annots: annotations(doc.reader()),
             widgets: widgets(doc.reader()),
             ocg_layers: ocg_layers(doc.reader()),
             removals,
