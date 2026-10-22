@@ -2,7 +2,9 @@
 //! policy become held bytes plus an exact report. Pipeline order, each stage complete or a typed
 //! refusal with no bytes:
 //!
-//! 1. raster mode: `CONSENT_REQUIRED` without acknowledgment, else refused until NEW-54;
+//! 1. raster mode leaves the native pipeline here: [`raster`] (eligibility `raster_plan`, pixels
+//!    `raster_pixels`, file `raster_write`) depends on rendering only, never on the native
+//!    stages below, and a native refusal never falls back to it;
 //! 2. preflight ([`preflight`]): widget / annotation flattening (NEW-42), optional-content
 //!    flattening (NEW-43), signed input policy, image erasure (NEW-34/35) and vector cutting
 //!    (NEW-36/37) refuse by name. `annotations: remove` is built (the allowlist writer drops
@@ -12,7 +14,6 @@
 //! 5. write; 6. verify (§5.7): strict reparse, page count, no cluster meeting rule 1.
 use crate::Document;
 use crate::document::{Binding, Committed};
-use crate::engine::not_built;
 use crate::redaction::plan::{RedactionPlan, bounds_of, text_coverage};
 use crate::redaction::text::redact_text;
 use crate::sanitize::document::scan;
@@ -26,6 +27,10 @@ use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
 pub mod preflight;
+pub mod raster;
+pub mod raster_pixels;
+pub mod raster_plan;
+pub mod raster_write;
 use preflight::Blocker;
 
 /// The plan the engine holds: what `export` checks and hands over. `bytes` is `None` once taken.
@@ -42,7 +47,7 @@ pub struct Prepared {
     pub report: ExportReport,
 }
 
-fn verify_failed() -> PdfError {
+pub(crate) fn verify_failed() -> PdfError {
     PdfError::new(ErrorCode::RedactVerifyFailed)
 }
 
@@ -138,10 +143,7 @@ pub fn prepare(
     limits: &Limits,
 ) -> Result<Prepared, PdfError> {
     if mode == ExportMode::Raster {
-        if !policy.raster.acknowledge_losses {
-            return Err(PdfError::new(ErrorCode::ConsentRequired));
-        }
-        return Err(not_built("exportRaster"));
+        return raster::run(doc, committed, binding, policy, limits);
     }
     let reader = doc.reader();
     let removals = scan(reader)?;

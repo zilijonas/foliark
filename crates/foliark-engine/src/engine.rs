@@ -429,6 +429,15 @@ impl Engine {
     ) -> BoxTask<ExportPlan> {
         let at = self.revision(doc).ok();
         let doc = doc.to_owned();
+        if mode == ExportMode::Raster {
+            // Raster export draws page by page: a real stepping task, so a cancel lands between pages.
+            return Box::new(RasterTask {
+                doc,
+                at,
+                policy,
+                job: None,
+            });
+        }
         once(move |e| {
             e.still_at(&doc, at)?;
             e.plan = None;
@@ -442,27 +451,39 @@ impl Engine {
                 &policy,
                 &e.limits,
             )?;
-            e.next_plan += 1;
-            let plan = ExportPlan {
-                plan_id: format!("plan-{}-{}", e.generation, e.next_plan),
-                doc_id: doc,
-                generation: binding.generation,
-                revision: binding.revision,
-                mode,
-                policy_hash: export::preflight::policy_hash(mode, &policy),
-                font_registry_version: e.fonts.version(),
-                byte_length: out.bytes.len() as u32,
-                report: out.report,
-            };
-            e.plan = Some(Held {
-                id: plan.plan_id.clone(),
-                binding,
-                mode,
-                fonts: plan.font_registry_version,
-                bytes: Some(out.bytes),
-            });
-            Ok(plan)
+            Ok(e.hold(doc, binding, mode, &policy, out))
         })
+    }
+
+    /// Keep `out` as the one held plan of `doc` and describe it.
+    fn hold(
+        &mut self,
+        doc: String,
+        binding: Binding,
+        mode: ExportMode,
+        policy: &ExportPolicy,
+        out: export::Prepared,
+    ) -> ExportPlan {
+        self.next_plan += 1;
+        let plan = ExportPlan {
+            plan_id: format!("plan-{}-{}", self.generation, self.next_plan),
+            doc_id: doc,
+            generation: binding.generation,
+            revision: binding.revision,
+            mode,
+            policy_hash: export::preflight::policy_hash(mode, policy),
+            font_registry_version: self.fonts.version(),
+            byte_length: out.bytes.len() as u32,
+            report: out.report,
+        };
+        self.plan = Some(Held {
+            id: plan.plan_id.clone(),
+            binding,
+            mode,
+            fonts: plan.font_registry_version,
+            bytes: Some(out.bytes),
+        });
+        plan
     }
 
     /// Single use. `STALE_PLAN`: not the held plan, or its revision, document or fonts moved on
@@ -535,5 +556,55 @@ impl Task for SearchTask {
             }));
         }
         Ok(Step::Done(std::mem::take(&mut self.hits)))
+    }
+}
+
+/// Spec §7 raster export as a stepping task. The older plan is freed on the first step; a cancel
+/// or failure between pages drops the job and leaves no plan.
+struct RasterTask {
+    doc: DocId,
+    at: Option<u32>,
+    policy: ExportPolicy,
+    job: Option<export::raster::Job>,
+}
+
+impl Task for RasterTask {
+    type Out = ExportPlan;
+
+    fn step(&mut self, e: &mut Engine, budget: u64) -> Result<Step<ExportPlan>, PdfError> {
+        e.still_at(&self.doc, self.at)?;
+        let binding = e.binding(&self.doc)?;
+        if self.job.is_none() {
+            e.plan = None;
+            let s = e.get(&self.doc)?;
+            let job = export::raster::Job::new(
+                s.doc(),
+                &s.committed,
+                binding.clone(),
+                &self.policy,
+                &e.limits,
+            )?;
+            self.job = Some(job);
+        }
+        let job = self.job.as_mut().ok_or(PdfError::new(ErrorCode::Internal))?;
+        let out = match job.step(e.get(&self.doc)?.doc(), &e.limits, budget)? {
+            Some(out) => out,
+            None => {
+                let (done, total) = job.progress();
+                return Ok(Step::Pending(Progress {
+                    phase: Phase::Export,
+                    done,
+                    total,
+                }));
+            }
+        };
+        let plan = e.hold(
+            self.doc.clone(),
+            binding,
+            ExportMode::Raster,
+            &self.policy,
+            out,
+        );
+        Ok(Step::Done(plan))
     }
 }
