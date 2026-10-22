@@ -5,6 +5,7 @@
 use foliark_model::{ExtractOptions, PdfError, TextPage};
 
 mod extract;
+mod selection;
 
 pub use extract::TextLayout;
 
