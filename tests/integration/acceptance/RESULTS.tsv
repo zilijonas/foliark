@@ -1,0 +1,481 @@
+case	scenario	mode	bucket	input_sha12	output_sha12	detail
+tj-kerning	sanitize	native	SAFE	e36d6371cac0	8a556e32f1f9	
+tj-kerning	region	native	SAFE	e36d6371cac0	dcadaa275297	
+tj-kerning	text	native	SAFE	e36d6371cac0	9d06415ef8fd	
+tj-kerning	raster	raster	SAFE	e36d6371cac0	b6bb99ecdd4b	
+tj-kerning	raster_sanitize	raster	SAFE	e36d6371cac0	45a06a3532f4	
+tj-kerning	edit	native	SAFE	e36d6371cac0	d17a8a3c7ed8	
+split-ops	sanitize	native	SAFE	c506d7c62498	897caffab6a9	
+split-ops	region	native	SAFE	c506d7c62498	cc867622281e	
+split-ops	text	native	SAFE	c506d7c62498	8dd675a5ad95	
+split-ops	raster	raster	SAFE	c506d7c62498	67fba5b265e2	
+split-ops	raster_sanitize	raster	SAFE	c506d7c62498	50e7546f6850	
+split-ops	edit	native	SAFE	c506d7c62498	e3badbe054a6	
+hex-escaped	sanitize	native	SAFE	663f6c048637	6b0028545a0a	
+hex-escaped	region	native	SAFE	663f6c048637	681442e6ccb7	
+hex-escaped	text	native	SAFE	663f6c048637	9e55ebb390bb	
+hex-escaped	raster	raster	SAFE	663f6c048637	03b8e6aab8bf	
+hex-escaped	raster_sanitize	raster	SAFE	663f6c048637	df76815657da	
+hex-escaped	edit	native	SAFE	663f6c048637	1578f8565f26	
+quote-ops	sanitize	native	SAFE	22eb82b3fe7c	a618723daadd	
+quote-ops	region	native	SAFE	22eb82b3fe7c	227906899a77	
+quote-ops	text	native	SAFE	22eb82b3fe7c	9ed0ea33df0a	
+quote-ops	raster	raster	SAFE	22eb82b3fe7c	b9bab71ef3a0	
+quote-ops	raster_sanitize	raster	SAFE	22eb82b3fe7c	c7181417a96f	
+quote-ops	edit	native	SAFE	22eb82b3fe7c	b944d58c24a8	
+render-modes	sanitize	native	SAFE	20c8d911a3ac	a6c4ea65c034	
+render-modes	region	native	SAFE	20c8d911a3ac	5483f1909e01	
+render-modes	text	native	SAFE	20c8d911a3ac	24c1036624be	
+render-modes	raster	raster	SAFE	20c8d911a3ac	29ce56d3e6aa	
+render-modes	raster_sanitize	raster	SAFE	20c8d911a3ac	38da7a694dbf	
+render-modes	edit	native	SAFE	20c8d911a3ac	78d96ab4c111	
+spacing-neighbors	sanitize	native	SAFE	7fa0c8a3067d	28fc6fb7097d	
+spacing-neighbors	region	native	SAFE	7fa0c8a3067d	e175565a0d2d	
+spacing-neighbors	text	native	SAFE	7fa0c8a3067d	e175565a0d2d	
+spacing-neighbors	raster	raster	SAFE	7fa0c8a3067d	57fd12a52f24	
+spacing-neighbors	raster_sanitize	raster	SAFE	7fa0c8a3067d	cc185460a617	
+spacing-neighbors	edit	native	SAFE	7fa0c8a3067d	f60d7df472cf	
+overprint	sanitize	native	SAFE	5d6482d7dcb5	2dd346332ada	
+overprint	region	native	SAFE	5d6482d7dcb5	4c4bfd32bde0	
+overprint	text	native	SAFE	5d6482d7dcb5	14e5d2979131	
+overprint	raster	raster	SAFE	5d6482d7dcb5	1727220e44d2	
+overprint	raster_sanitize	raster	SAFE	5d6482d7dcb5	f1d435436a94	
+overprint	edit	native	SAFE	5d6482d7dcb5	d979155bc439	
+white-and-covered	sanitize	native	SAFE	f9552c1568e3	3a8f54daffda	
+white-and-covered	region	native	SAFE	f9552c1568e3	4fa41cfe99a9	
+white-and-covered	text	native	SAFE	f9552c1568e3	92e2b26d7d90	
+white-and-covered	raster	raster	SAFE	f9552c1568e3	698d387116b8	
+white-and-covered	raster_sanitize	raster	SAFE	f9552c1568e3	4baefb6ae0c8	
+white-and-covered	edit	native	SAFE	f9552c1568e3	871249f4dbc4	
+clipped-text	sanitize	native	SAFE	5f3c156195b1	7bda83b002e4	
+clipped-text	region	native	SAFE	5f3c156195b1	65e2efc827a5	
+clipped-text	text	native	SAFE	5f3c156195b1	24f2756b4713	
+clipped-text	raster	raster	SAFE	5f3c156195b1	76324bdaf330	
+clipped-text	raster_sanitize	raster	SAFE	5f3c156195b1	f63530e5c9ce	
+clipped-text	edit	native	SAFE	5f3c156195b1	f75724e6fe44	
+invisible-tr3	sanitize	native	SAFE	8962408a653f	572de83bbfe6	
+invisible-tr3	region	native	SAFE	8962408a653f	b20ccf8364a2	
+invisible-tr3	text	native	SAFE	8962408a653f	df9ec85c852e	
+invisible-tr3	raster	raster	SAFE	8962408a653f	8a0fd7f1468f	
+invisible-tr3	raster_sanitize	raster	SAFE	8962408a653f	40735da61398	
+invisible-tr3	edit	native	SAFE	8962408a653f	63bb2a6d7766	
+split-streams	sanitize	native	SAFE	86c642933cf9	68832d59a40b	
+split-streams	region	native	SAFE	86c642933cf9	93e98faecaef	
+split-streams	text	native	SAFE	86c642933cf9	98645aae210a	
+split-streams	raster	raster	SAFE	86c642933cf9	d3e443ba287a	
+split-streams	raster_sanitize	raster	SAFE	86c642933cf9	3939ff4649a4	
+split-streams	edit	native	SAFE	86c642933cf9	eb72c721993d	
+ligature	sanitize	native	SAFE	3ae997047617	aef1a8283d00	
+ligature	region	native	SAFE	3ae997047617	a39bad3c2e97	
+ligature	text	native	SAFE	3ae997047617	4e106fc6d799	
+ligature	raster	raster	SAFE	3ae997047617	9466371797fa	
+ligature	raster_sanitize	raster	SAFE	3ae997047617	d400acf30743	
+ligature	edit	native	SAFE	3ae997047617	00ea4b3cb5f6	
+form-both-places	sanitize	native	SAFE	8b7906cdd39c	2886cdd5716f	
+form-both-places	region	native	SAFE	8b7906cdd39c	9404cc027eb5	
+form-both-places	text	native	EXPLAINED	8b7906cdd39c		n/a: survivor case: region scenario only
+form-both-places	raster	raster	SAFE	8b7906cdd39c	4d7a28021dbf	
+form-both-places	raster_sanitize	raster	SAFE	8b7906cdd39c	aa3ce9785a48	
+form-both-places	edit	native	SAFE	8b7906cdd39c	1bd99d94b7ce	
+annot-as-off	sanitize	native	SAFE	1178399c4e75	2f33ba34ddeb	
+annot-as-off	region	native	SAFE	1178399c4e75	c9c0e38e94b9	
+annot-as-off	text	native	SAFE	1178399c4e75	c9c0e38e94b9	
+annot-as-off	raster	raster	SAFE	1178399c4e75	774f19d6a268	
+annot-as-off	raster_sanitize	raster	SAFE	1178399c4e75	ba86ad1d3e1d	
+annot-as-off	edit	native	SAFE	1178399c4e75	bb6519375bc0	
+annot-as-on	sanitize	native	SAFE	8d4679e71091	7d9f26af1e9f	
+annot-as-on	region	native	SAFE	8d4679e71091	270d63c4d91c	
+annot-as-on	text	native	SAFE	8d4679e71091	216a72ce6bad	
+annot-as-on	raster	raster	SAFE	8d4679e71091	a79e7097e2ae	
+annot-as-on	raster_sanitize	raster	SAFE	8d4679e71091	891f7fbba025	
+annot-as-on	edit	native	SAFE	8d4679e71091	9625a4cc2bd3	
+annot-popup	sanitize	native	SAFE	5884ca3951a2	232a3c2ff7d7	
+annot-popup	region	native	SAFE	5884ca3951a2	e0615e4fc002	
+annot-popup	text	native	SAFE	5884ca3951a2	01fff1d1c581	
+annot-popup	raster	raster	SAFE	5884ca3951a2	7c27c741bb82	
+annot-popup	raster_sanitize	raster	SAFE	5884ca3951a2	7459924e6547	
+annot-popup	edit	native	SAFE	5884ca3951a2	f880a355a044	
+smask-group-text	sanitize	native	SAFE	15b2ded23d0a	40c95d599e5a	
+smask-group-text	region	native	REFUSED	15b2ded23d0a		typed INVALID_ARGUMENT
+smask-group-text	text	native	EXPLAINED	15b2ded23d0a		n/a: secret not in extracted text
+smask-group-text	raster	raster	SAFE	15b2ded23d0a	11fb1a48718e	
+smask-group-text	raster_sanitize	raster	SAFE	15b2ded23d0a	513fae314bff	
+smask-group-text	edit	native	EXPLAINED	15b2ded23d0a		n/a: no located text secret to retype
+ocg-ve	sanitize	native	SAFE	8b3025da594e	d5379f7ac595	
+ocg-ve	region	native	SAFE	8b3025da594e	a2efa32571b7	
+ocg-ve	text	native	SAFE	8b3025da594e	4dc1725c6e1a	
+ocg-ve	raster	raster	SAFE	8b3025da594e	60cf5ca2a058	
+ocg-ve	raster_sanitize	raster	SAFE	8b3025da594e	aea5f83f193c	
+ocg-ve	edit	native	SAFE	8b3025da594e	3c42b752da64	
+ocg-ve-hidden	sanitize	native	SAFE	ace2476dfe0f	ebddd1b5e4ca	
+ocg-ve-hidden	region	native	SAFE	ace2476dfe0f	c1e379be15ad	
+ocg-ve-hidden	text	native	SAFE	ace2476dfe0f	c1e379be15ad	
+ocg-ve-hidden	raster	raster	SAFE	ace2476dfe0f	36361a8ca468	
+ocg-ve-hidden	raster_sanitize	raster	SAFE	ace2476dfe0f	78d5785d26c2	
+ocg-ve-hidden	edit	native	SAFE	ace2476dfe0f	32788af04d0c	
+ocg-off-in-form	sanitize	native	SAFE	746e2a7352ec	fbbb06c8090a	
+ocg-off-in-form	region	native	SAFE	746e2a7352ec	2501dfcd0127	
+ocg-off-in-form	text	native	EXPLAINED	746e2a7352ec		n/a: secret not in extracted text
+ocg-off-in-form	raster	raster	SAFE	746e2a7352ec	7c9463881784	
+ocg-off-in-form	raster_sanitize	raster	SAFE	746e2a7352ec	ad66d088bdd5	
+ocg-off-in-form	edit	native	EXPLAINED	746e2a7352ec		n/a: no located text secret to retype
+image-smask-only	sanitize	native	SAFE	17b9b5e74f53	e3c79cf57a9f	
+image-smask-only	region	native	SAFE	17b9b5e74f53	ccb42e7e1ba7	
+image-smask-only	text	native	EXPLAINED	17b9b5e74f53		n/a: no text secret
+image-smask-only	raster	raster	SAFE	17b9b5e74f53	cf091d9ad2a4	
+image-smask-only	raster_sanitize	raster	SAFE	17b9b5e74f53	fe4beafdceaf	
+image-smask-only	edit	native	EXPLAINED	17b9b5e74f53		n/a: no located text secret to retype
+image-inline	sanitize	native	SAFE	5999c527f9fb	fed182c3468b	
+image-inline	region	native	SAFE	5999c527f9fb	90898f369f7c	
+image-inline	text	native	EXPLAINED	5999c527f9fb		n/a: no text secret
+image-inline	raster	raster	SAFE	5999c527f9fb	272ca77dca36	
+image-inline	raster_sanitize	raster	SAFE	5999c527f9fb	5c224bf42dcd	
+image-inline	edit	native	EXPLAINED	5999c527f9fb		n/a: no located text secret to retype
+pattern-text-cell	sanitize	native	SAFE	d95b1a4ad319	20ab469020a9	
+pattern-text-cell	region	native	REFUSED	d95b1a4ad319		typed REDACT_PATTERN_UNSUPPORTED
+pattern-text-cell	text	native	EXPLAINED	d95b1a4ad319		n/a: secret not in extracted text
+pattern-text-cell	raster	raster	SAFE	d95b1a4ad319	58af15459a6b	
+pattern-text-cell	raster_sanitize	raster	SAFE	d95b1a4ad319	4a799267b839	
+pattern-text-cell	edit	native	EXPLAINED	d95b1a4ad319		n/a: no located text secret to retype
+pattern-image-cell	sanitize	native	SAFE	e4430aacd7da	c28eddb06f82	
+pattern-image-cell	region	native	REFUSED	e4430aacd7da		typed REDACT_PATTERN_UNSUPPORTED
+pattern-image-cell	text	native	EXPLAINED	e4430aacd7da		n/a: no text secret
+pattern-image-cell	raster	raster	SAFE	e4430aacd7da	b357a47183b2	
+pattern-image-cell	raster_sanitize	raster	SAFE	e4430aacd7da	76654c19ba97	
+pattern-image-cell	edit	native	EXPLAINED	e4430aacd7da		n/a: no located text secret to retype
+type3-glyphs	sanitize	native	SAFE	c6597c37e076	95addb2423d4	
+type3-glyphs	region	native	SAFE	c6597c37e076	fe6957146044	
+type3-glyphs	text	native	SAFE	c6597c37e076	c561863ce4c9	
+type3-glyphs	raster	raster	SAFE	c6597c37e076	f5316c691e32	
+type3-glyphs	raster_sanitize	raster	SAFE	c6597c37e076	c8477c6db47d	
+type3-glyphs	edit	native	SAFE	c6597c37e076	8f41074acc88	
+unused-font	sanitize	native	SAFE	231f647cfa73	2a35c247e576	
+unused-font	region	native	SAFE	231f647cfa73	695fc71fdb72	
+unused-font	text	native	SAFE	231f647cfa73	eed7ed36b513	
+unused-font	raster	raster	SAFE	231f647cfa73	f702771409af	
+unused-font	raster_sanitize	raster	SAFE	231f647cfa73	853be65c5fae	
+unused-font	edit	native	REFUSED	231f647cfa73		typed EDIT_NO_FIT
+unused-xobject	sanitize	native	BLOCKER	e2520faa04ae	8f5333c9ed22	NEW-80: STREAM: 'SECRET_UNUSED_FORM' in decoded stream (5, 0)
+unused-xobject	region	native	BLOCKER	e2520faa04ae	4963cf36180e	NEW-80: STREAM: 'SECRET_UNUSED_FORM' in decoded stream (5, 0)
+unused-xobject	text	native	BLOCKER	e2520faa04ae	ce1028858044	NEW-80: STREAM: 'SECRET_UNUSED_FORM' in decoded stream (5, 0)
+unused-xobject	raster	raster	SAFE	e2520faa04ae	44b689df15fa	
+unused-xobject	raster_sanitize	raster	SAFE	e2520faa04ae	c29e7b4c15b6	
+unused-xobject	edit	native	SAFE	e2520faa04ae	b6b1081e9831	
+marked-props	sanitize	native	SAFE	28f105ca9332	a44c7bcadaf7	
+marked-props	region	native	SAFE	28f105ca9332	a894cfa208bc	
+marked-props	text	native	SAFE	28f105ca9332	633a4143efab	
+marked-props	raster	raster	SAFE	28f105ca9332	4edca3fe8add	
+marked-props	raster_sanitize	raster	SAFE	28f105ca9332	a76422db4717	
+marked-props	edit	native	SAFE	28f105ca9332	21e7de3d235a	
+actualtext-nested	sanitize	native	SAFE	ac9f03f73b1f	bbc3c38838af	
+actualtext-nested	region	native	SAFE	ac9f03f73b1f	7607422c83c8	
+actualtext-nested	text	native	EXPLAINED	ac9f03f73b1f		n/a: secret not in extracted text
+actualtext-nested	raster	raster	SAFE	ac9f03f73b1f	730f2d154b37	
+actualtext-nested	raster_sanitize	raster	SAFE	ac9f03f73b1f	0188ddceaddf	
+actualtext-nested	edit	native	EXPLAINED	ac9f03f73b1f		n/a: no located text secret to retype
+content-noise	sanitize	native	SAFE	64e22764be2d	e30acf47915f	
+content-noise	region	native	SAFE	64e22764be2d	871c48e87aa8	
+content-noise	text	native	SAFE	64e22764be2d	25f0229f2efc	
+content-noise	raster	raster	SAFE	64e22764be2d	accba3df33db	
+content-noise	raster_sanitize	raster	SAFE	64e22764be2d	7aaed6b23b3d	
+content-noise	edit	native	SAFE	64e22764be2d	fac30d88472d	
+content-chain	sanitize	native	SAFE	3370081c3a7d	c896fff9530a	
+content-chain	region	native	SAFE	3370081c3a7d	cbc2d3b31426	
+content-chain	text	native	SAFE	3370081c3a7d	5981bff53a3d	
+content-chain	raster	raster	SAFE	3370081c3a7d	ac5b9251e520	
+content-chain	raster_sanitize	raster	SAFE	3370081c3a7d	6d871801a51f	
+content-chain	edit	native	SAFE	3370081c3a7d	0002678de8dd	
+annot-hidden	sanitize	native	SAFE	98c9f526f2d3	502b82befdf0	
+annot-hidden	region	native	SAFE	98c9f526f2d3	f95f37ac4730	
+annot-hidden	text	native	SAFE	98c9f526f2d3	9e370f599894	
+annot-hidden	raster	raster	SAFE	98c9f526f2d3	4f2b413e3558	
+annot-hidden	raster_sanitize	raster	SAFE	98c9f526f2d3	ed5e7a67b7b0	
+annot-hidden	edit	native	SAFE	98c9f526f2d3	f18413000adb	
+rotated-text-30	sanitize	native	SAFE	01e99c6a1034	b05194ad607f	
+rotated-text-30	region	native	SAFE	01e99c6a1034	f166675c927e	
+rotated-text-30	text	native	SAFE	01e99c6a1034	f02d13e9f3a3	
+rotated-text-30	raster	raster	SAFE	01e99c6a1034	993d287047eb	
+rotated-text-30	raster_sanitize	raster	SAFE	01e99c6a1034	f0026c86c3d1	
+rotated-text-30	edit	native	SAFE	01e99c6a1034	d3eb05d20038	
+hidden-everywhere	sanitize	native	SAFE	5e06218ccfc4	b9c5c181e585	
+hidden-everywhere	region	native	EXPLAINED	5e06218ccfc4		n/a: no region and no located secret
+hidden-everywhere	text	native	EXPLAINED	5e06218ccfc4		n/a: secret not in extracted text
+hidden-everywhere	raster	raster	SAFE	5e06218ccfc4	0c8c1ba2546b	
+hidden-everywhere	raster_sanitize	raster	SAFE	5e06218ccfc4	0c8c1ba2546b	
+hidden-everywhere	edit	native	EXPLAINED	5e06218ccfc4		n/a: no located text secret to retype
+incremental-info	sanitize	native	SAFE	3df6cf27e50c	3938e2e71376	
+incremental-info	region	native	EXPLAINED	3df6cf27e50c		n/a: no region and no located secret
+incremental-info	text	native	EXPLAINED	3df6cf27e50c		n/a: secret not in extracted text
+incremental-info	raster	raster	SAFE	3df6cf27e50c	1fe71b8daf99	
+incremental-info	raster_sanitize	raster	SAFE	3df6cf27e50c	1fe71b8daf99	
+incremental-info	edit	native	EXPLAINED	3df6cf27e50c		n/a: no located text secret to retype
+orphan-trailing	sanitize	native	SAFE	cc600e665cbb	471bccd9b8f2	
+orphan-trailing	region	native	SAFE	cc600e665cbb	207a5453ef87	
+orphan-trailing	text	native	SAFE	cc600e665cbb	908723f737b1	
+orphan-trailing	raster	raster	SAFE	cc600e665cbb	6c84c293d933	
+orphan-trailing	raster_sanitize	raster	SAFE	cc600e665cbb	c49f16fd4d75	
+orphan-trailing	edit	native	SAFE	cc600e665cbb	e7b6a98cda8c	
+objstm-orphan	sanitize	native	SAFE	6628f1ed5f1e	fdcd102083c7	
+objstm-orphan	region	native	SAFE	6628f1ed5f1e	efd8a2484600	
+objstm-orphan	text	native	SAFE	6628f1ed5f1e	fffa226de775	
+objstm-orphan	raster	raster	SAFE	6628f1ed5f1e	b2ff765cca28	
+objstm-orphan	raster_sanitize	raster	SAFE	6628f1ed5f1e	591fe8781022	
+objstm-orphan	edit	native	SAFE	6628f1ed5f1e	67d767b772fb	
+cropbox-outside	sanitize	native	SAFE	1879a3981598	79c58abfa024	
+cropbox-outside	region	native	SAFE	1879a3981598	ba0e0496e144	
+cropbox-outside	text	native	SAFE	1879a3981598	675d998f64d2	
+cropbox-outside	raster	raster	SAFE	1879a3981598	7982bb99441a	
+cropbox-outside	raster_sanitize	raster	SAFE	1879a3981598	4967540015a0	
+cropbox-outside	edit	native	SAFE	1879a3981598	120c0abbe2b1	
+inherited-rot270	sanitize	native	SAFE	979d2e344d95	52de1625c5ce	
+inherited-rot270	region	native	SAFE	979d2e344d95	beddbf1254c3	
+inherited-rot270	text	native	SAFE	979d2e344d95	bba6f95bbd8b	
+inherited-rot270	raster	raster	SAFE	979d2e344d95	8e3539b76c7e	
+inherited-rot270	raster_sanitize	raster	SAFE	979d2e344d95	505ff995ba78	
+inherited-rot270	edit	native	REFUSED	979d2e344d95		typed EDIT_ROTATED_TEXT
+shared-stream-pages	sanitize	native	SAFE	0598db806bd2	798dcb046e90	
+shared-stream-pages	region	native	SAFE	0598db806bd2	28c8ebc3458c	
+shared-stream-pages	text	native	EXPLAINED	0598db806bd2		n/a: survivor case: region scenario only
+shared-stream-pages	raster	raster	SAFE	0598db806bd2	c9e806e9ab7a	
+shared-stream-pages	raster_sanitize	raster	SAFE	0598db806bd2	6ae779b0259f	
+shared-stream-pages	edit	native	SAFE	0598db806bd2	c41fa46ca479	
+multipage-12	sanitize	native	SAFE	18749da1b015	70fcf8144680	
+multipage-12	region	native	SAFE	18749da1b015	85870dca3a18	
+multipage-12	text	native	SAFE	18749da1b015	0dc7e8121f3f	
+multipage-12	raster	raster	SAFE	18749da1b015	797285eb3794	
+multipage-12	raster_sanitize	raster	SAFE	18749da1b015	a925a883da59	
+multipage-12	edit	native	SAFE	18749da1b015	cf10672307d8	
+metadata-xmp	sanitize	native	SAFE	03e27e03b609	b7eb8ece57c1	
+metadata-xmp	region	native	SAFE	03e27e03b609	808224fd948a	
+metadata-xmp	text	native	SAFE	03e27e03b609	1f075b2c5044	
+metadata-xmp	raster	raster	SAFE	03e27e03b609	b16360c777d1	
+metadata-xmp	raster_sanitize	raster	SAFE	03e27e03b609	3a30268ec2c3	
+metadata-xmp	edit	native	SAFE	03e27e03b609	c929ff054877	
+annotation-comment	sanitize	native	SAFE	d2619514f210	471b0b085359	
+annotation-comment	region	native	SAFE	d2619514f210	f52d390348e7	
+annotation-comment	text	native	SAFE	d2619514f210	ddef9d6ac148	
+annotation-comment	raster	raster	REFUSED	d2619514f210		typed RENDER_INCOMPLETE
+annotation-comment	raster_sanitize	raster	REFUSED	d2619514f210		typed RENDER_INCOMPLETE
+annotation-comment	edit	native	SAFE	d2619514f210	d3c877ab0115	
+attachment	sanitize	native	SAFE	8e251be09ec1	430ecb9dd195	
+attachment	region	native	SAFE	8e251be09ec1	f011d6503f81	
+attachment	text	native	SAFE	8e251be09ec1	01878074fe41	
+attachment	raster	raster	SAFE	8e251be09ec1	6c9889dd28eb	
+attachment	raster_sanitize	raster	SAFE	8e251be09ec1	61eee9078eca	
+attachment	edit	native	SAFE	8e251be09ec1	b4396aa33707	
+actions-js	sanitize	native	SAFE	8ece2e7c3625	34d6e87e88d8	
+actions-js	region	native	SAFE	8ece2e7c3625	b0a7310ad1b1	
+actions-js	text	native	SAFE	8ece2e7c3625	9f8e7b3b85f3	
+actions-js	raster	raster	SAFE	8ece2e7c3625	0fc908310508	
+actions-js	raster_sanitize	raster	SAFE	8ece2e7c3625	dc97f16528ee	
+actions-js	edit	native	SAFE	8ece2e7c3625	b0bb566ff9ce	
+acroform	sanitize	native	SAFE	4e80f8217d80	86b84b654939	
+acroform	region	native	SAFE	4e80f8217d80	24c07781cf9a	
+acroform	text	native	SAFE	4e80f8217d80	cade40f269f7	
+acroform	raster	raster	SAFE	4e80f8217d80	0ba6bed8cfa2	
+acroform	raster_sanitize	raster	SAFE	4e80f8217d80	b6d545a3e535	
+acroform	edit	native	SAFE	4e80f8217d80	d46cbc0f24fb	
+optional-content-layer	sanitize	native	SAFE	e200e108f44d	01928a70f81e	
+optional-content-layer	region	native	SAFE	e200e108f44d	9d5d39ccbbce	
+optional-content-layer	text	native	SAFE	e200e108f44d	add864ebf465	
+optional-content-layer	raster	raster	SAFE	e200e108f44d	b80265636691	
+optional-content-layer	raster_sanitize	raster	SAFE	e200e108f44d	5a62362c111c	
+optional-content-layer	edit	native	SAFE	e200e108f44d	1212d3c281f4	
+hidden-ocr-text	sanitize	native	SAFE	3b7c9e27e5fd	b3e04c66f133	
+hidden-ocr-text	region	native	SAFE	3b7c9e27e5fd	23677fa16664	
+hidden-ocr-text	text	native	SAFE	3b7c9e27e5fd	dda280263138	
+hidden-ocr-text	raster	raster	SAFE	3b7c9e27e5fd	d8fb22b53734	
+hidden-ocr-text	raster_sanitize	raster	SAFE	3b7c9e27e5fd	13833c6bb145	
+hidden-ocr-text	edit	native	SAFE	3b7c9e27e5fd	1f68312168df	
+thumbnail	sanitize	native	SAFE	3f342c70d2a8	0827e041d251	
+thumbnail	region	native	SAFE	3f342c70d2a8	3bd2ebdc1306	
+thumbnail	text	native	SAFE	3f342c70d2a8	648d8de543b0	
+thumbnail	raster	raster	SAFE	3f342c70d2a8	d6daf9c34e98	
+thumbnail	raster_sanitize	raster	SAFE	3f342c70d2a8	6e507a6ec27f	
+thumbnail	edit	native	SAFE	3f342c70d2a8	1ef4dc19a0d4	
+outline-bookmark	sanitize	native	SAFE	e6182519db1d	4d71d9001d8a	
+outline-bookmark	region	native	SAFE	e6182519db1d	72e9ab508c25	
+outline-bookmark	text	native	SAFE	e6182519db1d	5f06f32c8186	
+outline-bookmark	raster	raster	SAFE	e6182519db1d	b2aa07a9b0bd	
+outline-bookmark	raster_sanitize	raster	SAFE	e6182519db1d	91f4a308c789	
+outline-bookmark	edit	native	SAFE	e6182519db1d	b71d0791e19e	
+actualtext	sanitize	native	SAFE	7394dd868b36	0016832d18ce	
+actualtext	region	native	SAFE	7394dd868b36	c82cbf7578f9	
+actualtext	text	native	SAFE	7394dd868b36	874d9eb2464e	
+actualtext	raster	raster	SAFE	7394dd868b36	080cb444090b	
+actualtext	raster_sanitize	raster	SAFE	7394dd868b36	1ad9e88f8a63	
+actualtext	edit	native	SAFE	7394dd868b36	d310e7980c31	
+incremental-revision	sanitize	native	SAFE	c889e72739c0	f5c28ef60a96	
+incremental-revision	region	native	EXPLAINED	c889e72739c0		n/a: no region and no located secret
+incremental-revision	text	native	EXPLAINED	c889e72739c0		n/a: secret not in extracted text
+incremental-revision	raster	raster	SAFE	c889e72739c0	e35030444e20	
+incremental-revision	raster_sanitize	raster	SAFE	c889e72739c0	e35030444e20	
+incremental-revision	edit	native	EXPLAINED	c889e72739c0		n/a: no located text secret to retype
+shared-image	sanitize	native	SAFE	4d627708bc9d	0123c88ac25e	
+shared-image	region	native	SAFE	4d627708bc9d	c60951eb42a6	
+shared-image	text	native	SAFE	4d627708bc9d	12b762ab51f8	
+shared-image	raster	raster	SAFE	4d627708bc9d	f7bff8d533c4	
+shared-image	raster_sanitize	raster	SAFE	4d627708bc9d	739b37520182	
+shared-image	edit	native	SAFE	4d627708bc9d	26102a2b54b3	
+shared-vector	sanitize	native	SAFE	ac662396cbc3	a5207f7cea4a	
+shared-vector	region	native	SAFE	ac662396cbc3	676f1676f983	
+shared-vector	text	native	SAFE	ac662396cbc3	3e65ac54ceb3	
+shared-vector	raster	raster	SAFE	ac662396cbc3	f43c0c7e8d95	
+shared-vector	raster_sanitize	raster	SAFE	ac662396cbc3	872b83df2f7d	
+shared-vector	edit	native	SAFE	ac662396cbc3	b6c0475a812e	
+rotation-crop	sanitize	native	SAFE	37e25c655f90	8eda26d332f6	
+rotation-crop	region	native	SAFE	37e25c655f90	71df9b43ba53	
+rotation-crop	text	native	SAFE	37e25c655f90	a712a33e3397	
+rotation-crop	raster	raster	SAFE	37e25c655f90	61be6fb51766	
+rotation-crop	raster_sanitize	raster	SAFE	37e25c655f90	a951217dd2bf	
+rotation-crop	edit	native	SAFE	37e25c655f90	aa9dd673ac6a	
+unicode-glyph-widths	sanitize	native	SAFE	c6ab1d3a8887	4dd3821a55c5	
+unicode-glyph-widths	region	native	SAFE	c6ab1d3a8887	5c5c15a9f284	
+unicode-glyph-widths	text	native	SAFE	c6ab1d3a8887	6b6523ebb1d6	
+unicode-glyph-widths	raster	raster	SAFE	c6ab1d3a8887	f29612e1a436	
+unicode-glyph-widths	raster_sanitize	raster	SAFE	c6ab1d3a8887	6ff2eae18e0e	
+unicode-glyph-widths	edit	native	SAFE	c6ab1d3a8887	f61e7eca4dab	
+encrypted	sanitize	native	SAFE	c04d1d9dbfce	ba7d6f1a205f	
+encrypted	region	native	SAFE	c04d1d9dbfce	4b3558af3958	
+encrypted	text	native	SAFE	c04d1d9dbfce	ef9aefb0a8dd	
+encrypted	raster	raster	SAFE	c04d1d9dbfce	bdf8d1ddd79b	
+encrypted	raster_sanitize	raster	SAFE	c04d1d9dbfce	e5a47d4aa231	
+encrypted	edit	native	SAFE	c04d1d9dbfce	0ccb448842e3	
+malformed-truncated	sanitize	native	REFUSED	f8213d2aeb4e		typed REPAIRED_PDF
+malformed-truncated	region	native	REFUSED	f8213d2aeb4e		typed REPAIRED_PDF
+malformed-truncated	text	native	REFUSED	f8213d2aeb4e		typed REPAIRED_PDF
+malformed-truncated	raster	raster	REFUSED	f8213d2aeb4e		typed REPAIRED_PDF
+malformed-truncated	raster_sanitize	raster	REFUSED	f8213d2aeb4e		typed REPAIRED_PDF
+malformed-truncated	edit	native	REFUSED	f8213d2aeb4e		typed REPAIRED_PDF
+malformed-xref	sanitize	native	REFUSED	8f8191b5b2d7		typed REPAIRED_PDF
+malformed-xref	region	native	REFUSED	8f8191b5b2d7		typed REPAIRED_PDF
+malformed-xref	text	native	REFUSED	8f8191b5b2d7		typed REPAIRED_PDF
+malformed-xref	raster	raster	REFUSED	8f8191b5b2d7		typed REPAIRED_PDF
+malformed-xref	raster_sanitize	raster	REFUSED	8f8191b5b2d7		typed REPAIRED_PDF
+malformed-xref	edit	native	REFUSED	8f8191b5b2d7		typed REPAIRED_PDF
+oversized-image	sanitize	native	REFUSED	75c54c8e4ed6		typed LIMIT_EXCEEDED
+oversized-image	region	native	REFUSED	75c54c8e4ed6		typed LIMIT_EXCEEDED
+oversized-image	text	native	REFUSED	75c54c8e4ed6		typed LIMIT_EXCEEDED
+oversized-image	raster	raster	REFUSED	75c54c8e4ed6		typed LIMIT_EXCEEDED
+oversized-image	raster_sanitize	raster	REFUSED	75c54c8e4ed6		typed LIMIT_EXCEEDED
+oversized-image	edit	native	REFUSED	75c54c8e4ed6		typed LIMIT_EXCEEDED
+compressed-stream	sanitize	native	REFUSED	ba6dd7b24a1e		typed LIMIT_EXCEEDED
+compressed-stream	region	native	REFUSED	ba6dd7b24a1e		typed LIMIT_EXCEEDED
+compressed-stream	text	native	REFUSED	ba6dd7b24a1e		typed LIMIT_EXCEEDED
+compressed-stream	raster	raster	REFUSED	ba6dd7b24a1e		typed LIMIT_EXCEEDED
+compressed-stream	raster_sanitize	raster	REFUSED	ba6dd7b24a1e		typed LIMIT_EXCEEDED
+compressed-stream	edit	native	REFUSED	ba6dd7b24a1e		typed LIMIT_EXCEEDED
+corrupt-flate	sanitize	native	REFUSED	2b22528e19c5		typed DECODE_FAILED
+corrupt-flate	region	native	REFUSED	2b22528e19c5		typed DECODE_FAILED
+corrupt-flate	text	native	REFUSED	2b22528e19c5		typed DECODE_FAILED
+corrupt-flate	raster	raster	REFUSED	2b22528e19c5		typed DECODE_FAILED
+corrupt-flate	raster_sanitize	raster	REFUSED	2b22528e19c5		typed DECODE_FAILED
+corrupt-flate	edit	native	REFUSED	2b22528e19c5		typed DECODE_FAILED
+forms-cyclic	sanitize	native	REFUSED	ddc81e58dad7		typed MALFORMED_PDF
+forms-cyclic	region	native	REFUSED	ddc81e58dad7		typed MALFORMED_PDF
+forms-cyclic	text	native	REFUSED	ddc81e58dad7		typed MALFORMED_PDF
+forms-cyclic	raster	raster	REFUSED	ddc81e58dad7		typed MALFORMED_PDF
+forms-cyclic	raster_sanitize	raster	REFUSED	ddc81e58dad7		typed RENDER_INCOMPLETE
+forms-cyclic	edit	native	REFUSED	ddc81e58dad7		typed MALFORMED_PDF
+forms-deep-40	sanitize	native	REFUSED	a3e675f84b58		typed LIMIT_EXCEEDED
+forms-deep-40	region	native	REFUSED	a3e675f84b58		typed LIMIT_EXCEEDED
+forms-deep-40	text	native	REFUSED	a3e675f84b58		typed LIMIT_EXCEEDED
+forms-deep-40	raster	raster	REFUSED	a3e675f84b58		typed LIMIT_EXCEEDED
+forms-deep-40	raster_sanitize	raster	SAFE	a3e675f84b58	88902ef306ce	
+forms-deep-40	edit	native	REFUSED	a3e675f84b58		typed LIMIT_EXCEEDED
+form-reuse-matrices	sanitize	native	SAFE	426c4ba5e820	98c688c3324b	
+form-reuse-matrices	region	native	SAFE	426c4ba5e820	117675bcfcbe	
+form-reuse-matrices	text	native	SAFE	426c4ba5e820	631068baf0d9	
+form-reuse-matrices	raster	raster	SAFE	426c4ba5e820	3e7d3fdeb1f1	
+form-reuse-matrices	raster_sanitize	raster	SAFE	426c4ba5e820	e93e626758db	
+form-reuse-matrices	edit	native	SAFE	426c4ba5e820	377c262ee0ee	
+many-pages-1001	sanitize	native	REFUSED	2cd12540fb8a		typed LIMIT_EXCEEDED
+many-pages-1001	region	native	REFUSED	2cd12540fb8a		typed LIMIT_EXCEEDED
+many-pages-1001	text	native	REFUSED	2cd12540fb8a		typed LIMIT_EXCEEDED
+many-pages-1001	raster	raster	REFUSED	2cd12540fb8a		typed LIMIT_EXCEEDED
+many-pages-1001	raster_sanitize	raster	REFUSED	2cd12540fb8a		typed LIMIT_EXCEEDED
+many-pages-1001	edit	native	REFUSED	2cd12540fb8a		typed LIMIT_EXCEEDED
+ocg-hidden-text	sanitize	native	SAFE	b0056a28a9ed	e19ada043c94	
+ocg-hidden-text	region	native	SAFE	b0056a28a9ed	ca6984ca25a1	
+ocg-hidden-text	text	native	EXPLAINED	b0056a28a9ed		n/a: secret not in extracted text
+ocg-hidden-text	raster	raster	SAFE	b0056a28a9ed	285c67227117	
+ocg-hidden-text	raster_sanitize	raster	SAFE	b0056a28a9ed	e3a7edea7c02	
+ocg-hidden-text	edit	native	EXPLAINED	b0056a28a9ed		n/a: no located text secret to retype
+ocr-over-image	sanitize	native	SAFE	851a2cd64d1b	37ee5dd75f15	
+ocr-over-image	region	native	SAFE	851a2cd64d1b	713e9a9e0ee7	
+ocr-over-image	text	native	SAFE	851a2cd64d1b	9aedc5639615	
+ocr-over-image	raster	raster	SAFE	851a2cd64d1b	b7ad7fcda25e	
+ocr-over-image	raster_sanitize	raster	SAFE	851a2cd64d1b	38a2bdb2f3bf	
+ocr-over-image	edit	native	EXPLAINED	851a2cd64d1b		n/a: no public word on page 0 to retype over
+leaks-metadata-attachment-js	sanitize	native	SAFE	a19ab47d6c2a	0bb6f6cfad3a	
+leaks-metadata-attachment-js	region	native	EXPLAINED	a19ab47d6c2a		n/a: no region and no located secret
+leaks-metadata-attachment-js	text	native	EXPLAINED	a19ab47d6c2a		n/a: secret not in extracted text
+leaks-metadata-attachment-js	raster	raster	SAFE	a19ab47d6c2a	e11e9eeb0a07	
+leaks-metadata-attachment-js	raster_sanitize	raster	SAFE	a19ab47d6c2a	e11e9eeb0a07	
+leaks-metadata-attachment-js	edit	native	EXPLAINED	a19ab47d6c2a		n/a: no located text secret to retype
+incremental-prior-text	sanitize	native	SAFE	54734f09d875	7edcb8d9ddd5	
+incremental-prior-text	region	native	EXPLAINED	54734f09d875		n/a: no region and no located secret
+incremental-prior-text	text	native	EXPLAINED	54734f09d875		n/a: secret not in extracted text
+incremental-prior-text	raster	raster	SAFE	54734f09d875	3165b68e0203	
+incremental-prior-text	raster_sanitize	raster	SAFE	54734f09d875	3165b68e0203	
+incremental-prior-text	edit	native	EXPLAINED	54734f09d875		n/a: no located text secret to retype
+acroform-values	sanitize	native	SAFE	ffb8b8e74993	774e9e245cb0	
+acroform-values	region	native	SAFE	ffb8b8e74993	c2e2453be379	
+acroform-values	text	native	SAFE	ffb8b8e74993	773169e4da37	
+acroform-values	raster	raster	SAFE	ffb8b8e74993	58e6bf7d5318	
+acroform-values	raster_sanitize	raster	SAFE	ffb8b8e74993	a06782f43cc9	
+acroform-values	edit	native	REFUSED	ffb8b8e74993		typed EDIT_NO_FIT
+annot-appearance	sanitize	native	SAFE	45333ccdfa66	aa77758f639f	
+annot-appearance	region	native	SAFE	45333ccdfa66	8f1c6274e3de	
+annot-appearance	text	native	SAFE	45333ccdfa66	6658091282c5	
+annot-appearance	raster	raster	SAFE	45333ccdfa66	d92006815624	
+annot-appearance	raster_sanitize	raster	SAFE	45333ccdfa66	8e9e4e3ca1b3	
+annot-appearance	edit	native	REFUSED	45333ccdfa66		typed EDIT_NO_FIT
+mixed-regions	sanitize	native	SAFE	7285493d981b	bce9c07ea7d2	
+mixed-regions	region	native	SAFE	7285493d981b	3fe98fe2ce39	
+mixed-regions	text	native	SAFE	7285493d981b	bd1b063c8adc	
+mixed-regions	raster	raster	SAFE	7285493d981b	2830e79374d7	
+mixed-regions	raster_sanitize	raster	SAFE	7285493d981b	9c9f04aad4f6	
+mixed-regions	edit	native	REFUSED	7285493d981b		typed EDIT_NO_FIT
+icc-tail-secret	sanitize	native	SAFE	9238336c2aae	b41850e93c1a	
+icc-tail-secret	region	native	SAFE	9238336c2aae	7f5caded2be1	
+icc-tail-secret	text	native	SAFE	9238336c2aae	6ed828ab0a24	
+icc-tail-secret	raster	raster	SAFE	9238336c2aae	a09f4cdeb58b	
+icc-tail-secret	raster_sanitize	raster	SAFE	9238336c2aae	8e2b7cad7dc4	
+icc-tail-secret	edit	native	REFUSED	9238336c2aae		typed EDIT_NO_FIT
+jpeg-payload-secret	sanitize	native	SAFE	b916b36e8f84	dacb8a1a6ebd	
+jpeg-payload-secret	region	native	SAFE	b916b36e8f84	ccce1b923fb1	
+jpeg-payload-secret	text	native	SAFE	b916b36e8f84	089e1c0c9247	
+jpeg-payload-secret	raster	raster	SAFE	b916b36e8f84	333dfc13c8b3	
+jpeg-payload-secret	raster_sanitize	raster	SAFE	b916b36e8f84	88e63e6b5b6b	
+jpeg-payload-secret	edit	native	SAFE	b916b36e8f84	50a2e12707b4	
+font-payload-secret	sanitize	native	SAFE	0aaca1026697	4dd3821a55c5	
+font-payload-secret	region	native	SAFE	0aaca1026697	6b6523ebb1d6	
+font-payload-secret	text	native	SAFE	0aaca1026697	6b6523ebb1d6	
+font-payload-secret	raster	raster	SAFE	0aaca1026697	2d8f4c408e42	
+font-payload-secret	raster_sanitize	raster	SAFE	0aaca1026697	6ff2eae18e0e	
+font-payload-secret	edit	native	SAFE	0aaca1026697	f61e7eca4dab	
+encrypted-rc4-40	sanitize	native	SAFE	89b74529499d	6190deca6818	
+encrypted-rc4-40	region	native	SAFE	89b74529499d	c52980f99f98	
+encrypted-rc4-40	text	native	SAFE	89b74529499d	c52980f99f98	
+encrypted-rc4-40	raster	raster	SAFE	89b74529499d	b8f35df29fcf	
+encrypted-rc4-40	raster_sanitize	raster	SAFE	89b74529499d	51969c308a22	
+encrypted-rc4-40	edit	native	SAFE	89b74529499d	996689fe917d	
+encrypted-rc4-128	sanitize	native	SAFE	3da93f7ea5b0	6190deca6818	
+encrypted-rc4-128	region	native	SAFE	3da93f7ea5b0	c52980f99f98	
+encrypted-rc4-128	text	native	SAFE	3da93f7ea5b0	c52980f99f98	
+encrypted-rc4-128	raster	raster	SAFE	3da93f7ea5b0	b8f35df29fcf	
+encrypted-rc4-128	raster_sanitize	raster	SAFE	3da93f7ea5b0	51969c308a22	
+encrypted-rc4-128	edit	native	SAFE	3da93f7ea5b0	996689fe917d	
+encrypted-aes-128	sanitize	native	SAFE	353f8ec9d1e1	6190deca6818	
+encrypted-aes-128	region	native	SAFE	353f8ec9d1e1	c52980f99f98	
+encrypted-aes-128	text	native	SAFE	353f8ec9d1e1	c52980f99f98	
+encrypted-aes-128	raster	raster	SAFE	353f8ec9d1e1	b8f35df29fcf	
+encrypted-aes-128	raster_sanitize	raster	SAFE	353f8ec9d1e1	51969c308a22	
+encrypted-aes-128	edit	native	SAFE	353f8ec9d1e1	996689fe917d	
+encrypted-aes-256	sanitize	native	SAFE	8d90fb7374c3	6190deca6818	
+encrypted-aes-256	region	native	SAFE	8d90fb7374c3	c52980f99f98	
+encrypted-aes-256	text	native	SAFE	8d90fb7374c3	c52980f99f98	
+encrypted-aes-256	raster	raster	SAFE	8d90fb7374c3	b8f35df29fcf	
+encrypted-aes-256	raster_sanitize	raster	SAFE	8d90fb7374c3	51969c308a22	
+encrypted-aes-256	edit	native	SAFE	8d90fb7374c3	996689fe917d	

@@ -54,13 +54,13 @@ def build(objs, root=1, trailer="", base=None, prev=None):
     return bytes(out), xpos
 
 
-def simple(content, extra=None, page_extra="", cat_extra="", trailer="", flate=True, resources_extra=""):
+def simple(content, extra=None, page_extra="", cat_extra="", trailer="", flate=True, resources_extra="", fonts="/F1 5 0 R"):
     """1-page doc: 1 catalog, 2 pages, 3 page, 4 content, 5 Helvetica; extra objects from 6."""
     objs = {
         1: "<< /Type /Catalog /Pages 2 0 R %s >>" % cat_extra,
         2: "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-        3: "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 %d %d] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> %s >> %s >>"
-        % (W, H, resources_extra, page_extra),
+        3: "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 %d %d] /Contents 4 0 R /Resources << /Font << %s >> %s >> %s >>"
+        % (W, H, fonts, resources_extra, page_extra),
         4: stream("", content, flate),
         5: "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
     }
