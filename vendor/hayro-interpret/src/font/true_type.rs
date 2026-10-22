@@ -38,6 +38,10 @@ enum Kind {
 }
 
 impl TrueTypeFont {
+    pub(crate) fn is_substituted(&self) -> bool {
+        matches!(&self.kind, Kind::Standard(s) if s.is_fallback())
+    }
+
     pub(crate) fn new(
         dict: &Dict<'_>,
         font_resolver: &FontResolverFn,

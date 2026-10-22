@@ -5,7 +5,10 @@ use crate::font::{Font, PositionedGlyph, StandardFont};
 use crate::interpret::state::{ClipType, State, TextStateFont};
 use crate::ocg::OcgState;
 use crate::util::{BezPathExt, Float64Ext};
-use crate::{ClipPath, Device, DrawProps, FillRule, InterpreterSettings, Paint, StrokeProps};
+use crate::{
+    ClipPath, Device, DrawProps, FillRule, InterpreterSettings, InterpreterWarning, Paint,
+    StrokeProps,
+};
 use hayro_syntax::content::ops::Transform;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Name;
@@ -410,11 +413,19 @@ impl<'a> Context<'a> {
             font_cache
                 .entry(cache_key)
                 .or_insert_with(|| {
-                    Font::new(
+                    let font = Font::new(
                         font_dict,
                         &self.settings.font_resolver,
                         &self.settings.cmap_resolver,
-                    )
+                    );
+                    if self.settings.report_font_substitution
+                        && font.as_ref().is_some_and(Font::is_substituted)
+                    {
+                        (self.settings.warning_sink)(InterpreterWarning::FontSubstituted(
+                            font_dict.obj_id().map(ObjRef::from),
+                        ));
+                    }
+                    font
                 })
                 .clone()
         };

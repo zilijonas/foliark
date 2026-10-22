@@ -10,8 +10,8 @@ let queue: Promise<void> = Promise.resolve();
 /** The wasm facade still throws bare strings; NEW-27 replaces this with codes from `foliark-wasm`. */
 function fromWasm(e: unknown): FoliarkError {
   const message = e instanceof Error ? e.message : String(e);
-  if (/out of range|must be finite/.test(message)) return new FoliarkError("INVALID_ARGUMENT", message);
-  if (/exceeds/.test(message)) return new FoliarkError("LIMIT_EXCEEDED", message);
+  if (/InvalidArgument|out of range|must be finite/.test(message)) return new FoliarkError("INVALID_ARGUMENT", message);
+  if (/LimitExceeded|exceeds/.test(message)) return new FoliarkError("LIMIT_EXCEEDED", message);
   if (/unknown document handle/.test(message)) return new FoliarkError("DOCUMENT_GONE", message);
   if (/cannot open PDF/.test(message)) return new FoliarkError("MALFORMED_PDF", message);
   return asFoliarkError(e);
@@ -33,12 +33,11 @@ async function run(op: OpName, doc: string | undefined, a: Args): Promise<{ resu
     case "pages":
       return { result: Array.from({ length: wasm.pageCount(id) }, (_, i) => wasm.pageGeometry(id, i)) };
     case "renderPage": {
-      const r = wasm.renderPage(id, a.page, a.scale ?? 1);
-      const data = r.takeData().buffer as ArrayBuffer;
-      const scale = a.scale ?? 1;
-      const out = { width: r.width, height: r.height, scale, clip: { x: 0, y: 0, width: r.width / scale, height: r.height / scale }, complete: true, warnings: [], data };
+      const { page, ...options } = a;
+      const r = wasm.renderPage(id, page, options);
+      const out = { ...r.header, data: r.takeData().buffer as ArrayBuffer };
       r.free();
-      return { result: out, transfer: [data] };
+      return { result: out, transfer: [out.data] };
     }
     case "close":
       wasm.close(id);
