@@ -4,7 +4,7 @@
 //! report counts against a pikepdf count of the input.
 mod common;
 use common::{fidelity_oracle, fixture, objects_oracle, python, run, tmp};
-use foliark_engine::Engine;
+use foliark_engine::{Document, Engine, RenderOptions};
 use foliark_model::{
     AnnotationPolicy, ChangeSet, ErrorCode, ExportMode, ExportPlan, ExportPolicy, Limits, LossCode,
     PdfError, Rect, Redaction, SanitizedItem, SignedInputPolicy,
@@ -33,12 +33,17 @@ const ID: &str = "1 0 0 1 0 0";
 
 /// 300 x 400 page showing KEEP_PUBLIC; objects 6.. are `bodies`, `annots` the /Annots array.
 fn pdf(catalog: &str, annots: &str, bodies: &[String]) -> Vec<u8> {
+    pdf_on(catalog, "", annots, bodies)
+}
+
+/// `pdf` with `page` (for example `/Rotate 90`) added to the page dictionary.
+fn pdf_on(catalog: &str, page: &str, annots: &str, bodies: &[String]) -> Vec<u8> {
     let content = "BT /F1 12 Tf 20 370 Td (KEEP_PUBLIC) Tj ET";
     let mut objs = vec![
         format!("<< /Type /Catalog /Pages 2 0 R {catalog} >>"),
         "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_owned(),
         format!(
-            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> /Annots [{annots}] >>"
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> /Annots [{annots}] {page} >>"
         ),
         stream("", content),
         "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".to_owned(),
@@ -221,6 +226,102 @@ fn appearance_states_alternates_and_the_bbox_mapping() {
             "{key} survived"
         );
     }
+}
+
+#[test]
+fn a_no_rotate_note_keeps_its_upper_left_corner_and_stands_upright_on_a_rotated_page() {
+    // HDDN public-cropped-rotated (NEW-94): a /F 28 (NoRotate) note on a page turned 90, 180 or
+    // 270 degrees is drawn upright with the rectangle's upper-left corner fixed; the plain note
+    // beside it (/F 4) turns with the page. MuPDF renders the input with annotations on; the
+    // appearances are asymmetric colour boxes (MuPDF's text extraction ignores NoRotate).
+    let boxes = |w: &str, h: &str, small: &str| {
+        stream(
+            &format!("/Type /XObject /Subtype /Form /BBox [0 0 {w} {h}]"),
+            &format!("1 0 0 rg 0 0 {w} {h} re f 0 0 1 rg 0 0 {small} re f"),
+        )
+    };
+    let bodies = [
+        boxes("80", "20", "20 10"),
+        boxes("60", "30", "10 20"),
+        "<< /Type /Annot /Subtype /Text /Rect [150 200 230 220] /F 28 /AP << /N 6 0 R >> >>".into(),
+        "<< /Type /Annot /Subtype /Text /Rect [40 100 100 130] /F 4 /AP << /N 7 0 R >> >>".into(),
+    ];
+    for rotate in [90, 180, 270] {
+        let input = pdf_on("", &format!("/Rotate {rotate}"), "8 0 R 9 0 R", &bodies);
+        let (_, out) = export(&input, vec![], ExportPolicy::default()).unwrap();
+        let name = format!("norotate{rotate}");
+        let (ok, log) = fidelity_oracle(
+            "sanitize-interactive",
+            &name,
+            &input,
+            &out,
+            &[],
+            &["KEEP_PUBLIC"],
+        );
+        assert!(ok, "rotate {rotate}: {log}");
+        // The raster renderer (image-only export) draws the input's notes where flattening put
+        // them: both pages show the same pixels.
+        let draw = |bytes: &[u8]| {
+            let d = Document::open(bytes.to_vec(), None).unwrap();
+            d.render_page(0, RenderOptions::at(1.0)).unwrap().data
+        };
+        let (a, b) = (draw(&input), draw(&out));
+        let off = a
+            .iter()
+            .zip(&b)
+            .filter(|(x, y)| x.abs_diff(**y) > 32)
+            .count();
+        assert!(
+            off < a.len() / 1000,
+            "rotate {rotate}: {off} samples differ"
+        );
+    }
+}
+
+#[test]
+fn identical_notes_on_two_pages_stay_separate_objects_when_one_is_redacted() {
+    // HDDN public-cropped-rotated (NEW-94): flattening draws each note's appearance as its own
+    // Form. Two pages whose appearances are byte-equal must not merge into one object in the
+    // staged copy, or a redaction on one page would count as a shared survivor on the other and
+    // refuse the native export.
+    let note = form("0 0 80 20", ID, "SAME_NOTE");
+    let objs = vec![
+        "<< /Type /Catalog /Pages 2 0 R >>".to_owned(),
+        "<< /Type /Pages /Kids [3 0 R 8 0 R] /Count 2 >>".to_owned(),
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> /Annots [7 0 R] >>".to_owned(),
+        stream("", "BT /F1 12 Tf 20 370 Td (KEEP_PUBLIC) Tj ET"),
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".to_owned(),
+        note.clone(),
+        "<< /Type /Annot /Subtype /FreeText /Rect [20 300 100 320] /F 4 /AP << /N 6 0 R >> >>".to_owned(),
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> /Annots [10 0 R] >>".to_owned(),
+        note,
+        "<< /Type /Annot /Subtype /FreeText /Rect [20 300 100 320] /F 4 /AP << /N 9 0 R >> >>".to_owned(),
+    ];
+    let mut input = b"%PDF-1.7\n".to_vec();
+    let mut at = Vec::new();
+    for (i, o) in objs.iter().enumerate() {
+        at.push(input.len());
+        input.extend(format!("{} 0 obj\n{o}\nendobj\n", i + 1).bytes());
+    }
+    let xref = input.len();
+    input.extend(format!("xref\n0 {}\n0000000000 65535 f \n", objs.len() + 1).bytes());
+    for a in at {
+        input.extend(format!("{a:010} 00000 n \n").bytes());
+    }
+    input.extend(
+        format!(
+            "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n",
+            objs.len() + 1
+        )
+        .bytes(),
+    );
+    let (plan, _) = export(
+        &input,
+        vec![region("r1", 20.0, 80.0, 80.0, 20.0)],
+        ExportPolicy::default(),
+    )
+    .unwrap();
+    assert!(plan.report.redaction.shared_survivors.is_empty());
 }
 
 #[test]

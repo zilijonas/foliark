@@ -1,13 +1,13 @@
 {
   "name": "@zilijonas/foliark",
-  "version": "0.1.0",
-  "description": "Headless Rust/WASM PDF SDK: extract, render, redact, edit and export in a worker, nothing leaves the device.",
+  "version": "0.1.1",
+  "description": "Rust/WebAssembly PDF SDK for the browser: extract text, render, edit, redact and sanitize PDFs offline. A PyMuPDF alternative. AGPL-3.0.",
   "type": "module",
   "license": "AGPL-3.0-only",
   "author": "Linas Jonas Zilinskas",
   "homepage": "https://github.com/zilijonas/foliark#readme",
   "bugs": { "url": "https://github.com/zilijonas/foliark/issues" },
-  "keywords": ["pdf", "pdf-redaction", "pdf-editor", "sanitize", "wasm", "webassembly", "rust", "offline", "privacy"],
+  "keywords": ["pdf", "pdf-redaction", "redact", "pdf-editor", "pdf-text-extraction", "pdf-render", "pdf-sanitize", "webassembly", "wasm", "rust", "pymupdf-alternative", "privacy", "offline", "browser", "typescript"],
   "publishConfig": { "access": "public" },
   "repository": {
     "type": "git",

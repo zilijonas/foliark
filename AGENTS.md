@@ -48,6 +48,7 @@ Documents:
   - [0005](docs/adr/0005-strict-font-rebuild.md) strict export rebuilds every retained font
   - [0006](docs/adr/0006-content-hidden-data.md) content streams carry no hidden data (unknown operators, marked-content dicts)
   - [0007](docs/adr/0007-unused-resources.md) export keeps only resources surviving content uses
+  - [0010](docs/adr/0010-image-decode-bound-and-no-rotate.md) image streams bounded by their declared size; NoRotate annotations flatten upright
 
 ## 3. Commands
 

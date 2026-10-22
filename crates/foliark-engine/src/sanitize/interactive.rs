@@ -22,6 +22,7 @@ use std::fmt::Write as _;
 
 const HIDDEN: u32 = 2;
 const NO_VIEW: u32 = 32;
+const NO_ROTATE: u32 = 16;
 
 #[derive(Debug, Clone, PartialEq)]
 struct Draw {
@@ -115,8 +116,10 @@ fn normal<'a>(annot: &Dict<'a>) -> Option<Stream<'a>> {
 }
 
 /// PDF 12.5.5: `Matrix` followed by the scale and translation that fit the transformed `BBox`
-/// onto `Rect`. `None` for an appearance or rectangle with no area.
-fn placement(ap: &Stream<'_>, rect: &[f64]) -> Option<[f64; 6]> {
+/// onto `Rect`. `None` for an appearance or rectangle with no area. `upright` is the page's
+/// clockwise `/Rotate` for a `NoRotate` annotation: its appearance stays upright on the displayed
+/// page with the rectangle's upper-left corner (in the unrotated page) fixed (PDF 12.5.3).
+fn placement(ap: &Stream<'_>, rect: &[f64], upright: u16) -> Option<[f64; 6]> {
     let d = ap.dict();
     let b = nums(d.get::<Array<'_>>("BBox"), 4)?;
     let m = nums(d.get::<Array<'_>>("Matrix"), 6).unwrap_or(vec![1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
@@ -137,7 +140,13 @@ fn placement(ap: &Stream<'_>, rect: &[f64]) -> Option<[f64; 6]> {
     let (sx, sy) = ((rx1 - rx0) / tw, (ry1 - ry0) / th);
     let (ex, ey) = (rx0 - lo[0] * sx, ry0 - lo[1] * sy);
     // `Do` applies the Form's own `/Matrix` (step 3's `Matrix x A`), so only A is emitted.
-    Some([sx, 0.0, 0.0, sy, ex, ey])
+    let (ax, ay) = (rx0, ry1);
+    Some(match upright {
+        90 => [0.0, sx, -sy, 0.0, ax + hi[1] * sy, ay - lo[0] * sx],
+        180 => [-sx, 0.0, 0.0, -sy, ax + lo[0] * sx, ay + hi[1] * sy],
+        270 => [0.0, -sx, sy, 0.0, ax - hi[1] * sy, ay + lo[0] * sx],
+        _ => [sx, 0.0, 0.0, sy, ex, ey],
+    })
 }
 
 /// An inheritable field attribute: the widget's own, else the nearest ancestor's.
@@ -216,6 +225,7 @@ pub fn scan(doc: &Document, policy: &ExportPolicy) -> Scan {
         let Some(list) = page.raw().get::<Array<'_>>("Annots") else {
             continue;
         };
+        let rotation = doc.page_geometry(i).map_or(0, |g| g.rotation);
         for a in list.iter::<Dict<'_>>() {
             let kind = a.get::<Name<'_>>("Subtype");
             let kind = kind.as_ref().map(|n| n.as_str());
@@ -226,9 +236,17 @@ pub fn scan(doc: &Document, policy: &ExportPolicy) -> Scan {
             out.oc_hidden += u32::from(flagged && off);
             let shown = flagged && !off;
             let appearance = normal(&a);
+            let upright = if a.get::<u32>("F").unwrap_or(0) & NO_ROTATE != 0 {
+                rotation
+            } else {
+                0
+            };
             let place = appearance.as_ref().and_then(|ap| {
                 let rect = nums(a.get::<Array<'_>>("Rect"), 4)?;
-                Some((object_id(ap.obj_id().into()), placement(ap, &rect)?))
+                Some((
+                    object_id(ap.obj_id().into()),
+                    placement(ap, &rect, upright)?,
+                ))
             });
             if widget {
                 out.widgets += 1;

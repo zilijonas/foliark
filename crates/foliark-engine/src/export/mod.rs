@@ -365,6 +365,7 @@ pub fn prepare(
         None
     } else {
         let mut w = Writer::new(reader, limits.clone());
+        w.keep_duplicates();
         inter.apply(&mut w)?;
         vis.apply(&mut w);
         let bytes = w.write()?;

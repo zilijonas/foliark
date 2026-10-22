@@ -4,6 +4,24 @@ All notable changes to `@zilijonas/foliark` (named `@foliark/sdk` before 0.1.0 w
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-22
+
+Engine fixes from HDDN's public-corpus gate (NEW-94) and the npm page polish. Source: tag `v0.1.1`. Tarball and hashes: `docs/release/candidate.md`.
+
+### Fixed
+- A legitimate large scan imports: an image XObject is held to its declared size (width x height x components x bits, one predictor byte per row, never below `maxStreamDecodedBytes`) instead of the generic 128 MiB stream cap, so a 9000 x 9000 RGB scan (81 MP, 243 MB decoded) opens, renders and exports. `maxImagePixels` still refuses dimension bombs, the cap still stops a stream that inflates past its declaration, and the redaction image budget no longer double-counts against the stream cap (ADR 0010).
+- Annotations with the `NoRotate` flag (Text notes) are flattened upright with the upper-left corner of their rectangle fixed on a rotated page, as viewers draw them; they used to turn with the page and move (HDDN `public-cropped-rotated`, 0.67 to 0.78 percent of pixels changed on three pages, now 0.14 to 0.18) (ADR 0010).
+- Opening a file no longer holds a Flate-only image in memory just to measure it: the budget scan counts the inflated bytes in a fixed buffer (the 81 MP scan opened at +524 MB of memory, now +17 MB).
+- The first draw of that scan peaks at +230 MB instead of +510 MB: the Flate decoder allocates an image's expected size once instead of doubling (hayro P21).
+- Native export no longer refuses with a shared-content error when two pages carry byte-equal annotation appearances and one page is redacted: the staged copy keeps flattened appearances apart (they were merged by object deduplication).
+- The raster renderer places annotation appearances with the origin scaled with the box and honours `NoRotate` the same way (hayro patch P20); image-only export of rotated pages showed the same note displacement.
+- Regression tests: edge-straddling text, fill and image keep their pixels on every page rotation while wholly outside content goes (`sanitize_visibility.rs`); NoRotate notes against MuPDF at 90, 180 and 270 degrees (`sanitize_interactive.rs`); the 81 MP scan and the lying-stream bomb (`resource_limits.rs`).
+
+### Changed
+- npm package page: new `README.md` with the logo, the HDDN story, the measured comparison with its context and caveats, a feature list, quick start, browser support and licensing, and a not-affiliated note for PyMuPDF and MuPDF.
+- `package.json`: new `description` and `keywords`; version 0.1.1.
+- Repository `README.md` carries the same story and pitch; the stale wasm size in the package README is corrected to 5.8 MB raw, 2.2 MB gzip.
+
 ## [0.1.0] - 2026-10-22
 
 First public release, `@zilijonas/foliark`, AGPL-3.0-only with separate commercial licensing (`LICENSING.md`, `COMMERCIAL-LICENSING.md`). Source: tag `v0.1.0` of https://github.com/zilijonas/foliark. Candidate tarball, hashes and checks: `docs/release/candidate.md`.
@@ -37,4 +55,5 @@ First public release, `@zilijonas/foliark`, AGPL-3.0-only with separate commerci
 - See `docs/support-matrix.md` for every row and its evidence.
 
 [Unreleased]: docs/release/process.md
+[0.1.1]: docs/release/candidate.md
 [0.1.0]: docs/release/candidate.md

@@ -98,6 +98,13 @@ impl Document {
                         budget.charge_pixels(limits::image_pixels(&self.limits, w, h)?)?;
                     }
                     if !is_image_codec(&s) {
+                        if name_is(d, "Subtype", "Image") {
+                            match limits::count_flate_image(&s, &self.limits, &mut budget) {
+                                Some(Err(e)) => return Err(e),
+                                Some(Ok(())) => continue,
+                                None => {}
+                            }
+                        }
                         match limits::decode_stream(&s, obj, &self.limits, &mut budget) {
                             Err(e) if e.code == ErrorCode::DecodeFailed => {}
                             Ok(_) => {}
