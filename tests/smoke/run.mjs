@@ -58,6 +58,11 @@ try {
   assert.equal(r.exported.length, r.exported.planLength);
   assert.equal(r.exported.text.trim(), "Hello Foliark", "native export reopens with its text");
   assert.equal(r.exported.consumed, "PLAN_CONSUMED");
+  const x = r.editExport;
+  assert.deepEqual(x.previewLines, ["ąčęėįšųūž testing", "Žaliasis rašalas"]);
+  assert.ok(x.fingerprintsEqual && x.all, `edit preview vs export: ${JSON.stringify(x)}`);
+  assert.ok(Math.max(...x.dx, ...x.dy) < 0.6, `export glyphs off the preview's placements: ${JSON.stringify(x)}`);
+  console.log(`smoke ${name}: layoutEdit ${x.calls} calls, median ${x.medianMs.toFixed(2)} ms, p95 ${x.p95Ms.toFixed(2)} ms, max ${x.maxMs.toFixed(2)} ms (with glyph boxes, worker round trip)`);
   console.log(`smoke ${name}: ok (${r.width}x${r.height}, ${r.nonWhite} non-white px)`);
 
   // Hard recovery in a real worker: a synchronous call that never returns is terminated by the watchdog.

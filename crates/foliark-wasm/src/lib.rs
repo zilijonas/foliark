@@ -278,6 +278,25 @@ impl Engine {
         Ok(out)
     }
 
+    /// ADR 0004: the layout an edit would commit, nothing committed.
+    #[wasm_bindgen(js_name = layoutEdit)]
+    pub fn layout_edit(
+        &mut self,
+        doc: &str,
+        page: u32,
+        rects: JsValue,
+        text: &str,
+        font: Option<String>,
+        glyphs: Option<bool>,
+    ) -> Result<JsValue, JsValue> {
+        let rects: Vec<Rect> = required(rects)?;
+        let p = self
+            .inner
+            .layout_edit(doc, page, rects, text, font, glyphs.unwrap_or(false))
+            .map_err(err)?;
+        to_js(&p)
+    }
+
     /// The export bytes as an owned copy; frees the plan.
     #[wasm_bindgen(js_name = takeExport)]
     pub fn take_export(&mut self, doc: &str, plan_id: &str) -> Result<Vec<u8>, JsValue> {

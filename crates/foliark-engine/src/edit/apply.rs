@@ -12,6 +12,7 @@
 //! from a fresh writer, so a font used by several edits is embedded once per edit.
 //!
 //! Any edit that cannot apply rejects the whole list; nothing is kept.
+use super::preview::{Planned, plan_edit};
 use crate::document::{Applied, EditApplier, EditContext};
 use crate::export::preflight::annotations;
 use crate::redaction::plan::RedactionPlan;
@@ -23,7 +24,7 @@ use crate::{Binding, Committed, Document, StoredRedaction};
 use foliark_model::{
     EditLayout, ErrorCode, ErrorDetails, PdfError, Rect, RejectedChange, RunSource, TextEdit,
 };
-use foliark_text::{FontFace, Ladder, LayoutParams, layout_paragraph, normalize};
+use foliark_text::FontFace;
 use hayro::hayro_syntax::object::Dict;
 use std::collections::BTreeSet;
 
@@ -117,36 +118,13 @@ fn apply_one(
     ctx: &EditContext<'_>,
 ) -> Result<(Vec<u8>, EditLayout), PdfError> {
     let page = e.page_index as usize;
-    let p = doc.prepare(
-        page,
-        &e.rects,
-        e.font.as_deref(),
-        false,
-        ctx.fonts,
-        ctx.font_match,
-    )?;
+    let Planned {
+        prepared: p,
+        text,
+        laid,
+    } = plan_edit(doc, page, &e.rects, e.font.as_deref(), &e.text, ctx)?;
     let info = &p.info;
-    let text = normalize(&e.text)?;
-    let ladder = Ladder {
-        registry: ctx.fonts,
-        caller: e.font.as_deref(),
-        source: p.source.as_ref().map(|s| s as &dyn FontFace),
-        source_name: &p.source_name,
-        flags: p.flags,
-        font_match: ctx.font_match,
-    };
-    let plan = layout_paragraph(
-        &text,
-        &LayoutParams {
-            font_size: info.font_size,
-            wrap_width: info.wrap_width,
-            max_lines: info.max_lines,
-            line_step: info.line_step,
-            first_baseline: info.first_baseline,
-            origin_x: info.origin_x,
-        },
-        &ladder,
-    )?;
+    let plan = laid.fit()?;
 
     // Remove the selected clusters. The glyphs the new text reuses from the source font must
     // count as survivors, or removal would empty their outlines.

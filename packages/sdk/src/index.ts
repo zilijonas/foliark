@@ -3,6 +3,10 @@ export type { Foliark, FoliarkOptions, OpenOptions, ResetReason } from "./client
 export type {
   DocumentHandle, ExportOptions, ExtractTextOptions, RenderedPage, RenderOptions, SearchOptions,
 } from "./document.js";
+export { isCurrentPreview } from "./layout.js";
+export type { EditPreview } from "./generated/EditPreview.js";
+export type { PreviewGlyph } from "./generated/PreviewGlyph.js";
+export type { PreviewLine } from "./generated/PreviewLine.js";
 export { FoliarkError } from "./protocol.js";
 export type { Capabilities } from "./generated/Capabilities.js";
 export type { ChangeResult } from "./generated/ChangeResult.js";

@@ -3,13 +3,13 @@
 //! handles. Ops that are not built yet return the typed refusal in [`not_built`].
 use crate::cache::DOC_CACHE_BYTES;
 use crate::document::{Binding, Committed, EditApplier, EditContext, Session};
-use crate::edit::ParagraphApplier;
+use crate::edit::{ParagraphApplier, layout_edit};
 use crate::export::{self, Held};
 use crate::{Document, RenderOptions, RenderedPage};
 use foliark_model::{
-    Capabilities, ChangeResult, ChangeSet, DocumentInfo, ErrorCode, ErrorDetails, ExportMode,
-    ExportPlan, ExportPolicy, ExtractOptions, FontMatchRule, FontSource, Hit, Limits, PageGeometry,
-    ParagraphInfo, PdfError, Phase, Point, Progress, Rect, RegisteredFont, SearchHit,
+    Capabilities, ChangeResult, ChangeSet, DocumentInfo, EditPreview, ErrorCode, ErrorDetails,
+    ExportMode, ExportPlan, ExportPolicy, ExtractOptions, FontMatchRule, FontSource, Hit, Limits,
+    PageGeometry, ParagraphInfo, PdfError, Phase, Point, Progress, Rect, RegisteredFont, SearchHit,
     SearchOptions, TextPage, TextRange,
 };
 use foliark_text::Registry;
@@ -425,6 +425,43 @@ impl Engine {
         info.doc_id = doc.to_owned();
         info.revision = s.revision;
         Ok(info)
+    }
+
+    /// ADR 0004: the layout `apply_changes` would commit for one edit of the selection `rects`
+    /// make, with nothing committed or changed. Refuses as `apply_changes` would, except that
+    /// text that does not fit comes back with `fits: false`.
+    pub fn layout_edit(
+        &self,
+        doc: &str,
+        page: u32,
+        rects: Vec<Rect>,
+        text: &str,
+        font: Option<String>,
+        glyphs: bool,
+    ) -> Result<EditPreview, PdfError> {
+        let flat: Vec<f64> = rects
+            .iter()
+            .flat_map(|r| [r.x, r.y, r.width, r.height])
+            .collect();
+        finite(&flat)?;
+        let s = self.get(doc)?;
+        let ctx = EditContext {
+            limits: &self.limits,
+            fonts: &self.fonts,
+            font_match: &self.font_match,
+        };
+        let mut p = layout_edit(
+            s.doc(),
+            page as usize,
+            &rects,
+            font.as_deref(),
+            text,
+            glyphs,
+            &ctx,
+        )?;
+        p.doc_id = doc.to_owned();
+        p.revision = s.revision;
+        Ok(p)
     }
 
     /// Spec §4: atomic at `changes.base_revision`. A stale base is `STALE_REVISION`; item

@@ -42,8 +42,39 @@
     const consumed = await doc.export(plan).then(() => "none", (e) => e.code);
     const refused = await doc.prepareExport({ mode: "raster" }).then(() => "none", (e) => e.code);
     await doc.close();
+    // Edit preview in a real worker: per-keystroke latency (worker round trip included), and the preview's lines
+    // against what the export of the same edit shows when the exported file is read back.
+    const sans = new Uint8Array(await (await fetch("/crates/foliark-text/tests/data/LiberationSans-Regular.ttf")).arrayBuffer());
+    await foliark.registerFonts([{ bytes: sans, family: "Liberation Sans", weight: 400, style: "normal" }]);
+    const edoc = await foliark.open(new Uint8Array(await (await fetch("/tests/fixtures/hddn/shared-image.pdf")).arrayBuffer()));
+    const sec = (await edoc.extractText(0)).words.find((w) => w.text === "SECRET_SHARED_IMAGE").box;
+    const rects = [{ x: sec.x - 1, y: sec.y - 1, width: sec.width + 2, height: sec.height + 2 }];
+    const typed = "Žaliasis rašalas ąčęėįšųūž ".repeat(2) + "testing one two";
+    const ms = [];
+    for (let n = 1; n <= typed.length; n++) {
+      const t0 = performance.now();
+      await edoc.layoutEdit(0, rects, typed.slice(0, n), { glyphs: true });
+      ms.push(performance.now() - t0);
+    }
+    ms.sort((a, b) => a - b);
+    const preview = await edoc.layoutEdit(0, rects, "ąčęėįšųūž testing\nŽaliasis rašalas", { glyphs: true });
+    const commit = await edoc.applyChanges({ baseRevision: 0, textEdits: [{ id: "e", pageIndex: 0, rects, text: "ąčęėįšųūž testing\nŽaliasis rašalas" }] });
+    const exportedEdit = await foliark.open(await edoc.export(await edoc.prepareExport({ mode: "native" })));
+    const words = (await exportedEdit.extractText(0)).words;
+    const lineWords = preview.lines.map((l) => l.text.split(" "));
+    const flat = lineWords.flat();
+    const found = flat.map((w) => words.find((x) => x.text === w));
+    const editExport = {
+      previewLines: preview.lines.map((l) => l.text), fingerprintsEqual: preview.fingerprint === commit.layouts[0].fingerprint,
+      exportedWords: words.map((w) => w.text).filter((t) => flat.includes(t)), all: found.every(Boolean),
+      // Same line breaks and starts: the exported words sit on the preview's baselines and the first of each line at its x.
+      dx: preview.lines.map((l, i) => Math.abs(found[lineWords.slice(0, i).flat().length].box.x - l.x)),
+      dy: lineWords.flatMap((ws, i) => ws.map((_, j) => Math.abs(found[lineWords.slice(0, i).flat().length + j].box.y + found[0].box.height * 0.8 - preview.lines[i].baseline))),
+      calls: ms.length, medianMs: ms[ms.length >> 1], p95Ms: ms[Math.floor(ms.length * 0.95)], maxMs: ms[ms.length - 1],
+    };
     await foliark.dispose();
     Object.assign(out, {
+      editExport,
       ok: true, pageCount: info.pageCount, pdfVersion: info.pdfVersion,
       fixture: { pages: fixtureInfo.pageCount, text: text.text, hits: hits.length, sliced, render: [fixtureRender.width, fixtureRender.height, fixtureRender.data.length], closedCode },
       refused, exported: { length: exported.byteLength, planLength: plan.byteLength, text: exportedText, consumed }, helloText: await helloText, geometry, width: page.width, height: page.height,

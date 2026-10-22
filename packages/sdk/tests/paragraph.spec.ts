@@ -42,7 +42,7 @@ describe("paragraph edits", () => {
 
     const r = await doc.applyChanges({ baseRevision: 0, textEdits: [{ id: "e1", pageIndex: 0, rects, text: "ąčęėįšųūž", font: font.id }] });
     expect(r).toMatchObject({ accepted: true, revision: 1, changedPages: [0] });
-    expect(r.layouts).toEqual([{ id: "e1", lines: 1, approximate: true, runs: [{ source: "registered", font: font.id, clusters: 9 }] }]);
+    expect(r.layouts).toEqual([{ id: "e1", lines: 1, approximate: true, fingerprint: expect.stringMatching(/^[0-9a-f]{16}$/), runs: [{ source: "registered", font: font.id, clusters: 9 }] }]);
     const page = await doc.extractText(0);
     expect(page.revision).toBe(1);
     expect(page.text).toContain("ąčęėįšųūž");

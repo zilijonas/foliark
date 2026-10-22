@@ -112,6 +112,8 @@ export function createWorkerCore(host: WorkerHost, stepBudget = STEP_BUDGET) {
         r.editorFace.bytes = ownBuffer(r.editorFace.bytes);
         return { result: r, transfer: [r.editorFace.bytes] };
       }
+      case "layoutEdit":
+        return { result: e.layoutEdit(d, a.page, a.rects, a.text, a.font, a.glyphs) };
       case "export": {
         const bytes = ownBuffer(e.takeExport(d, a.planId));
         return { result: bytes, transfer: [bytes] };
