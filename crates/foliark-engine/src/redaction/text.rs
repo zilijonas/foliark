@@ -23,8 +23,8 @@ use super::forms::Targets;
 use super::plan::{PlannedCluster, RedactionPlan};
 use crate::Document;
 use crate::limits::{self, Budget};
-use crate::writer::Writer;
 use crate::writer::fonts::{self, Program};
+use crate::writer::{Writer, string_token};
 use foliark_model::{ErrorCode, ObjectId, PdfError};
 use hayro::hayro_syntax::content::UntypedIter;
 use hayro::hayro_syntax::object::{Dict, Name, Object, ObjectIdentifier, Stream};
@@ -157,10 +157,15 @@ fn code_width(doc: &Document, font: ObjectId) -> Result<usize, PdfError> {
     Ok(1)
 }
 
-/// Thousandths of an em, never in exponent form.
-fn num(v: f64) -> String {
-    let s = format!("{v:.5}");
-    let s = s.trim_end_matches('0').trim_end_matches('.');
+/// `v` to `places` decimals, trailing zeros dropped, never in exponent form.
+pub(crate) fn num(v: f64, places: usize) -> String {
+    let s = format!("{v:.places$}");
+    let s = if s.contains('.') {
+        s.trim_end_matches('0')
+    } else {
+        &s
+    };
+    let s = s.trim_end_matches('.');
     if s.is_empty() || s == "-0" {
         "0".into()
     } else {
@@ -180,17 +185,14 @@ impl Tj {
     fn flush_string(&mut self) {
         if !self.buf.is_empty() {
             self.flush_shift();
-            self.out.push('<');
-            for b in self.buf.drain(..) {
-                let _ = write!(self.out, "{b:02X}");
-            }
-            self.out.push('>');
+            self.out.push_str(&string_token(&self.buf));
+            self.buf.clear();
         }
     }
 
     fn flush_shift(&mut self) {
         if self.pending.abs() > 1e-9 {
-            let _ = write!(self.out, " {} ", num(self.pending));
+            let _ = write!(self.out, " {} ", num(self.pending, 3));
         }
         self.pending = 0.0;
     }
@@ -217,7 +219,11 @@ fn rewrite(
         (b"Tj", [s]) => (String::new(), vec![(*s).clone()]),
         (b"'", [s]) => ("T*\n".into(), vec![(*s).clone()]),
         (b"\"", [Object::Number(aw), Object::Number(ac), s]) => (
-            format!("{} Tw\n{} Tc\nT*\n", num(aw.as_f64()), num(ac.as_f64())),
+            format!(
+                "{} Tw\n{} Tc\nT*\n",
+                num(aw.as_f64(), 5),
+                num(ac.as_f64(), 5)
+            ),
             vec![(*s).clone()],
         ),
         (b"TJ", [Object::Array(a)]) => (String::new(), a.iter::<Object<'_>>().collect()),

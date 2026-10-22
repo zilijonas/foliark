@@ -445,8 +445,8 @@ fn name_val(n: &[u8]) -> Val {
     Val::Name(n.to_vec())
 }
 
-fn deflate(data: &[u8]) -> Vec<u8> {
-    let mut z = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+pub(super) fn deflate(data: &[u8]) -> Vec<u8> {
+    let mut z = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::best());
     z.write_all(data).expect("write to Vec");
     z.finish().expect("write to Vec")
 }
@@ -1255,6 +1255,10 @@ impl<'a> Walk<'a> {
         }
         self.drain()?;
         self.nodes.sort_by_key(|n| n.id.get());
+        let mut refs = refs;
+        if !self.preserve {
+            super::shrink::shrink(&mut self.nodes, &mut refs)?;
+        }
         Ok(refs)
     }
 

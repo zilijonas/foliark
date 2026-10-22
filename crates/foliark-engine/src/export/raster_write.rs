@@ -20,7 +20,7 @@ use foliark_model::{
     EditsReport, ExportMode, ExportReport, ExtractOptions, Flattened, KeptReport, Limits, PdfError,
     RedactionReport,
 };
-use pdf_writer::{Content, Filter, Finish, Name, Pdf, Rect, Ref};
+use pdf_writer::{Content, Filter, Finish, Name, Pdf, Rect, Ref, Settings};
 use std::io::Write;
 
 /// One page's image, ready to place.
@@ -54,7 +54,7 @@ pub fn encode(px: &Pixels) -> Result<Encoded, PdfError> {
 
 /// The file: catalog 1, page tree 2, then page / contents / image per page.
 pub fn assemble(pages: &[(PageSpec, Encoded)]) -> Vec<u8> {
-    let mut pdf = Pdf::new();
+    let mut pdf = Pdf::with_settings(Settings { pretty: false });
     pdf.catalog(Ref::new(1)).pages(Ref::new(2));
     let page_ref = |i: usize| Ref::new(3 + 3 * i as i32);
     pdf.pages(Ref::new(2))

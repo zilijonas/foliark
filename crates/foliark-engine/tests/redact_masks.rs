@@ -358,10 +358,12 @@ fn every_occurrence_erased_leaves_only_clones_and_no_original() {
     assert!(out.plan.report.shared_survivors.is_empty());
     let s = samples(&out.path);
     let all = s["all"].as_array().unwrap();
-    assert_eq!(
-        all.len(),
-        3,
-        "three clones, the original is not in the file"
+    // Clones erased the same way are one object, so up to three images; an original would have no
+    // erased pixel and fail the loop below.
+    assert!(
+        (1..=3).contains(&all.len()),
+        "only clones are in the file: {}",
+        all.len()
     );
     for im in all {
         assert!(

@@ -26,8 +26,9 @@
  "notes": [
   "Frozen from the numbers above by: node tools/bench/check-budgets.mjs --derive <fresh files>. Rule (also in RULE in the script): timings max = ceil(measured x 1.5 + 3 ms); download and wasm bytes x 1.05; wasm linear memory x 1.25.",
   "Observed run-to-run spread between the two chromium runs: at most 10% on medians above 5 ms, so 50% headroom catches a real slowdown (about 1.5x) and not a noisy neighbour; the check takes the best median of every fresh file passed.",
-  "Not budgeted: whole-browser RSS (process tree, noisy, WebKit value misses helper processes), p95, exported file sizes, HDDN numbers (comparison.json holds them), scanned-page numbers for any browser other than chromium and webkit.",
-  "image-heavy render/page and scan repeat budgets are cached-render numbers (second and later draw); the first draw is budgeted separately and is the number to quote for a cold page."
+  "Not budgeted: whole-browser RSS (process tree, noisy, WebKit value misses helper processes), p95, HDDN numbers (comparison.json holds them), scanned-page numbers for any browser other than chromium and webkit.",
+  "image-heavy render/page and scan repeat budgets are cached-render numbers (second and later draw); the first draw is budgeted separately and is the number to quote for a cold page.",
+  "exportBytes (NEW-83): Foliark native export size for the keyword flow of tools/bench/export-size.py (most frequent 4+ letter word redacted with a black fill), max = ceil(measured x 1.05). Deterministic bytes, no browser: `tests/oracles/.venv/bin/python tools/bench/export-size.py --check` after `cargo build --release -p foliark-engine --example export_size`. The table against PyMuPDF is in docs/performance/comparison.md."
  ],
  "wasm": {
   "gzipBytes": {
@@ -833,6 +834,26 @@
    "kind": "timeMs",
    "measured": 26.6,
    "max": 43
+  }
+ ],
+ "exportBytes": [
+  {
+   "id": "native-30p",
+   "keyword": "alpha",
+   "measured": 27500,
+   "max": 28875
+  },
+  {
+   "id": "hddn/unicode-glyph-widths",
+   "keyword": "unicode",
+   "measured": 8102,
+   "max": 8508
+  },
+  {
+   "id": "hddn/shared-image",
+   "keyword": "image",
+   "measured": 3654,
+   "max": 3837
   }
  ]
 }

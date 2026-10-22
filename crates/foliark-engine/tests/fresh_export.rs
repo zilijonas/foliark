@@ -4,7 +4,8 @@
 //! never by the engine's own reader.
 mod common;
 use common::{
-    Font, bin_stream, fixture, has, objects_oracle, pdf_bytes, python, repo, run, tiny_pdf_bin, tmp,
+    Font, bin_stream, fixture, has, objects_oracle, pdf_bytes, python, repo, run, stream,
+    tiny_pdf_bin, tmp,
 };
 use foliark_engine::{Document, Engine};
 use foliark_model::{
@@ -424,4 +425,78 @@ fn a_large_source_stream_is_refused_before_it_is_copied_into_the_output() {
     let (mut e, doc) = engine(Limits::default(), &pdf, None).unwrap();
     let (_, out) = export(&mut e, &doc).unwrap();
     assert_fresh(&out, "big-stream");
+}
+
+#[test]
+fn a_pages_content_streams_become_one_and_identical_objects_one() {
+    // Two pages, each `/Contents` split at token boundaries over three streams, each with its own
+    // copy of the same resources and Helvetica. The output keeps one content stream per page,
+    // one resources dictionary and one font, numbered 1..N, and the words still read.
+    const HELV: &str = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>";
+    let page = |content: u32, res: u32| {
+        format!(
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Resources {res} 0 R /Contents [{} 0 R {} 0 R {} 0 R] >>",
+            content,
+            content + 1,
+            content + 2
+        )
+    };
+    let parts = |text: &str| {
+        [
+            stream("", "BT /F1 12 Tf"),
+            stream("", &format!("20 300 Td ({text}) Tj")),
+            stream("", "ET"),
+        ]
+    };
+    // 1 catalog, 2 tree, 3 and 4 pages, 5-7 and 11-13 content parts, 8 and 9 resources, 10 and 14
+    // two copies of one Helvetica.
+    let mut objs = vec![
+        "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
+        "<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>".into(),
+        page(5, 8),
+        page(11, 9),
+    ];
+    objs.extend(parts("FIRST_WORDS"));
+    objs.extend([
+        "<< /Font << /F1 10 0 R >> >>".into(),
+        "<< /Font << /F1 14 0 R >> >>".into(),
+        HELV.into(),
+    ]);
+    objs.extend(parts("SECOND_WORDS"));
+    objs.push(HELV.into());
+    let mut pdf = String::from("%PDF-1.7\n");
+    let mut at = Vec::new();
+    for (i, o) in objs.iter().enumerate() {
+        at.push(pdf.len());
+        pdf += &format!("{} 0 obj\n{o}\nendobj\n", i + 1);
+    }
+    let xref = pdf.len();
+    pdf += &format!("xref\n0 {}\n0000000000 65535 f \n", at.len() + 1);
+    for h in &at {
+        pdf += &format!("{h:010} 00000 n \n");
+    }
+    pdf += &format!(
+        "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n",
+        at.len() + 1
+    );
+    let out = sanitize_only(pdf.as_bytes(), None);
+    assert_fresh(&out, "split contents");
+    assert_eq!(count(&out, "\nstream\n"), 2, "one content stream per page");
+    assert_eq!(count(&out, "/Helvetica"), 1, "one font");
+    assert_eq!(
+        object_heads(&out).len(),
+        8,
+        "catalog, tree, 2 pages, 2 contents, resources, font"
+    );
+    let p = tmp("fresh_export", "split-contents.pdf");
+    std::fs::write(&p, &out).unwrap();
+    let (ok, text) = python(&[
+        "-c",
+        "import sys, fitz; print([pg.get_text().strip() for pg in fitz.open(sys.argv[1])])",
+        p.to_str().unwrap(),
+    ]);
+    assert!(
+        ok && text.contains("['FIRST_WORDS', 'SECOND_WORDS']"),
+        "{text}"
+    );
 }

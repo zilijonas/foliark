@@ -144,7 +144,11 @@ fn normalize(src: &[u8], out: &mut Vec<u8>) {
             }
         };
         let token = &src[i..end];
-        out.extend_from_slice(token);
+        if b == b'<' && token.len() > 1 && token[1] != b'<' {
+            out.extend_from_slice(&hex_token(token));
+        } else {
+            out.extend_from_slice(token);
+        }
         i = end;
         if token == b"ID" && out[start..].starts_with(b"BI") {
             // One whitespace byte, then the image data up to the final `EI` when only
@@ -158,6 +162,48 @@ fn normalize(src: &[u8], out: &mut Vec<u8>) {
             out.extend_from_slice(&src[data_start.min(ei)..ei]);
             return;
         }
+    }
+}
+
+/// A string operand as hex or literal, whichever is shorter (ties literal: text compresses better
+/// than hex digits); always ASCII.
+pub(crate) fn string_token(bytes: &[u8]) -> String {
+    let mut lit = String::from("(");
+    for &b in bytes {
+        match b {
+            b'(' | b')' | b'\\' => {
+                lit.push('\\');
+                lit.push(b as char);
+            }
+            0x20..=0x7e => lit.push(b as char),
+            _ => lit.push_str(&format!("\\{b:03o}")),
+        }
+    }
+    lit.push(')');
+    if lit.len() <= 2 * bytes.len() + 2 {
+        return lit;
+    }
+    let hex: String = bytes.iter().map(|b| format!("{b:02X}")).collect();
+    format!("<{hex}>")
+}
+
+/// `<...>` hex string token as the shorter of `string_token`; anything that is not plain hex
+/// digits and whitespace stays as written.
+fn hex_token(token: &[u8]) -> Vec<u8> {
+    let digits: Option<Vec<u8>> = token[1..token.len().saturating_sub(1)]
+        .iter()
+        .filter(|b| !WS.contains(b))
+        .map(|&b| (b as char).to_digit(16).map(|d| d as u8))
+        .collect();
+    match digits {
+        Some(d) if token.last() == Some(&b'>') => {
+            let bytes: Vec<u8> = d
+                .chunks(2)
+                .map(|c| c[0] << 4 | c.get(1).copied().unwrap_or(0))
+                .collect();
+            string_token(&bytes).into_bytes()
+        }
+        _ => token.to_vec(),
     }
 }
 

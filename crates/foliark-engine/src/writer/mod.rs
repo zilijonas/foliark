@@ -3,14 +3,16 @@
 //! rewrite operator spans, clone Forms and re-encode images through the substitution API.
 use crate::{limits, reader};
 use foliark_model::{ErrorCode, Limits, ObjectId, PdfError};
-use pdf_writer::{Name, Null, Obj, Pdf, Ref, Str};
+use pdf_writer::{Name, Null, Obj, Pdf, Ref, Settings, Str};
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Range;
 
 mod content;
 pub use content::reemit;
+pub(crate) use content::string_token;
 pub mod fonts;
 mod graph;
+mod shrink;
 pub mod text;
 
 /// Span substitutions per content stream: decoded byte range and replacement operators.
@@ -344,7 +346,7 @@ impl<'d> Writer<'d> {
             [&self.page_fonts, &self.page_xobjects],
             &self.dropped_xobjects,
         )?;
-        let mut pdf = Pdf::new();
+        let mut pdf = Pdf::with_settings(Settings { pretty: false });
         if !self.preserve {
             pdf.catalog(Ref::new(1)).pages(Ref::new(2));
             pdf.pages(Ref::new(2))
