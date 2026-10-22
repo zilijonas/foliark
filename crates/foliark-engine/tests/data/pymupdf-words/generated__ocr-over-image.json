@@ -1,0 +1,35 @@
+{
+ "fixture": "generated/ocr-over-image.pdf",
+ "pages": [
+  {
+   "width": 300.0,
+   "height": 400.0,
+   "words": [
+    {
+     "box": [
+      20.0,
+      29.046579360961914,
+      201.2860107421875,
+      43.04657745361328
+     ],
+     "text": "KEEP_PUBLIC_OCR_PAGE",
+     "block": 1,
+     "line": 0,
+     "word": 0
+    },
+    {
+     "box": [
+      45.0,
+      135.61135864257812,
+      164.3520050048828,
+      147.61135864257812
+     ],
+     "text": "SECRET_OCR_TEXT",
+     "block": 0,
+     "line": 0,
+     "word": 0
+    }
+   ]
+  }
+ ]
+}

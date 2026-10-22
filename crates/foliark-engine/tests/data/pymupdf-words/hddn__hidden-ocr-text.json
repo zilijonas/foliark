@@ -1,0 +1,47 @@
+{
+ "fixture": "hddn/hidden-ocr-text.pdf",
+ "pages": [
+  {
+   "width": 600.0,
+   "height": 800.0,
+   "words": [
+    {
+     "box": [
+      72.0,
+      50.61135482788086,
+      277.3799743652344,
+      62.61135482788086
+     ],
+     "text": "KEEP_PUBLIC_HIDDEN_OCR_TEXT",
+     "block": 0,
+     "line": 0,
+     "word": 0
+    },
+    {
+     "box": [
+      72.0,
+      140.61135864257812,
+      244.01998901367188,
+      152.61135864257812
+     ],
+     "text": "SECRET_HIDDEN_OCR_TEXT",
+     "block": 1,
+     "line": 0,
+     "word": 0
+    },
+    {
+     "box": [
+      72.0,
+      230.61135864257812,
+      218.03997802734375,
+      242.61135864257812
+     ],
+     "text": "SECRET_INVISIBLE_OCR",
+     "block": 2,
+     "line": 0,
+     "word": 0
+    }
+   ]
+  }
+ ]
+}

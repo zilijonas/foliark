@@ -1,0 +1,125 @@
+{
+ "fixture": "hddn/rotation-crop.pdf",
+ "pages": [
+  {
+   "width": 560.0,
+   "height": 740.0,
+   "words": [
+    {
+     "box": [
+      52.0,
+      20.61135482788086,
+      244.0479736328125,
+      32.61135482788086
+     ],
+     "text": "KEEP_PUBLIC_ROTATION_CROP",
+     "block": 0,
+     "line": 0,
+     "word": 0
+    },
+    {
+     "box": [
+      52.0,
+      110.6113510131836,
+      210.68798828125,
+      122.6113510131836
+     ],
+     "text": "SECRET_ROTATION_CROP",
+     "block": 1,
+     "line": 0,
+     "word": 0
+    }
+   ]
+  },
+  {
+   "width": 740.0,
+   "height": 560.0,
+   "words": [
+    {
+     "box": [
+      707.388671875,
+      52.0,
+      719.388671875,
+      244.0479736328125
+     ],
+     "text": "KEEP_PUBLIC_ROTATION_CROP",
+     "block": 0,
+     "line": 0,
+     "word": 0
+    },
+    {
+     "box": [
+      617.388671875,
+      52.0,
+      629.388671875,
+      210.68798828125
+     ],
+     "text": "SECRET_ROTATION_CROP",
+     "block": 1,
+     "line": 0,
+     "word": 0
+    }
+   ]
+  },
+  {
+   "width": 560.0,
+   "height": 740.0,
+   "words": [
+    {
+     "box": [
+      315.9520263671875,
+      707.388671875,
+      508.0,
+      719.388671875
+     ],
+     "text": "KEEP_PUBLIC_ROTATION_CROP",
+     "block": 0,
+     "line": 0,
+     "word": 0
+    },
+    {
+     "box": [
+      349.31201171875,
+      617.388671875,
+      508.0,
+      629.388671875
+     ],
+     "text": "SECRET_ROTATION_CROP",
+     "block": 1,
+     "line": 0,
+     "word": 0
+    }
+   ]
+  },
+  {
+   "width": 740.0,
+   "height": 560.0,
+   "words": [
+    {
+     "box": [
+      20.61135482788086,
+      315.9520263671875,
+      32.61135482788086,
+      508.0
+     ],
+     "text": "KEEP_PUBLIC_ROTATION_CROP",
+     "block": 0,
+     "line": 0,
+     "word": 0
+    },
+    {
+     "box": [
+      110.6113510131836,
+      349.31201171875,
+      122.6113510131836,
+      508.0
+     ],
+     "text": "SECRET_ROTATION_CROP",
+     "block": 1,
+     "line": 0,
+     "word": 0
+    }
+   ]
+  }
+ ]
+}

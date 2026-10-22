@@ -1,0 +1,35 @@
+{
+ "fixture": "generated/acroform-values.pdf",
+ "pages": [
+  {
+   "width": 300.0,
+   "height": 400.0,
+   "words": [
+    {
+     "box": [
+      20.0,
+      29.046579360961914,
+      164.7040252685547,
+      43.04657745361328
+     ],
+     "text": "KEEP_PUBLIC_FORM",
+     "block": 0,
+     "line": 0,
+     "word": 0
+    },
+    {
+     "box": [
+      24.0,
+      80.6113510131836,
+      160.69200134277344,
+      92.6113510131836
+     ],
+     "text": "SECRET_FORM_VALUE",
+     "block": 1,
+     "line": 0,
+     "word": 0
+    }
+   ]
+  }
+ ]
+}

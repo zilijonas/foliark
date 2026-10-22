@@ -1,0 +1,23 @@
+{
+ "fixture": "generated/leaks-metadata-attachment-js.pdf",
+ "pages": [
+  {
+   "width": 300.0,
+   "height": 400.0,
+   "words": [
+    {
+     "box": [
+      20.0,
+      29.046579360961914,
+      184.93402099609375,
+      43.04657745361328
+     ],
+     "text": "KEEP_PUBLIC_KITCHEN",
+     "block": 0,
+     "line": 0,
+     "word": 0
+    }
+   ]
+  }
+ ]
+}

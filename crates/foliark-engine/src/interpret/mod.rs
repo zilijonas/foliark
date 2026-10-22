@@ -29,7 +29,7 @@ use std::ops::Range;
 use std::sync::{Arc, Mutex};
 
 mod fonts;
-pub use fonts::{FontInfo, FontKind};
+pub use fonts::{FontInfo, FontKind, MetricsSource};
 pub use hayro::hayro_interpret::{FillRule, StrokeProps};
 
 #[derive(Debug, Clone)]
@@ -136,6 +136,8 @@ pub enum DiagnosticKind {
     PatternNotDescended,
     /// Glyphs of a font dictionary that is a direct object have no `font` id.
     DirectFontDict,
+    /// No descriptor, font program or FontBBox gave ascent and descent: quads use 0.8 / -0.2.
+    FontMetricsDefaulted(ObjectId),
     UnsupportedFont,
     ImageDecodeFailure,
     UnresolvedAnnotationAppearance,
@@ -224,6 +226,9 @@ impl Builder<'_> {
                         .get::<Dict<'_>>(id_to_ref(id).into())
                         .and_then(|d| FontInfo::read(&d))
                 {
+                    if info.metrics == MetricsSource::Default {
+                        self.diagnose(DiagnosticKind::FontMetricsDefaulted(id));
+                    }
                     self.fonts.insert(id, info);
                 }
             }

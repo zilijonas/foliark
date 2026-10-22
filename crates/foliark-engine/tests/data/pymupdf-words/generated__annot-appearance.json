@@ -1,0 +1,35 @@
+{
+ "fixture": "generated/annot-appearance.pdf",
+ "pages": [
+  {
+   "width": 300.0,
+   "height": 400.0,
+   "words": [
+    {
+     "box": [
+      20.0,
+      29.046579360961914,
+      172.48802185058594,
+      43.04657745361328
+     ],
+     "text": "KEEP_PUBLIC_ANNOT",
+     "block": 0,
+     "line": 0,
+     "word": 0
+    },
+    {
+     "box": [
+      24.0,
+      100.6113510131836,
+      158.68800354003906,
+      112.6113510131836
+     ],
+     "text": "SECRET_ANNOT_TEXT",
+     "block": 1,
+     "line": 0,
+     "word": 0
+    }
+   ]
+  }
+ ]
+}

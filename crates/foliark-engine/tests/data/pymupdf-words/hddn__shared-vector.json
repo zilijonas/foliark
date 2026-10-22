@@ -1,0 +1,53 @@
+{
+ "fixture": "hddn/shared-vector.pdf",
+ "pages": [
+  {
+   "width": 600.0,
+   "height": 800.0,
+   "words": [
+    {
+     "box": [
+      72.0,
+      50.61135482788086,
+      288.7319641113281,
+      62.61135482788086
+     ],
+     "text": "KEEP_PUBLIC_SHARED_VECTOR_P1",
+     "block": 0,
+     "line": 0,
+     "word": 0
+    },
+    {
+     "box": [
+      72.0,
+      140.61135864257812,
+      234.02398681640625,
+      152.61135864257812
+     ],
+     "text": "SECRET_SHARED_VECTOR",
+     "block": 1,
+     "line": 0,
+     "word": 0
+    }
+   ]
+  },
+  {
+   "width": 600.0,
+   "height": 800.0,
+   "words": [
+    {
+     "box": [
+      72.0,
+      50.61135482788086,
+      288.7319641113281,
+      62.61135482788086
+     ],
+     "text": "KEEP_PUBLIC_SHARED_VECTOR_P2",
+     "block": 0,
+     "line": 0,
+     "word": 0
+    }
+   ]
+  }
+ ]
+}

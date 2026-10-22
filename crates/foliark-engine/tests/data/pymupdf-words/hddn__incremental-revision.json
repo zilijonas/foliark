@@ -1,0 +1,35 @@
+{
+ "fixture": "hddn/incremental-revision.pdf",
+ "pages": [
+  {
+   "width": 600.0,
+   "height": 800.0,
+   "words": [
+    {
+     "box": [
+      72.0,
+      50.61135482788086,
+      310.72796630859375,
+      62.61135482788086
+     ],
+     "text": "KEEP_PUBLIC_INCREMENTAL_REVISION",
+     "block": 0,
+     "line": 0,
+     "word": 0
+    },
+    {
+     "box": [
+      72.0,
+      140.61135864257812,
+      174.69598388671875,
+      152.61135864257812
+     ],
+     "text": "PUBLIC_REVISED",
+     "block": 1,
+     "line": 0,
+     "word": 0
+    }
+   ]
+  }
+ ]
+}

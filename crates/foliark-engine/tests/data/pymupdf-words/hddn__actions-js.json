@@ -1,0 +1,35 @@
+{
+ "fixture": "hddn/actions-js.pdf",
+ "pages": [
+  {
+   "width": 600.0,
+   "height": 800.0,
+   "words": [
+    {
+     "box": [
+      72.0,
+      50.61135482788086,
+      234.719970703125,
+      62.61135482788086
+     ],
+     "text": "KEEP_PUBLIC_ACTIONS_JS",
+     "block": 0,
+     "line": 0,
+     "word": 0
+    },
+    {
+     "box": [
+      72.0,
+      140.61135864257812,
+      201.3599853515625,
+      152.61135864257812
+     ],
+     "text": "SECRET_ACTIONS_JS",
+     "block": 1,
+     "line": 0,
+     "word": 0
+    }
+   ]
+  }
+ ]
+}

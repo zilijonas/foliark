@@ -1,0 +1,35 @@
+{
+ "fixture": "hddn/optional-content-layer.pdf",
+ "pages": [
+  {
+   "width": 600.0,
+   "height": 800.0,
+   "words": [
+    {
+     "box": [
+      72.0,
+      50.61135482788086,
+      332.0759582519531,
+      62.61135482788086
+     ],
+     "text": "KEEP_PUBLIC_OPTIONAL_CONTENT_LAYER",
+     "block": 0,
+     "line": 0,
+     "word": 0
+    },
+    {
+     "box": [
+      72.0,
+      140.61135864257812,
+      298.7159729003906,
+      152.61135864257812
+     ],
+     "text": "SECRET_OPTIONAL_CONTENT_LAYER",
+     "block": 1,
+     "line": 0,
+     "word": 0
+    }
+   ]
+  }
+ ]
+}

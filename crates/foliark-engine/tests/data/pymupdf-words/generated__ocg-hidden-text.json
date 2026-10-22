@@ -1,0 +1,35 @@
+{
+ "fixture": "generated/ocg-hidden-text.pdf",
+ "pages": [
+  {
+   "width": 300.0,
+   "height": 400.0,
+   "words": [
+    {
+     "box": [
+      20.0,
+      29.046579360961914,
+      155.38002014160156,
+      43.04657745361328
+     ],
+     "text": "KEEP_PUBLIC_OCG",
+     "block": 0,
+     "line": 0,
+     "word": 0
+    },
+    {
+     "box": [
+      20.0,
+      69.04657745361328,
+      198.17800903320312,
+      83.04657745361328
+     ],
+     "text": "KEEP_PUBLIC_ON_LAYER",
+     "block": 1,
+     "line": 0,
+     "word": 0
+    }
+   ]
+  }
+ ]
+}
