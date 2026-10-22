@@ -29,6 +29,11 @@ const REFUSED_LAYERS: &[&str] = &[
     "generated/ocg-hidden-text.pdf",
 ];
 
+/// Inline ActualText in marked content is removed by the writer (spec 8.2), so extractors read
+/// the drawn glyphs instead of the input's replacement text: the words differ by design. Judged
+/// in tests/sanitize_document.rs.
+const ACCESSIBILITY_STRIPPED: &[&str] = &["hddn/actualtext.pdf"];
+
 /// Visible annotations and widgets are not allowlisted, so they are gone from the rewrite until
 /// annotation flattening (spec 8.2, later task) draws them as Forms before writing. For these
 /// the appearance oracle is expected to see the loss; the object oracle must still pass.
@@ -101,7 +106,7 @@ fn every_fixture_rewrites_and_passes_the_oracles() {
     let mut pending = 0;
     let (mut bytes_in, mut bytes_out) = (0, 0);
     for (path, password) in manifest() {
-        if HOSTILE.contains(&path.as_str()) {
+        if HOSTILE.contains(&path.as_str()) || ACCESSIBILITY_STRIPPED.contains(&path.as_str()) {
             skipped.push(path);
             continue;
         }

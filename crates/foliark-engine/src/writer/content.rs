@@ -53,6 +53,13 @@ fn emit(data: &[u8], obj: ObjectId, subs: &[(Range<usize>, Vec<u8>)]) -> Result<
             None => {
                 let mark = out.len();
                 normalize(&data[span], &mut out);
+                // Spec 8.2: marked-content property lists keep their tag, not the accessibility
+                // text (ActualText, Alt, E) an inline dictionary can carry.
+                if out.ends_with(b"BDC") {
+                    let clean = strip_marked_props(&out[mark..]);
+                    out.truncate(mark);
+                    out.extend_from_slice(&clean);
+                }
                 // Never emit tokens that read back as something else (damaged inline images).
                 let mut back = UntypedIter::new(&out[mark..]);
                 let mut count = 0;
@@ -151,6 +158,95 @@ fn normalize(src: &[u8], out: &mut Vec<u8>) {
     }
 }
 
+/// Marked-content property keys that carry document text (spec 8.2).
+const ACCESSIBILITY_KEYS: [&[u8]; 3] = [b"ActualText", b"Alt", b"E"];
+
+/// `ins` is one normalized `/Tag << ... >> BDC` instruction: the same instruction without the
+/// accessibility entries of its inline dictionary. Anything else is returned unchanged.
+fn strip_marked_props(ins: &[u8]) -> Vec<u8> {
+    let Some(open) = ins.windows(2).position(|w| w == b"<<") else {
+        return ins.to_vec();
+    };
+    let mut out = ins[..open + 2].to_vec();
+    let mut i = open + 2;
+    loop {
+        while ins.get(i).is_some_and(|b| WS.contains(b)) {
+            i += 1;
+        }
+        if i >= ins.len() || ins[i..].starts_with(b">>") {
+            break;
+        }
+        let key_end = value_end(ins, i);
+        let mut v = key_end;
+        while ins.get(v).is_some_and(|b| WS.contains(b)) {
+            v += 1;
+        }
+        let end = value_end(ins, v);
+        if !ACCESSIBILITY_KEYS.contains(&&ins[i + 1..key_end]) {
+            out.push(b' ');
+            out.extend_from_slice(&ins[i..end]);
+        }
+        i = end;
+    }
+    out.push(b' ');
+    out.extend_from_slice(&ins[i.min(ins.len())..]);
+    out
+}
+
+/// End (exclusive) of the PDF value starting at `i`: string, hex string, name, number,
+/// array or (nested) dictionary.
+fn value_end(s: &[u8], i: usize) -> usize {
+    let pair = |j: usize, c: u8| s.get(j) == Some(&c) && s.get(j + 1) == Some(&c);
+    match s.get(i) {
+        Some(b'(') => literal_end(s, i),
+        Some(b'<') if !pair(i, b'<') => s[i..]
+            .iter()
+            .position(|c| *c == b'>')
+            .map_or(s.len(), |p| i + p + 1),
+        Some(b'<' | b'[') => {
+            let (mut j, mut depth) = (i, 0usize);
+            while j < s.len() {
+                match s[j] {
+                    b'(' => {
+                        j = literal_end(s, j);
+                        continue;
+                    }
+                    b'[' => depth += 1,
+                    b']' => depth = depth.saturating_sub(1),
+                    b'<' if pair(j, b'<') => {
+                        depth += 1;
+                        j += 1;
+                    }
+                    b'>' if pair(j, b'>') => {
+                        depth = depth.saturating_sub(1);
+                        j += 1;
+                    }
+                    b'<' => {
+                        j = s[j..]
+                            .iter()
+                            .position(|c| *c == b'>')
+                            .map_or(s.len(), |p| j + p);
+                    }
+                    _ => {}
+                }
+                j += 1;
+                if depth == 0 {
+                    return j;
+                }
+            }
+            s.len()
+        }
+        Some(_) => {
+            let mut j = i + 1;
+            while j < s.len() && !WS.contains(&s[j]) && !is_delim(s[j]) {
+                j += 1;
+            }
+            j
+        }
+        None => s.len(),
+    }
+}
+
 /// End (exclusive) of the literal string starting at `i`: balanced parentheses, `\` escapes.
 fn literal_end(src: &[u8], mut i: usize) -> usize {
     let mut depth = 0;
@@ -199,5 +295,16 @@ mod tests {
         let out = reemit(&data, ID, &sub).unwrap();
         assert!(out.starts_with(b"q\n1 0 0 1 0 0 cm\n(a "));
         assert!(reemit(&data, ID, &[(9999..10000, vec![])]).is_err());
+    }
+
+    #[test]
+    fn marked_content_keeps_tag_and_layer_but_not_accessibility_text() {
+        let data = b"/Span << /MCID 3 /ActualText <FEFF0053> /Alt (a (b) c) /E (x) /K [1 2] /Lang (en) >> BDC\n\
+/Span << /ActualText (only) >> BDC /P /MC0 BDC /OC /Ly BDC EMC EMC EMC EMC";
+        let out = String::from_utf8(reemit(data, ID, &[]).unwrap()).unwrap();
+        assert_eq!(
+            out,
+            "/Span << /MCID 3 /K [1 2] /Lang (en) >> BDC\n/Span << >> BDC\n/P /MC0 BDC\n/OC /Ly BDC\nEMC\nEMC\nEMC\nEMC\n"
+        );
     }
 }
