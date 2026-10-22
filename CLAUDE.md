@@ -10,6 +10,7 @@ Headless Rust/WASM PDF SDK. First consumer: HDDN (`~/ai/repos/hddn`), replacing 
 - Every `cargo build/test/clippy`, `wasm-bindgen`, browser or Playwright run goes through the memory queue:
   `~/ai/bin/memory-queue run --owner 807494d7-f0ff-4dfb-a3f4-ac700f52c9ef --label 'foliark <what>' --need-gb 4 --restartable --wait 1800 -- <cmd>`
   Exit 75 means deferred: wait and retry, do not treat as failure. Long runs go in the background; do not poll.
+  Never nest reservations: scripts that already call memory-queue themselves (`tools/fuzz-smoke/run.sh`) run unwrapped; wrapping them deadlocks the queue.
 - `source ~/.cargo/env` if `cargo` is not on PATH.
 - Workbench artifacts: pass Markdown inline via `content`. Never pass `sourcePath`.
 - Do not modify `~/ai/repos/hddn` unless your task is an HDDN integration task; then work only in the worktree you are given.
