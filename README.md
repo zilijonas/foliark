@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="logo.svg" alt="Foliark" width="360">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="logo-dark.svg">
+    <img src="logo.svg" alt="Foliark" width="360">
+  </picture>
 </p>
 
 <p align="center"><b>A headless PDF engine in Rust and WebAssembly. Extract, search, render, edit, redact and sanitize PDFs in the browser. The document never leaves the device.</b></p>
