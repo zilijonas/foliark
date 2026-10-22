@@ -1,0 +1,11 @@
+name: Oracle venv
+description: Dev-only independent PDF oracles (PyMuPDF, pypdf, pikepdf) in tests/oracles/.venv, used by engine and SDK tests
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with: { python-version: "3.12" }
+    - shell: bash
+      run: |
+        python -m venv tests/oracles/.venv
+        tests/oracles/.venv/bin/pip install --quiet --only-binary=:all: -r tests/oracles/requirements.txt

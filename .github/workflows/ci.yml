@@ -33,13 +33,7 @@ jobs:
       - uses: actions/checkout@v4
       - run: rustup show active-toolchain || rustup toolchain install
       - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.12" }
-      # Dev-only independent oracles (PyMuPDF, pypdf, pikepdf): several engine tests shell out to this venv.
-      - name: Oracle venv
-        run: |
-          python -m venv tests/oracles/.venv
-          tests/oracles/.venv/bin/pip install --quiet --only-binary=:all: -r tests/oracles/requirements.txt
+      - uses: ./.github/actions/oracle-venv   # several engine tests shell out to the oracle venv
       - run: cargo fmt --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
@@ -61,6 +55,7 @@ jobs:
           name=wasm-bindgen-$WASM_BINDGEN_VERSION-x86_64-unknown-linux-musl
           curl -fsSL "$base/$name.tar.gz" | tar xz -C "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/$name" >> "$GITHUB_PATH"
+      - uses: ./.github/actions/oracle-venv   # SDK edit specs read exports with the oracles
       - uses: pnpm/action-setup@v4          # version from "packageManager"
       - uses: actions/setup-node@v4
         with: { node-version: 26, cache: pnpm }
