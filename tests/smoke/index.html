@@ -34,13 +34,19 @@
     const fixtureRender = await fixture.renderPage(0, { scale: 0.5 });
     await fixture.close();
     const closedCode = await fixture.pages().then(() => "none", (e) => e.code);
-    const refused = await doc.prepareExport({ mode: "native" }).then(() => "none", (e) => e.code);
+    // Native export in a real worker: bytes transfer out, reopen, and the page text survives; raster is still refused.
+    const plan = await doc.prepareExport({ mode: "native" });
+    const exported = await doc.export(plan);
+    const reopened = await foliark.open(exported);
+    const exportedText = (await reopened.extractText(0)).text;
+    const consumed = await doc.export(plan).then(() => "none", (e) => e.code);
+    const refused = await doc.prepareExport({ mode: "raster" }).then(() => "none", (e) => e.code);
     await doc.close();
     await foliark.dispose();
     Object.assign(out, {
       ok: true, pageCount: info.pageCount, pdfVersion: info.pdfVersion,
       fixture: { pages: fixtureInfo.pageCount, text: text.text, hits: hits.length, sliced, render: [fixtureRender.width, fixtureRender.height, fixtureRender.data.length], closedCode },
-      refused, helloText: await helloText, geometry, width: page.width, height: page.height,
+      refused, exported: { length: exported.byteLength, planLength: plan.byteLength, text: exportedText, consumed }, helloText: await helloText, geometry, width: page.width, height: page.height,
       length: page.data.length, nonWhite, red: px(140, 75), corner: px(190, 5), outOfRange,
       complete: page.complete, warnings: page.warnings, clip: page.clip,
       part: { width: part.width, height: part.height, clip: part.clip, red: ppx(80, 150), corner: ppx(180, 10) },

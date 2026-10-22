@@ -7,11 +7,13 @@ mod cache;
 mod document;
 pub mod edit;
 mod engine;
+pub mod export;
 pub mod interpret;
 pub mod limits;
 pub mod reader;
 pub mod redaction;
 mod render;
+pub mod sanitize;
 pub mod text;
 pub mod writer;
 

@@ -228,20 +228,6 @@ fn ops_that_are_not_built_refuse_with_their_feature_name() {
         let err = r.err().unwrap();
         (err.code, err.details.unwrap().feature.unwrap())
     };
-    let t = e.capabilities(&d, true);
-    assert_eq!(
-        feature(run(&mut e, t, 1).0.map(|_| ())),
-        (ErrorCode::InvalidArgument, "capabilities".into())
-    );
-    let t = e.prepare_export(&d, foliark_model::ExportMode::Native, Default::default());
-    assert_eq!(
-        feature(run(&mut e, t, 1).0.map(|_| ())),
-        (ErrorCode::InvalidArgument, "prepareExport".into())
-    );
-    assert_eq!(
-        feature(e.take_export(&d, "p").map(|_| ())),
-        (ErrorCode::InvalidArgument, "export".into())
-    );
     assert_eq!(
         feature(e.prepare_paragraph(&d, 0, vec![], None, false).map(|_| ())),
         (ErrorCode::InvalidArgument, "prepareParagraph".into())

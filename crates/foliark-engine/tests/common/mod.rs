@@ -99,3 +99,98 @@ pub fn width(q: &Quad) -> f64 {
 pub fn close(a: f64, b: f64) -> bool {
     (a - b).abs() < 1e-6
 }
+
+// ---- engine driving and the independent Python oracles (tests/oracles) --------------------------
+
+use foliark_engine::{BoxTask, Engine, Step};
+use foliark_model::PdfError;
+use std::path::{Path, PathBuf};
+
+pub fn run<T>(e: &mut Engine, mut task: BoxTask<T>) -> Result<T, PdfError> {
+    loop {
+        if let Step::Done(v) = task.step(e, 1000)? {
+            return Ok(v);
+        }
+    }
+}
+
+pub fn repo() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
+/// A corpus fixture, e.g. `fixture("hddn/metadata-xmp.pdf")`.
+pub fn fixture(rel: &str) -> Vec<u8> {
+    std::fs::read(repo().join("tests/fixtures").join(rel)).unwrap()
+}
+
+/// `target/tmp/<dir>/<name>`.
+pub fn tmp(dir: &str, name: &str) -> PathBuf {
+    let d = Path::new(env!("CARGO_TARGET_TMPDIR")).join(dir);
+    std::fs::create_dir_all(&d).unwrap();
+    d.join(name)
+}
+
+/// The oracle venv's python run from the repo root: `(success, stdout + stderr)`.
+pub fn python(args: &[&str]) -> (bool, String) {
+    let py = repo().join("tests/oracles/.venv/bin/python");
+    assert!(
+        py.exists(),
+        "oracle venv missing: python3 -m venv tests/oracles/.venv && tests/oracles/.venv/bin/pip install -r tests/oracles/requirements.txt"
+    );
+    let out = std::process::Command::new(py)
+        .args(args)
+        .current_dir(repo())
+        .stdin(std::process::Stdio::null())
+        .output()
+        .unwrap();
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    (out.status.success(), text)
+}
+
+/// `objects.py` on `bytes` (written under `name`): findings log, empty-pass as `(ok, log)`.
+pub fn objects_oracle(dir: &str, name: &str, bytes: &[u8], forbid: &[&str]) -> (bool, String) {
+    let p = tmp(dir, name);
+    std::fs::write(&p, bytes).unwrap();
+    let mut args = vec!["tests/oracles/objects.py", p.to_str().unwrap()];
+    for f in forbid {
+        args.extend(["--forbid", f]);
+    }
+    python(&args)
+}
+
+/// `fidelity.py` input vs output with changed display-space rects `(page, x0, y0, x1, y1)`.
+pub fn fidelity_oracle(
+    dir: &str,
+    name: &str,
+    input: &[u8],
+    output: &[u8],
+    changed: &[(u32, f64, f64, f64, f64)],
+    preserve: &[&str],
+) -> (bool, String) {
+    let (i, o) = (
+        tmp(dir, &format!("{name}.in.pdf")),
+        tmp(dir, &format!("{name}.out.pdf")),
+    );
+    std::fs::write(&i, input).unwrap();
+    std::fs::write(&o, output).unwrap();
+    let rects: Vec<String> = changed
+        .iter()
+        .map(|(p, a, b, c, d)| format!("{p}:{a},{b},{c},{d}"))
+        .collect();
+    let mut args = vec![
+        "tests/oracles/fidelity.py",
+        i.to_str().unwrap(),
+        o.to_str().unwrap(),
+    ];
+    for r in &rects {
+        args.extend(["--changed", r]);
+    }
+    for p in preserve {
+        args.extend(["--preserve", p]);
+    }
+    python(&args)
+}

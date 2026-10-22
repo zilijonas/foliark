@@ -3,6 +3,7 @@
 //! handles. Ops that are not built yet return the typed refusal in [`not_built`].
 use crate::cache::DOC_CACHE_BYTES;
 use crate::document::{Binding, Committed, EditApplier, NotBuilt, Session};
+use crate::export::{self, Held};
 use crate::{Document, RenderOptions, RenderedPage};
 use foliark_model::{
     Capabilities, ChangeResult, ChangeSet, DocumentInfo, ErrorCode, ErrorDetails, ExportMode,
@@ -42,6 +43,8 @@ pub struct Stats {
     /// Estimated heap of the cached page layouts.
     pub cache_bytes: usize,
     pub cache_evictions: u64,
+    /// Bytes of the export plan held for `export` (0 when none).
+    pub plan_bytes: usize,
 }
 
 /// An op the spec defines but this build does not implement. `INVALID_ARGUMENT` with
@@ -74,10 +77,6 @@ fn once<T: 'static>(f: impl FnOnce(&mut Engine) -> Result<T, PdfError> + 'static
     Box::new(Once(Some(Box::new(f))))
 }
 
-fn refused<T: 'static>(feature: &'static str) -> BoxTask<T> {
-    once(move |_| Err(not_built(feature)))
-}
-
 pub struct Engine {
     limits: Limits,
     generation: u32,
@@ -87,6 +86,9 @@ pub struct Engine {
     applier: Box<dyn EditApplier>,
     cancel: Arc<AtomicBool>,
     cache_bytes: usize,
+    /// The one export plan held (spec §4: any newer plan, change, font or close frees it).
+    plan: Option<Held>,
+    next_plan: u64,
 }
 
 fn finite(values: &[f64]) -> Result<(), PdfError> {
@@ -108,6 +110,8 @@ impl Engine {
             applier: Box::new(NotBuilt),
             cancel: Arc::default(),
             cache_bytes: DOC_CACHE_BYTES,
+            plan: None,
+            next_plan: 0,
         }
     }
 
@@ -150,7 +154,15 @@ impl Engine {
     }
 
     pub fn stats(&self) -> Stats {
-        self.docs.values().fold(Stats::default(), |mut s, d| {
+        let seed = Stats {
+            plan_bytes: self
+                .plan
+                .as_ref()
+                .and_then(|p| p.bytes.as_ref())
+                .map_or(0, Vec::len),
+            ..Stats::default()
+        };
+        self.docs.values().fold(seed, |mut s, d| {
             s.documents += 1;
             s.source_bytes += d.source_len();
             s.cache_entries += d.index.len();
@@ -197,6 +209,11 @@ impl Engine {
             && self
                 .get(&binding.doc_id)
                 .is_ok_and(|s| s.revision == binding.revision)
+    }
+
+    /// The working copy at the current revision (the source until an edit is committed).
+    pub fn working_copy(&self, doc: &str) -> Result<&Document, PdfError> {
+        Ok(self.get(doc)?.doc())
     }
 
     /// The committed edit and redaction lists of the current revision.
@@ -246,6 +263,7 @@ impl Engine {
 
     /// Idempotent: an unknown or already closed id is fine. Frees the document and its caches.
     pub fn close(&mut self, doc: &str) {
+        self.plan = None;
         self.docs.remove(doc);
     }
 
@@ -305,6 +323,7 @@ impl Engine {
         for f in &fonts {
             scratch.register(f.clone())?;
         }
+        self.plan = None;
         fonts.into_iter().map(|f| self.fonts.register(f)).collect()
     }
 
@@ -344,8 +363,31 @@ impl Engine {
         })
     }
 
-    pub fn capabilities(&self, _doc: &str, _deep: bool) -> BoxTask<Capabilities> {
-        refused("capabilities")
+    /// Spec §11. Extract and render are supported once the document opened; export is
+    /// `unknown` until `prepare_export` succeeds (then `supported` for that revision and mode)
+    /// or preflight already knows a stage refuses (`unsupported`). `deep` adds nothing yet:
+    /// the redaction preflight already interprets every page it needs.
+    pub fn capabilities(&self, doc: &str, _deep: bool) -> BoxTask<Capabilities> {
+        let at = self.revision(doc).ok();
+        let doc = doc.to_owned();
+        once(move |e| {
+            e.still_at(&doc, at)?;
+            let held = |m| e.held(&doc, m);
+            let ready = (held(ExportMode::Native), held(ExportMode::Raster));
+            let s = e.get(&doc)?;
+            export::capabilities(s.doc(), &s.committed, e.binding(&doc)?, ready)
+        })
+    }
+
+    /// A plan of `mode` is held for `doc` at its current revision and font registry.
+    fn held(&self, doc: &str, mode: ExportMode) -> bool {
+        self.plan.as_ref().is_some_and(|p| {
+            p.mode == mode
+                && p.bytes.is_some()
+                && p.binding.doc_id == doc
+                && p.fonts == self.fonts.version()
+                && self.is_current(&p.binding)
+        })
     }
 
     pub fn prepare_paragraph(
@@ -368,21 +410,82 @@ impl Engine {
                 .docs
                 .get_mut(&doc)
                 .ok_or(PdfError::new(ErrorCode::DocumentGone))?;
-            s.apply(changes, &e.limits, &*e.applier)
+            let result = s.apply(changes, &e.limits, &*e.applier)?;
+            if result.accepted {
+                e.plan = None;
+            }
+            Ok(result)
         })
     }
 
+    /// Spec §4: runs the whole export now and holds the bytes (a newer plan, `apply_changes`,
+    /// `register_fonts` or `close` frees them). The older plan is freed first, so a failure
+    /// leaves none and two outputs are never held at once.
     pub fn prepare_export(
         &self,
-        _doc: &str,
-        _mode: ExportMode,
-        _policy: ExportPolicy,
+        doc: &str,
+        mode: ExportMode,
+        policy: ExportPolicy,
     ) -> BoxTask<ExportPlan> {
-        refused("prepareExport")
+        let at = self.revision(doc).ok();
+        let doc = doc.to_owned();
+        once(move |e| {
+            e.still_at(&doc, at)?;
+            e.plan = None;
+            let binding = e.binding(&doc)?;
+            let s = e.get(&doc)?;
+            let out = export::prepare(
+                s.doc(),
+                &s.committed,
+                binding.clone(),
+                mode,
+                &policy,
+                &e.limits,
+            )?;
+            e.next_plan += 1;
+            let plan = ExportPlan {
+                plan_id: format!("plan-{}-{}", e.generation, e.next_plan),
+                doc_id: doc,
+                generation: binding.generation,
+                revision: binding.revision,
+                mode,
+                policy_hash: export::preflight::policy_hash(mode, &policy),
+                font_registry_version: e.fonts.version(),
+                byte_length: out.bytes.len() as u32,
+                report: out.report,
+            };
+            e.plan = Some(Held {
+                id: plan.plan_id.clone(),
+                binding,
+                mode,
+                fonts: plan.font_registry_version,
+                bytes: Some(out.bytes),
+            });
+            Ok(plan)
+        })
     }
 
-    pub fn take_export(&mut self, _doc: &str, _plan_id: &str) -> Result<Vec<u8>, PdfError> {
-        Err(not_built("export"))
+    /// Single use. `STALE_PLAN`: not the held plan, or its revision, document or fonts moved on
+    /// (the plan is freed). `PLAN_CONSUMED`: already exported.
+    pub fn take_export(&mut self, doc: &str, plan_id: &str) -> Result<Vec<u8>, PdfError> {
+        self.get(doc)?;
+        let stale = || PdfError::new(ErrorCode::StalePlan);
+        let held = self
+            .plan
+            .as_ref()
+            .filter(|p| p.id == plan_id && p.binding.doc_id == doc)
+            .ok_or_else(stale)?;
+        if held.bytes.is_none() {
+            return Err(PdfError::new(ErrorCode::PlanConsumed));
+        }
+        if held.fonts != self.fonts.version() || !self.is_current(&held.binding) {
+            self.plan = None;
+            return Err(stale());
+        }
+        self.plan
+            .as_mut()
+            .and_then(|p| p.bytes.take())
+            .ok_or(PdfError::new(ErrorCode::Internal))
     }
 }
 

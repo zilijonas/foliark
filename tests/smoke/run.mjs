@@ -54,7 +54,10 @@ try {
   assert.deepEqual([r.fixture.pages, r.fixture.hits > 0, r.fixture.sliced, r.fixture.closedCode], [4, true, true, "DOCUMENT_GONE"]);
   assert.match(r.fixture.text, /KEEP_PUBLIC_ROTATION_CROP/);
   assert.equal(r.fixture.render[2], r.fixture.render[0] * r.fixture.render[1] * 4);
-  assert.equal(r.refused, "INVALID_ARGUMENT", "prepareExport is refused until NEW-46");
+  assert.equal(r.refused, "CONSENT_REQUIRED", "raster export needs consent (and is not built until NEW-54)");
+  assert.equal(r.exported.length, r.exported.planLength);
+  assert.equal(r.exported.text.trim(), "Hello Foliark", "native export reopens with its text");
+  assert.equal(r.exported.consumed, "PLAN_CONSUMED");
   console.log(`smoke ${name}: ok (${r.width}x${r.height}, ${r.nonWhite} non-white px)`);
 
   // Hard recovery in a real worker: a synchronous call that never returns is terminated by the watchdog.

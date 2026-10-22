@@ -218,7 +218,7 @@ impl RedactionPlan {
 
 type B = [f64; 4];
 
-fn bounds_of(r: &Rect) -> B {
+pub(crate) fn bounds_of(r: &Rect) -> B {
     [r.x, r.y, r.x + r.width, r.y + r.height]
 }
 
@@ -308,7 +308,7 @@ fn clipped_area(poly: &[Point], r: B) -> f64 {
 
 /// The share of `q` inside `r` when that meets the §5.1 threshold. A quad without area (a
 /// zero-advance glyph) counts, fully, when its box touches the region.
-fn text_coverage(q: &Quad, r: B) -> Option<f64> {
+pub(crate) fn text_coverage(q: &Quad, r: B) -> Option<f64> {
     let a = area(&q.0);
     if a < 1e-9 {
         return overlap(quad_bounds(q), r).then_some(1.0);
