@@ -1,5 +1,10 @@
 # Private installable candidate: @foliark/sdk 0.1.0 (NEW-74)
 
+Historical rc2 record. On 2026-10-22 the owner selected AGPL-3.0-only plus separate
+commercial licensing (NEW-73; current `LICENSING.md`). This recorded tarball still
+contains its original UNLICENSED metadata. NEW-90 must rebuild and re-qualify a
+licensed candidate before NEW-91 publishes it; the hash below is not that future release.
+
 PRIVATE and UNRELEASED. Nothing is published, no remote exists, `package.json` has `"private": true` and `"license": "UNLICENSED"`.
 `packages/sdk/LICENSE` is a marked placeholder ("UNLICENSED - all rights reserved pending owner decision (NEW-73)").
 

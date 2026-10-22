@@ -1,3 +1,7 @@
+Foliark: Copyright (c) 2026 Linas Jonas Zilinskas.
+Public license: AGPL-3.0-only (LICENSE). Alternative commercial licensing and the
+owner's no-fee HDDN permission: LICENSING.md and COMMERCIAL-LICENSING.md.
+
 Third-party material in the distributed files (wasm/foliark_wasm_bg.wasm). Full inventory and licence texts: THIRD_PARTY_NOTICES.md.
 
 Fonts: the 14 standard PDF fonts (FoxitSans, FoxitSerif, FoxitFixed families, FoxitSymbol, FoxitDingbats) embedded by
@@ -5,6 +9,6 @@ hayro-interpret, copyright Foxit Software / PDFium Authors, BSD-style licence in
 
 Colour profiles: CGATS001Compat-v2-micro.icc, LAB.icc and ProPhoto-v2-micro.icc, CC0 (public domain dedication).
 
-Rust crates compiled into the wasm (hayro, vello_cpu, pdf and font libraries and their dependencies) are
+Third-party Rust crates compiled into the wasm (hayro, vello_cpu, pdf and font libraries and their dependencies) are
 permissively licensed (MIT, Apache-2.0, BSD-3-Clause, Zlib, Unlicense, 0BSD, Unicode-3.0 only, checked by cargo-deny);
 each crate and its licence text is in THIRD_PARTY_NOTICES.md.

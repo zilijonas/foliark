@@ -1,5 +1,14 @@
 # Foliark licensing and contribution options (NEW-72)
 
+## Owner decision — 2026-10-22
+
+This options memo is historical. The owner approved AGPL-3.0-only plus separate
+commercial licensing, copyright Linas Jonas Zilinskas, no outside code contributions
+initially, public source at github.com/zilijonas/foliark and public npm publication
+under the zilijonas account. See [LICENSING.md](../../LICENSING.md),
+[commercial licensing](../../COMMERCIAL-LICENSING.md) and Workbench NEW-73.
+Earlier recommendations and unresolved owner questions below are superseded.
+
 Status: options memo for the owner decision in NEW-73. Not legal advice; have a lawyer review the chosen route and the CLA text. Facts are from the repo and the primary sources linked inline. Claims not checked against a primary source are marked (unverified).
 
 ## 1. Goals and constraints

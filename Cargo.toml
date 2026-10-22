@@ -7,7 +7,8 @@ exclude = ["vendor/*"]
 version = "0.0.0"
 edition = "2024"
 rust-version = "1.99"
-license = "UNLICENSED"
+license = "AGPL-3.0-only"
+authors = ["Linas Jonas Zilinskas"]
 publish = false
 
 # Exact pins from docs/research/cohort-spike.md "RECOMMENDED PINS". Cargo.lock is committed.

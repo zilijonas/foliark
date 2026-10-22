@@ -18,8 +18,14 @@ Foliark's promise is that content which is redacted or sanitized is gone from th
 Unsupported input listed in `docs/support-matrix.md` as refused or not proven is documented behaviour, not a vulnerability, unless the export claims success.
 
 ## Reporting
-Private channel: to be set by the owner (NEW-73). Until it is set there is no public reporting address; do not post details in a public place.
-When the channel exists, send the PDF (or a minimized one), the SDK version, the call sequence and what was recovered.
+The owner selected GitHub private vulnerability reporting for
+https://github.com/zilijonas/foliark on 2026-10-22 (NEW-73).
+Use https://github.com/zilijonas/foliark/security/advisories/new after it is enabled.
+The publication task NEW-91 must enable and verify that channel before public
+release; this document does not establish that it is enabled already. If the
+private form is unavailable, contact the maintainer on GitHub to arrange a private
+channel without posting exploit details or documents publicly.
+Privately provide a minimized PDF, SDK version, call sequence and what was recovered.
 
 ## Triage and regression policy
 1. Reproduce, then minimize the PDF to the smallest fixture that still shows the defect.
@@ -34,4 +40,7 @@ When the channel exists, send the PDF (or a minimized one), the SDK version, the
 - A security fix in a dependency ships as a patch release of the SDK with a changelog entry.
 
 ## Disclosure timeline
-Targets, to be confirmed by the owner with the reporting channel (NEW-73): acknowledge within 3 working days, assess within 10, fix a critical privacy defect in a patch release within 30 days, then publish an advisory and a `CHANGELOG.md` entry naming the fixed versions. Reporters are credited if they wish.
+Triage prioritizes recoverable protected content and unsafe exports. Release an
+advisory and a `CHANGELOG.md` entry naming fixed versions when a fix is available.
+No contractual response or resolution SLA is offered by this policy. Reporters
+are credited if they wish.

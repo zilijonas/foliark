@@ -1,6 +1,6 @@
 # @foliark/sdk
 
-Private, unreleased (0.1.0, UNLICENSED, see `LICENSE`). A headless Rust/WASM PDF engine for the browser: extract text, search, render,
+Unreleased (0.1.0), AGPL-3.0-only with separate commercial licensing; see `LICENSE`, `LICENSING.md` and `COMMERCIAL-LICENSING.md`. A headless Rust/WASM PDF engine for the browser: extract text, search, render,
 edit paragraphs, redact and export a sanitized PDF. It runs in a worker on the user's device; the document never leaves it.
 The SDK fetches only its own `.wasm` and worker script.
 

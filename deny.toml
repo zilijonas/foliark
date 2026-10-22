@@ -8,7 +8,8 @@ all-features = true
 
 [licenses]
 # Only licenses that actually appear in the current graph (see docs/provenance/dependencies.json).
-# Anything else is denied by default. Copyleft (GPL/AGPL/LGPL) is never allowed.
+# Third-party licenses outside this list are denied. Foliark's own AGPL-3.0-only
+# workspace code is excluded by licenses.private below; no copyleft dependency is added.
 allow = [
     "MIT",          # MIT-only crates and dual-licensed crates resolved to MIT
     "Apache-2.0",   # dual-licensed crates resolved to Apache-2.0; playwright-core, playwright, typescript (dev)

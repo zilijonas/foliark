@@ -1,8 +1,13 @@
 # Contributing to Foliark
 
-External contributions are not accepted until the owner selects the license and contribution terms (CLA or DCO, NEW-73).
-Please do not open pull requests or send patches before then. Until it is decided the repository is private and the licence is a placeholder (`LICENSE`).
-Options under discussion: `docs/business/licensing-options.md`.
+External code contributions are not accepted initially. Only Linas Jonas Zilinskas
+and agents acting for him contribute code at this stage. Please do not send patches
+or open code pull requests until an updated contribution policy is published.
+
+The owner selected AGPL-3.0-only plus separate commercial licensing on 2026-10-22
+(NEW-73). No CLA or DCO intake process is active. Accepting outside code later
+requires an owner-approved rights/contribution policy before the first contribution.
+Bug reports and feature suggestions are welcome; security issues use `SECURITY.md`.
 
 The rest of this file is how work is done today, so that it is ready when the terms are set.
 
@@ -20,7 +25,7 @@ Always pass `--locked`; `Cargo.lock` and `pnpm-lock.yaml` are committed.
 
 ## Commits
 Conventional commits: `type(scope): summary (TASK-ID)`, for example `fix(redact): drop inherited clip on form XObjects (NEW-33)`. One logical change per commit, body says why.
-Contribution terms, once chosen (CLA or DCO sign-off), will be stated here.
+External-contribution terms will be stated here if the owner opens code contributions.
 
 ## Security issues
 Do not file them as ordinary issues. See `SECURITY.md`.

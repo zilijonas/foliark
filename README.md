@@ -7,7 +7,7 @@
 
 <p align="center"><b>A headless PDF engine in Rust and WebAssembly. Extract, search, render, edit, redact and sanitize PDFs in the browser. The document never leaves the device.</b></p>
 
-> **Status:** private 0.1.0 release candidate. Nothing is published to npm. The license is a placeholder (`UNLICENSED`, all rights reserved) until the owner decides, see [License](#license).
+> **Status:** unreleased 0.1.0 candidate. The owner selected AGPL-3.0-only plus separate commercial licensing on 2026-10-22; see [License](#license). Public npm release and the account-scoped package-name migration are tracked in NEW-90/NEW-91. The recorded rc2 tarball predates this license change and must be rebuilt before publication.
 
 Foliark is a TypeScript SDK (`@foliark/sdk`) over a Rust engine compiled to WebAssembly. It runs in a worker, fetches only its own
 `.wasm` and worker script, and refuses what it cannot do safely with a typed `FoliarkError` instead of degrading quietly.
@@ -166,9 +166,8 @@ See [docs/evidence](docs/evidence), [tests/oracles](tests/oracles/README.md) and
 
 ## Security
 
-A redaction that leaves content in the exported file is a privacy defect. The private reporting channel is still to be set by the owner. Until then do not post details publicly; see [SECURITY.md](SECURITY.md) for the policy and severity classes.
+A redaction that leaves content in the exported file is a privacy defect. The owner selected GitHub private vulnerability reporting; publication must enable and verify it. Do not post details publicly; see [SECURITY.md](SECURITY.md).
 
 ## License
 
-Unlicensed for now: all rights reserved, see [LICENSE](LICENSE). The owner has not chosen a license or contribution terms
-([options](docs/business/licensing-options.md)), so external contributions are not accepted yet. Third-party notices ship in the package ([THIRD_PARTY_NOTICES.md](packages/sdk/THIRD_PARTY_NOTICES.md)).
+Copyright (c) 2026 Linas Jonas Zilinskas. Public Foliark code uses [AGPL-3.0-only](LICENSE), with [separate commercial licensing and no-fee HDDN permission](COMMERCIAL-LICENSING.md). See [LICENSING.md](LICENSING.md) for scope and source availability. External code contributions are closed initially. Third-party material retains its own terms and notices ([THIRD_PARTY_NOTICES.md](packages/sdk/THIRD_PARTY_NOTICES.md)).
