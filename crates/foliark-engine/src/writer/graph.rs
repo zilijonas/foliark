@@ -6,7 +6,7 @@
 //! that is neither Image nor Form, a font Subtype we do not know, a stream where a plain
 //! value belongs) is a typed `MALFORMED_PDF` refusal, never a silent skip. Direct values are
 //! copied; indirect values in plain positions are inlined; dangling references are errors.
-use super::{NewStream, Spans, Val, content, err, err_obj};
+use super::{Extra, NewStream, PageFonts, Spans, Val, content, err, err_obj};
 use crate::limits::{self, Budget};
 use crate::reader::{self, object_id};
 use foliark_model::{ErrorCode, Limits, ObjectId, PdfError};
@@ -394,6 +394,9 @@ pub(crate) struct Walk<'a> {
     limits: &'a Limits,
     repl: &'a BTreeMap<ObjectId, NewStream>,
     spans: &'a Spans,
+    extras: &'a [Extra],
+    to_unicode: &'a BTreeMap<ObjectId, Vec<u8>>,
+    extra_refs: HashMap<usize, Ref>,
     budget: Budget,
     pub nodes: Vec<Node>,
     memo: HashMap<(ObjectId, Class), Ref>,
@@ -418,12 +421,16 @@ impl<'a> Walk<'a> {
         limits: &'a Limits,
         repl: &'a BTreeMap<ObjectId, NewStream>,
         spans: &'a Spans,
+        (extras, to_unicode): (&'a [Extra], &'a BTreeMap<ObjectId, Vec<u8>>),
     ) -> Self {
         Self {
             doc,
             limits,
             repl,
             spans,
+            extras,
+            to_unicode,
+            extra_refs: HashMap::new(),
             budget: Budget::new(limits),
             nodes: Vec::new(),
             memo: HashMap::new(),
@@ -563,6 +570,7 @@ impl<'a> Walk<'a> {
         }
         let d = depth + 1;
         Ok(match (spec, v) {
+            (_, Val::New(i)) => self.extra(*i)?,
             (One(C::ColorSpace), _) => self.color_space(v, d)?,
             (V::Plain, Val::Src(id)) => {
                 let inner = self.inline(*id)?;
@@ -609,6 +617,55 @@ impl<'a> Walk<'a> {
             }
             (V::Plain, other) => other.clone(),
             (_, other) => self.emit(other, Plain, d)?,
+        })
+    }
+
+    /// The output reference of added object `i`, written on first use with the references
+    /// it holds resolved the same way.
+    fn extra(&mut self, i: usize) -> Result<Val, PdfError> {
+        if let Some(r) = self.extra_refs.get(&i) {
+            return Ok(Val::Ref(*r));
+        }
+        let Some(extra) = self.extras.get(i) else {
+            return Err(err(ErrorCode::Internal, "unknown added object"));
+        };
+        let r = self.alloc()?;
+        self.extra_refs.insert(i, r);
+        let mut val = self.resolve_new(&extra.val, 0)?;
+        if let (Some(data), Val::Dict(e)) = (&extra.data, &mut val) {
+            e.extend(flate());
+            self.push(Node {
+                id: r,
+                val,
+                data: Some(deflate(data)),
+            })?;
+        } else {
+            self.push(Node {
+                id: r,
+                val,
+                data: None,
+            })?;
+        }
+        Ok(Val::Ref(r))
+    }
+
+    fn resolve_new(&mut self, v: &Val, depth: usize) -> Result<Val, PdfError> {
+        if depth > MAX_DEPTH {
+            return Err(err(ErrorCode::Internal, "added object nesting too deep"));
+        }
+        Ok(match v {
+            Val::New(i) => self.extra(*i)?,
+            Val::Arr(a) => Val::Arr(
+                a.iter()
+                    .map(|x| self.resolve_new(x, depth + 1))
+                    .collect::<Result<_, _>>()?,
+            ),
+            Val::Dict(e) => Val::Dict(
+                e.iter()
+                    .map(|(k, x)| Ok((k.clone(), self.resolve_new(x, depth + 1)?)))
+                    .collect::<Result<_, PdfError>>()?,
+            ),
+            other => other.clone(),
         })
     }
 
@@ -706,6 +763,12 @@ impl<'a> Walk<'a> {
         let mut dict = dict;
         if let Val::Dict(e) = &mut dict {
             e.extend(filter);
+            if let (Some(cmap), C::SimpleFont | C::Type0Font | C::Type3Font) =
+                (self.to_unicode.get(&id), class)
+            {
+                e.retain(|(k, _)| k != b"ToUnicode");
+                e.push((b"ToUnicode".to_vec(), self.plain_stream(cmap)?));
+            }
         }
         self.push(Node {
             id: r,
@@ -854,7 +917,11 @@ impl<'a> Walk<'a> {
 
     /// Catalog, page tree root and one object per page (ids 1, 2, 3..), with inherited
     /// attributes resolved onto each page. Everything the pages reach is emitted too.
-    pub fn build(&mut self, appended: &BTreeMap<usize, Vec<u8>>) -> Result<Vec<Ref>, PdfError> {
+    pub fn build(
+        &mut self,
+        appended: &BTreeMap<usize, Vec<u8>>,
+        page_fonts: &PageFonts,
+    ) -> Result<Vec<Ref>, PdfError> {
         self.alloc()?;
         let pages = self.alloc()?;
         self.refuse_hidden_layers()?;
@@ -874,10 +941,15 @@ impl<'a> Walk<'a> {
                 ("Rotate", Plain),
                 ("Resources", One(C::Resources)),
             ] {
-                if let Some(v) = self
+                let mut v = self
                     .inherited(&raw, key.as_bytes())?
-                    .filter(|v| *v != Val::Null)
+                    .filter(|v| *v != Val::Null);
+                if key == "Resources"
+                    && let Some(add) = page_fonts.get(&i)
                 {
+                    v = Some(self.with_fonts(v, add)?);
+                }
+                if let Some(v) = v {
                     e.push((key.as_bytes().to_vec(), self.emit(&v, spec, 0)?));
                 }
             }
@@ -919,6 +991,27 @@ impl<'a> Walk<'a> {
         self.drain()?;
         self.nodes.sort_by_key(|n| n.id.get());
         Ok(refs)
+    }
+
+    /// `/Resources` with `fonts` added to its `/Font` dictionary (copied, never edited in place).
+    fn with_fonts(&self, res: Option<Val>, fonts: &[(Vec<u8>, Val)]) -> Result<Val, PdfError> {
+        let bad = || err(ErrorCode::MalformedPdf, "resources are not a dictionary");
+        let dict = |v: Option<Val>| match v.map(|v| self.resolve(&v)).transpose()? {
+            None | Some(Val::Null) => Ok(Vec::new()),
+            Some(Val::Dict(e)) => Ok(e),
+            Some(_) => Err(bad()),
+        };
+        let mut res = dict(res)?;
+        let mut map = dict(get(&res, "Font").cloned())?;
+        for (name, font) in fonts {
+            if map.iter().any(|(k, _)| k == name) {
+                return Err(err(ErrorCode::InvalidArgument, "font resource name in use"));
+            }
+            map.push((name.clone(), font.clone()));
+        }
+        res.retain(|(k, _)| k != b"Font");
+        res.push((b"Font".to_vec(), Val::Dict(map)));
+        Ok(Val::Dict(res))
     }
 
     fn content_ids(&self, m: MaybeRef<Object<'a>>) -> Result<Vec<ObjectId>, PdfError> {

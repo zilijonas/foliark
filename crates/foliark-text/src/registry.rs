@@ -12,6 +12,7 @@ use std::sync::Arc;
 /// A parsed registered font: its public record, cmap coverage and a shaping handle.
 pub struct RegisteredFace {
     info: RegisteredFont,
+    bytes: Arc<Vec<u8>>,
     font: Font,
     covered: BTreeSet<u32>,
     upem: f64,
@@ -21,6 +22,11 @@ pub struct RegisteredFace {
 impl RegisteredFace {
     pub fn info(&self) -> &RegisteredFont {
         &self.info
+    }
+
+    /// The sfnt exactly as registered (the writer subsets it, spec §6.3).
+    pub fn bytes(&self) -> &[u8] {
+        &self.bytes
     }
 }
 
@@ -157,8 +163,9 @@ impl Registry {
                 .field(&[src.style as u8]);
             format!("font-{}", h.hex())
         };
-        let bytes: Arc<dyn AsRef<[u8]> + Send + Sync> = Arc::new(src.bytes);
-        let font = Font::new(bytes, 0).ok_or_else(unsupported)?;
+        let bytes = Arc::new(src.bytes);
+        let shared: Arc<dyn AsRef<[u8]> + Send + Sync> = bytes.clone();
+        let font = Font::new(shared, 0).ok_or_else(unsupported)?;
         let info = RegisteredFont {
             id,
             family: src.family,
@@ -169,6 +176,7 @@ impl Registry {
         };
         let face = RegisteredFace {
             info: info.clone(),
+            bytes,
             font,
             covered,
             upem,

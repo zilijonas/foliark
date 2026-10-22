@@ -9,8 +9,11 @@ publish.workspace = true
 
 [dependencies]
 foliark-model = { path = "../foliark-model" }
+foliark-text = { path = "../foliark-text" }
 hayro.workspace = true
 pdf-writer.workspace = true
+skrifa = "=0.46.2"
+subsetter = { version = "=0.2.6", default-features = false }
 flate2 = { version = "=1.1.10", default-features = false, features = ["zlib-rs"] }
 
 [dev-dependencies]
