@@ -9,6 +9,7 @@ use std::fmt;
 
 pub mod limits;
 pub mod reader;
+pub mod writer;
 use reader::ReaderError;
 
 /// Spec §1.3: each rendered side is at most 16384 px.

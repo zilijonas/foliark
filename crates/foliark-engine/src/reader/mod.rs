@@ -283,7 +283,7 @@ fn contents_array<'a>(
         .collect()
 }
 
-fn decode_content(
+pub(crate) fn decode_content(
     stream: &Stream<'_>,
     limits: &Limits,
     budget: &mut Budget,
