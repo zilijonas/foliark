@@ -102,13 +102,11 @@ pub fn run(name: &str, input: Vec<u8>, regions: &[Rect]) -> Run {
     let plan = plan_for(&doc, regions);
     let mut w = Writer::new(doc.reader(), Limits::default());
     let report = redact_vectors(&doc, &plan, &mut w).unwrap();
+    // Every planned entry is accounted for: the plan only knows which paths may reach a region.
     assert_eq!(
-        report.subpaths_removed, plan.report.vector_subpaths_removed,
-        "{name}: removed"
-    );
-    assert_eq!(
-        report.rects_cut, plan.report.vector_rects_cut,
-        "{name}: cut"
+        report.subpaths_removed + report.paths_cut + report.untouched,
+        plan.report.vector_subpaths_removed + plan.report.vector_paths_cut,
+        "{name}: accounting"
     );
     assert_eq!(
         report.collateral, plan.report.collateral,
@@ -216,6 +214,96 @@ impl Run {
         }
         let (ok, log) = python(&args);
         assert!(ok, "{}: fidelity.py: {log}", self.name);
+    }
+
+    fn region_boxes(&self) -> Vec<[f64; 4]> {
+        self.regions
+            .iter()
+            .map(|r| [r.x, r.y, r.x + r.width, r.y + r.height])
+            .collect()
+    }
+
+    /// vector_cut.py (decoded content, no clip trusted): no painted fill or clip outline has a
+    /// vertex or edge in a region, no fill contains one, and the page with every `W` removed shows
+    /// no ink there. The same check on the INPUT must find leaks (the oracle is not vacuous).
+    pub fn assert_cut_is_precise(&self) {
+        let (i, o) = self.files();
+        let spec = tmp(&format!("{}.cut.json", self.name));
+        let boxes: Vec<String> = self
+            .region_boxes()
+            .iter()
+            .map(|b| format!("[{},{},{},{}]", b[0], b[1], b[2], b[3]))
+            .collect();
+        std::fs::write(&spec, format!("{{\"regions\":[{}]}}", boxes.join(","))).unwrap();
+        let check = |p: &Path| {
+            python(&[
+                "tests/oracles/vector_cut.py",
+                p.to_str().unwrap(),
+                "--spec",
+                spec.to_str().unwrap(),
+            ])
+        };
+        let (ok, log) = check(&o);
+        assert!(ok, "{}: vector_cut.py on output: {log}", self.name);
+        let (ok, log) = check(&i);
+        assert!(!ok, "{}: vector_cut.py blind on input: {log}", self.name);
+    }
+
+    /// fidelity.py at 144 dpi with only the regions (0.25 pt margin) excluded: no collateral
+    /// exclusion exists, so every outline, border and adjacent pixel outside must render alike.
+    pub fn assert_rest_unchanged_tight(&self) {
+        assert!(
+            self.report.collateral.is_empty(),
+            "{}: collateral",
+            self.name
+        );
+        let (i, o) = self.files();
+        let changed: Vec<String> = self
+            .region_boxes()
+            .iter()
+            .map(|b| {
+                format!(
+                    "{{\"page\":0,\"rect\":[{},{},{},{}]}}",
+                    b[0], b[1], b[2], b[3]
+                )
+            })
+            .collect();
+        let spec = tmp(&format!("{}.fid.json", self.name));
+        std::fs::write(
+            &spec,
+            format!(
+                "{{\"changed\":[{}],\"margin\":0.25,\"dpi\":144}}",
+                changed.join(",")
+            ),
+        )
+        .unwrap();
+        let (ok, log) = python(&[
+            "tests/oracles/fidelity.py",
+            i.to_str().unwrap(),
+            o.to_str().unwrap(),
+            "--spec",
+            spec.to_str().unwrap(),
+        ]);
+        assert!(ok, "{}: fidelity.py (tight): {log}", self.name);
+    }
+
+    /// The decoded page content of `which` (`false` = input, `true` = output), one string.
+    pub fn content(&self, output: bool) -> String {
+        let (i, o) = self.files();
+        let code = "import sys, pikepdf\npdf = pikepdf.open(sys.argv[1])\nc = pdf.pages[0].obj['/Contents']\n\
+                    print(b'\\n'.join(s.read_bytes() for s in (c if isinstance(c, pikepdf.Array) else [c])).decode('latin1'))";
+        let (ok, log) = python(&[
+            "-c",
+            code,
+            if output {
+                o.to_str().unwrap()
+            } else {
+                i.to_str().unwrap()
+            },
+        ]);
+        assert!(ok, "{}: content: {log}", self.name);
+        // The writer re-emits tokens: compare tokens, not whitespace.
+        log.split_whitespace().collect::<Vec<_>>().join(" ")
     }
 
     /// Inked pixels (any channel under 250 at 4x) inside region `n`, inset 0.6 pt, in

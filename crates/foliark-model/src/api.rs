@@ -802,6 +802,7 @@ pub enum LossCode {
     SignaturesInvalidated,
     ImageReencoded,
     VectorCollateral,
+    VectorCutApproximated,
     FontSubstituted,
     FontGlyphInventoryRetained,
     TextSearchLost,
@@ -852,7 +853,7 @@ pub struct RedactionReport {
     pub images_cloned: u32,
     pub forms_cloned: u32,
     pub vector_subpaths_removed: u32,
-    pub vector_rects_cut: u32,
+    pub vector_paths_cut: u32,
     /// Spec §5.4c.
     pub collateral: Vec<Collateral>,
     pub shared_survivors: Vec<SharedSurvivor>,

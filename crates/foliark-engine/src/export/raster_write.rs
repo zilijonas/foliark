@@ -129,7 +129,7 @@ pub fn report(plan: &RasterPlan, edits: usize, bytes: &[u8]) -> Result<ExportRep
             images_cloned: 0,
             forms_cloned: 0,
             vector_subpaths_removed: 0,
-            vector_rects_cut: 0,
+            vector_paths_cut: 0,
             collateral: Vec::new(),
             shared_survivors: Vec::new(),
         },

@@ -232,7 +232,7 @@ fn a_mixed_page_loses_text_image_vector_and_shared_form_text_in_one_export() {
             r.images_cloned,
             r.forms_cloned,
             r.vector_subpaths_removed,
-            r.vector_rects_cut
+            r.vector_paths_cut
         ),
         (4, 19, 1, 0, 1, 1, 0)
     );

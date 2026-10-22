@@ -4,6 +4,9 @@ All notable changes to `@foliark/sdk`. Format: [Keep a Changelog](https://keepac
 
 ## [Unreleased]
 
+### Changed
+- Redaction cuts filled vector paths and clip outlines precisely instead of removing a whole path for crossing a region: region subtraction in display space (`i_overlay`, nonzero and even-odd, holes, curves, any transform, nested clips). Cut curves become 0.01 pt polylines (loss `VECTOR_CUT_APPROXIMATED`); `RedactionReport.vectorRectsCut` is now `vectorPathsCut`; fills no longer produce `VECTOR_COLLATERAL` (stroked paths still do). Over 250,000 vertices or 131,072 pt coordinates is `LIMIT_EXCEEDED` (`vectorVertices`, `vectorCoordinate`) (NEW-86, ADR 0009).
+
 ## [0.1.0] - unreleased (private candidate)
 
 Not published. Candidate tarball and checksums: `docs/release/candidate.md`. The licence is a placeholder until NEW-73.
