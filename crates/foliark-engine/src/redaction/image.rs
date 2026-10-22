@@ -180,12 +180,7 @@ fn is_codec(s: &Stream<'_>) -> bool {
 /// The decoded size, checked against the limits before anything is allocated.
 fn budget_for(w: u32, h: u32, limits: &Limits, budget: &mut Budget) -> Result<(), PdfError> {
     let pixels = limits::image_pixels(limits, w, h)?;
-    // Colour (3 bytes) and one alpha plane.
-    limits::check(
-        "maxStreamDecodedBytes",
-        pixels.saturating_mul(4),
-        limits.max_stream_decoded_bytes.into(),
-    )?;
+    // Colour (3 bytes) and one alpha plane: bounded by `maxImagePixels` x 4, not by the per-stream cap.
     budget.charge_pixels(pixels)?;
     budget.charge_bytes((pixels.saturating_mul(4)).min(usize::MAX as u64) as usize)
 }

@@ -6,7 +6,12 @@ All notable changes to `@zilijonas/foliark` (named `@foliark/sdk` before 0.1.0 w
 
 ## [0.1.1] - 2026-10-22
 
-Documentation and package metadata only. The engine, SDK and CMaps are byte-identical to 0.1.0 (`wasm/` and `dist/` unchanged, verified against the registry tarball). Source: tag `v0.1.1`. Tarball and hashes: `docs/release/candidate.md`.
+Engine fixes from HDDN's public-corpus gate (NEW-94) and the npm page polish. Source: tag `v0.1.1`. Tarball and hashes: `docs/release/candidate.md`.
+
+### Fixed
+- A legitimate large scan imports: an image XObject is held to its declared size (width x height x components x bits, one predictor byte per row, never below `maxStreamDecodedBytes`) instead of the generic 128 MiB stream cap, so a 9000 x 9000 RGB scan (81 MP, 243 MB decoded) opens, renders and exports. `maxImagePixels` still refuses dimension bombs, the cap still stops a stream that inflates past its declaration, and the redaction image budget no longer double-counts against the stream cap (ADR 0010).
+- Annotations with the `NoRotate` flag (Text notes) are flattened upright with the upper-left corner of their rectangle fixed on a rotated page, as viewers draw them; they used to turn with the page and move (HDDN `public-cropped-rotated`, 0.67 to 0.78 percent of pixels changed on three pages, now 0.14 to 0.18) (ADR 0010).
+- Regression tests: edge-straddling text, fill and image keep their pixels on every page rotation while wholly outside content goes (`sanitize_visibility.rs`); NoRotate notes against MuPDF at 90, 180 and 270 degrees (`sanitize_interactive.rs`); the 81 MP scan and the lying-stream bomb (`resource_limits.rs`).
 
 ### Changed
 - npm package page: new `README.md` with the logo, the HDDN story, the measured comparison with its context and caveats, a feature list, quick start, browser support and licensing, and a not-affiliated note for PyMuPDF and MuPDF.

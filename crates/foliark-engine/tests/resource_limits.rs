@@ -260,6 +260,43 @@ fn expansion_bomb_stops_at_the_cap_and_the_edge_passes() {
 }
 
 #[test]
+fn large_scan_decodes_to_its_declared_size_and_a_bomb_stays_refused() {
+    // 9000x9000 RGB (81 MP, 243 MB decoded) is under maxImagePixels but over the 128 MiB generic
+    // stream cap: a legitimate scan imports, renders and reads back (HDDN public-mixed-multipage).
+    // Compressed in chunks so the test never holds the 243 MB input.
+    let side = 9000usize;
+    let mut e = ZlibEncoder::new(Vec::new(), Compression::fast());
+    let row = vec![0xffu8; side * 3];
+    for _ in 0..side {
+        e.write_all(&row).unwrap();
+    }
+    let big = image_pdf(&e.finish().unwrap(), side as i32, side as i32);
+    let doc = Engine::open(big, None).unwrap();
+    assert!(doc.reader().info().is_ok() && doc.page_model(0).is_ok());
+    assert!(doc.render_page(0, RenderOptions::at(0.25)).is_ok());
+
+    // The stream may not outgrow what its dictionary declares by more than the generic cap:
+    // a 10x10 RGB image that inflates to 2 MiB is refused at the cap, not at the pixel limit.
+    let lie = image_pdf(&zlib(&vec![0u8; 2 * MIB]), 10, 10);
+    let at = Limits {
+        max_stream_decoded_bytes: MIB as u32,
+        ..Default::default()
+    };
+    assert_eq!(
+        open(lie, at).unwrap().info().err(),
+        Some(limit("maxStreamDecodedBytes", MIB as u64 + 1, MIB as u64))
+    );
+    // Declared dimensions over maxImagePixels are still refused whatever the stream holds.
+    assert_eq!(
+        open(image_pdf(&zlib(&[0]), 10_001, 10_000), Limits::default())
+            .unwrap()
+            .info()
+            .err(),
+        Some(limit("maxImagePixels", 100_010_000, 100_000_000))
+    );
+}
+
+#[test]
 fn image_dimension_bomb_is_refused_from_the_dictionary() {
     // 100,000,000 pixels is the default: 10000x10000 passes, one more row does not.
     let image = |w, h| page_pdf(b"", None, Some((w, h)));

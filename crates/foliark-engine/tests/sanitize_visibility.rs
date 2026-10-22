@@ -499,6 +499,68 @@ fn clipped_out_and_off_page_content_is_removed_and_partly_visible_content_stays(
 }
 
 #[test]
+fn content_straddling_a_crop_edge_stays_on_every_rotation() {
+    // HDDN public-cropped-rotated (NEW-94): off-page removal must keep anything that shows in the
+    // visible area, whatever the page rotation. A text, a fill and an image cross each edge of the
+    // CropBox by a few points; three fills lie wholly outside (one 0.5 pt beyond the right edge),
+    // and a fill that only touches the edge stays. MuPDF compares the pixels of the input and the
+    // output inside the crop, so a straddler lost or moved shows as a difference.
+    let mut objs: Vec<String> = vec!["null".into(); 4];
+    objs.extend(GROUPS.map(str::to_owned));
+    objs.extend(vec!["null".into(); 9]);
+    objs.push(stream(
+        "/Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceGray /BitsPerComponent 8",
+        "A",
+    )); // 21
+    let fill = |c: &str, x: f64, y: f64, w: f64| format!("{c} rg {x} {y} {w} {w} re f\n");
+    let image = |x: u32, y: u32| format!("q 40 0 0 40 {x} {y} cm /Im1 Do Q\n");
+    // Text extraction reports the visible glyphs only: the part of each run inside the crop.
+    let shown = ["GE_LEFT", "EDGE_R", "EDGE_BOTTOM", "EDGE_TOP"];
+    let content = [
+        text(40, 200, "EDGE_LEFT"),
+        text(200, 220, "EDGE_RIGHT_STRADDLE"),
+        text(100, 56, "EDGE_BOTTOM"),
+        text(100, 336, "EDGE_TOP"),
+        fill("1 0 0", 40.0, 100.0, 20.0),
+        fill("0 1 0", 240.0, 120.0, 20.0),
+        fill("0 0 1", 150.0, 50.0, 20.0),
+        fill("1 0 1", 150.0, 330.0, 20.0),
+        image(30, 250),
+        image(230, 280),
+        image(200, 40),
+        image(100, 310),
+        fill("0 0 0", 250.0, 150.0, 10.0),
+        fill("1 0.5 0", 10.0, 10.0, 20.0),
+        fill("0 1 1", 270.0, 360.0, 20.0),
+        fill("0.5 0.5 0", 260.5, 150.0, 10.0),
+    ]
+    .concat();
+    for rotate in [0, 90, 180, 270] {
+        let input = pdf(
+            "",
+            &format!(
+                "/CropBox [50 60 250 340] /Rotate {rotate} {}",
+                resources("", "/XObject << /Im1 21 0 R >>")
+            ),
+            &content,
+            &objs,
+        );
+        let (plan, out) = export(&input).unwrap();
+        let name = format!("straddle{rotate}");
+        assert_eq!(
+            plan.report.removed[&SanitizedItem::OffPage],
+            3,
+            "rotate {rotate}: only the three wholly outside fills go"
+        );
+        let t = words(&out);
+        assert!(shown.iter().all(|w| t.contains(w)), "rotate {rotate}: {t}");
+        assert!(has(&out, "/Image"), "rotate {rotate}: an image was lost");
+        let (ok, log) = fidelity_oracle("sanitize-visibility", &name, &input, &out, &[], &shown);
+        assert!(ok, "rotate {rotate}: {log}");
+    }
+}
+
+#[test]
 fn layers_that_cannot_be_evaluated_refuse_by_name() {
     let catalog = "/OCProperties << /OCGs [10 0 R] /D << >> >>";
     let mut objs: Vec<String> = vec!["null".into(); 4];

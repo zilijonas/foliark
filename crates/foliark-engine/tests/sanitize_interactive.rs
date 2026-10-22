@@ -33,12 +33,17 @@ const ID: &str = "1 0 0 1 0 0";
 
 /// 300 x 400 page showing KEEP_PUBLIC; objects 6.. are `bodies`, `annots` the /Annots array.
 fn pdf(catalog: &str, annots: &str, bodies: &[String]) -> Vec<u8> {
+    pdf_on(catalog, "", annots, bodies)
+}
+
+/// `pdf` with `page` (for example `/Rotate 90`) added to the page dictionary.
+fn pdf_on(catalog: &str, page: &str, annots: &str, bodies: &[String]) -> Vec<u8> {
     let content = "BT /F1 12 Tf 20 370 Td (KEEP_PUBLIC) Tj ET";
     let mut objs = vec![
         format!("<< /Type /Catalog /Pages 2 0 R {catalog} >>"),
         "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_owned(),
         format!(
-            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> /Annots [{annots}] >>"
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> /Annots [{annots}] {page} >>"
         ),
         stream("", content),
         "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".to_owned(),
@@ -220,6 +225,40 @@ fn appearance_states_alternates_and_the_bbox_mapping() {
             !out.windows(key.len()).any(|w| w == key.as_bytes()),
             "{key} survived"
         );
+    }
+}
+
+#[test]
+fn a_no_rotate_note_keeps_its_upper_left_corner_and_stands_upright_on_a_rotated_page() {
+    // HDDN public-cropped-rotated (NEW-94): a /F 28 (NoRotate) note on a page turned 90, 180 or
+    // 270 degrees is drawn upright with the rectangle's upper-left corner fixed; the plain note
+    // beside it (/F 4) turns with the page. MuPDF renders the input with annotations on; the
+    // appearances are asymmetric colour boxes (MuPDF's text extraction ignores NoRotate).
+    let boxes = |w: &str, h: &str, small: &str| {
+        stream(
+            &format!("/Type /XObject /Subtype /Form /BBox [0 0 {w} {h}]"),
+            &format!("1 0 0 rg 0 0 {w} {h} re f 0 0 1 rg 0 0 {small} re f"),
+        )
+    };
+    let bodies = [
+        boxes("80", "20", "20 10"),
+        boxes("60", "30", "10 20"),
+        "<< /Type /Annot /Subtype /Text /Rect [150 200 230 220] /F 28 /AP << /N 6 0 R >> >>".into(),
+        "<< /Type /Annot /Subtype /Text /Rect [40 100 100 130] /F 4 /AP << /N 7 0 R >> >>".into(),
+    ];
+    for rotate in [90, 180, 270] {
+        let input = pdf_on("", &format!("/Rotate {rotate}"), "8 0 R 9 0 R", &bodies);
+        let (_, out) = export(&input, vec![], ExportPolicy::default()).unwrap();
+        let name = format!("norotate{rotate}");
+        let (ok, log) = fidelity_oracle(
+            "sanitize-interactive",
+            &name,
+            &input,
+            &out,
+            &[],
+            &["KEEP_PUBLIC"],
+        );
+        assert!(ok, "rotate {rotate}: {log}");
     }
 }
 

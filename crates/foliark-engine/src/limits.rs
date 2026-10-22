@@ -2,7 +2,7 @@
 //! allocation or work it guards; `LIMIT_EXCEEDED` carries which limit, the value and the max.
 use foliark_model::{ErrorCode, Limits, ObjectId, PdfError};
 use hayro::hayro_syntax::object::stream::DecodeFailure;
-use hayro::hayro_syntax::object::{Name, Stream};
+use hayro::hayro_syntax::object::{Dict, Name, Stream};
 use std::borrow::Cow;
 
 const MIB: u64 = 1 << 20;
@@ -63,26 +63,61 @@ pub(crate) fn image_pixels(limits: &Limits, width: u32, height: u32) -> Result<u
     Ok(pixels)
 }
 
-/// Strict decode of one stream under `maxStreamDecodedBytes` and `maxDecodeRatio` (the ratio
-/// only applies once the output passes 1 MiB, and never to an image XObject: its decoded size
-/// is bounded by `maxImagePixels` and deflate reaches about 1030:1 on flat data, so a blank
-/// scanned page, 6.3 MB of white at 150 dpi, would otherwise look like a bomb). The decoder stops at the cap, so a bomb is
-/// never built. `actual` is a lower bound: decoding stops at the first byte over the cap.
+/// Most bytes an image XObject can decode to: its declared samples (rows padded to bytes, plus
+/// one predictor byte per row) with the colour model's component count. Only the plain device
+/// spaces are narrower than 4 components; any other space is bounded by 4. Dimensions are
+/// already limited by `maxImagePixels`, so this stays bounded; an image is never held to the
+/// generic per-stream cap, which a legitimate 81 MP RGB scan (243 MB) passes.
+fn image_decoded_bound(d: &Dict<'_>, w: u32, h: u32) -> u64 {
+    let mask = d.get::<bool>("ImageMask").unwrap_or(false);
+    let bpc = if mask {
+        1
+    } else {
+        u64::from(
+            d.get::<u32>("BitsPerComponent")
+                .or_else(|| d.get("BPC"))
+                .unwrap_or(8),
+        )
+        .clamp(1, 16)
+    };
+    let comps = match d.get::<Name<'_>>("ColorSpace").or_else(|| d.get("CS")) {
+        _ if mask => 1,
+        Some(n) if matches!(n.as_str(), "DeviceGray" | "G" | "CalGray") => 1,
+        Some(n) if matches!(n.as_str(), "DeviceRGB" | "RGB" | "CalRGB") => 3,
+        _ => 4,
+    };
+    let row = (u64::from(w) * comps * bpc).div_ceil(8) + 1;
+    row.saturating_mul(u64::from(h))
+}
+
+/// Strict decode of one stream under `maxStreamDecodedBytes` and `maxDecodeRatio`. An image
+/// XObject is held to its declared size instead (`image_decoded_bound`, never below the generic
+/// cap) and exempt from the ratio: deflate reaches about 1030:1 on flat data, so a blank
+/// scanned page, 6.3 MB of white at 150 dpi, would otherwise look like a bomb. The ratio only
+/// applies to other streams once the output passes 1 MiB. The decoder stops at the cap, so a
+/// bomb is never built. `actual` is a lower bound: decoding stops at the first byte over the cap.
 pub(crate) fn decode_stream<'a>(
     stream: &Stream<'a>,
     obj: ObjectId,
     limits: &Limits,
     budget: &mut Budget,
 ) -> Result<Cow<'a, [u8]>, PdfError> {
-    let max = u64::from(limits.max_stream_decoded_bytes);
+    let mut max = u64::from(limits.max_stream_decoded_bytes);
     let ratio = u64::from(limits.max_decode_ratio);
     let allowed = (stream.raw_data().len() as u64)
         .saturating_mul(ratio)
         .max(MIB);
-    let image = stream
-        .dict()
+    let d = stream.dict();
+    let image = d
         .get::<Name<'_>>("Subtype")
         .is_some_and(|n| n.as_str() == "Image");
+    if image {
+        let dim = |long, short| d.get::<u32>(long).or_else(|| d.get(short)).unwrap_or(0);
+        let (w, h) = (dim("Width", "W"), dim("Height", "H"));
+        // The dimension bomb is refused first; the bound below only widens a size-correct image.
+        image_pixels(limits, w, h)?;
+        max = max.max(image_decoded_bound(d, w, h));
+    }
     let by_ratio = !image && allowed < max;
     let cap = if by_ratio { allowed } else { max };
     let cap_usize = usize::try_from(cap).unwrap_or(usize::MAX);
