@@ -125,6 +125,12 @@ impl Type1Font {
     }
 }
 
+impl Type1Font {
+    pub(crate) fn is_substituted(&self) -> bool {
+        matches!(&self.1, Kind::Standard(s) if s.is_fallback())
+    }
+}
+
 impl CacheKey for Type1Font {
     fn cache_key(&self) -> u128 {
         self.0

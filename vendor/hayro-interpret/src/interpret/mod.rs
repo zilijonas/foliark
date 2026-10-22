@@ -107,6 +107,9 @@ pub struct InterpreterSettings {
     /// truncated and report [`InterpreterWarning::StreamDecodeFailure`], instead of
     /// interpreting whatever decoded.
     pub strict_streams: bool,
+    /// Report [`InterpreterWarning::FontSubstituted`] for a simple font that is drawn with a
+    /// standard face because the PDF does not embed it.
+    pub report_font_substitution: bool,
 }
 
 impl Default for InterpreterSettings {
@@ -127,6 +130,7 @@ impl Default for InterpreterSettings {
             render_annotations: true,
             ocg_override: false,
             strict_streams: false,
+            report_font_substitution: false,
         }
     }
 }
@@ -149,6 +153,10 @@ pub enum InterpreterWarning {
     /// A `Do` names an XObject that is in the resources but cannot be read: the object is
     /// missing or damaged, or it is part of a reference cycle (a Form that draws itself).
     UnresolvedXObject(hayro_syntax::object::ObjRef),
+    /// A simple font that is not embedded and is not one of the 14 standard faces is drawn with
+    /// a standard face instead. Carries the font dictionary's object, if it is indirect. Reported
+    /// once per font and render cache.
+    FontSubstituted(Option<hayro_syntax::object::ObjRef>),
 }
 
 /// interpret the contents of the page and render them into the device.

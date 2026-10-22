@@ -18,6 +18,8 @@
     for (let i = 0; i < page.data.length; i += 4) {
       if (page.data[i] !== 255 || page.data[i + 1] !== 255 || page.data[i + 2] !== 255) nonWhite++;
     }
+    const part = await doc.renderPage(0, { scale: 2, clip: { x: 100, y: 0, width: 100, height: 100 }, background: [0, 0, 0, 0] });
+    const ppx = (x, y) => Array.from(part.data.subarray((y * part.width + x) * 4, (y * part.width + x) * 4 + 4));
     let outOfRange = "";
     await doc.renderPage(5).catch((e) => (outOfRange = e.message));
     await doc.close();
@@ -25,6 +27,8 @@
     Object.assign(out, {
       ok: true, pageCount: doc.pageCount, geometry, width: page.width, height: page.height,
       length: page.data.length, nonWhite, red: px(140, 75), corner: px(190, 5), outOfRange,
+      complete: page.complete, warnings: page.warnings, clip: page.clip,
+      part: { width: part.width, height: part.height, clip: part.clip, red: ppx(80, 150), corner: ppx(180, 10) },
     });
   } catch (e) {
     out.error = String(e);

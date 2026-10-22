@@ -39,6 +39,11 @@ try {
   assert.deepEqual(r.red, [255, 0, 0, 255], "red rect pixel");
   assert.deepEqual(r.corner, [255, 255, 255, 255], "white background pixel");
   assert.ok(r.nonWhite > 1000, `expected rect + text pixels, got ${r.nonWhite}`);
+  assert.deepEqual([r.complete, r.warnings, r.clip], [true, [], { x: 0, y: 0, width: 200, height: 100 }]);
+  assert.deepEqual(
+    [r.part.width, r.part.height, r.part.clip, r.part.red, r.part.corner],
+    [200, 200, { x: 100, y: 0, width: 100, height: 100 }, [255, 0, 0, 255], [0, 0, 0, 0]],
+  );
   assert.match(r.outOfRange, /InvalidArgument/);
   console.log(`smoke ${name}: ok (${r.width}x${r.height}, ${r.nonWhite} non-white px)`);
 } finally {

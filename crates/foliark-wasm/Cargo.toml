@@ -13,5 +13,6 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 foliark-engine = { path = "../foliark-engine" }
 foliark-model = { path = "../foliark-model" }
+serde.workspace = true
 serde-wasm-bindgen.workspace = true
 wasm-bindgen.workspace = true

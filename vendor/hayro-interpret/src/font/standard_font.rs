@@ -367,6 +367,11 @@ impl StandardKind {
         Self::new_with_standard(dict, font, !exact, resolver)
     }
 
+    /// Whether this face stands in for a font the PDF does not embed.
+    pub(crate) fn is_fallback(&self) -> bool {
+        self.fallback
+    }
+
     pub(crate) fn new_with_standard(
         dict: &Dict<'_>,
         base_font: StandardFont,

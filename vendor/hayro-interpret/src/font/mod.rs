@@ -321,6 +321,15 @@ impl CacheKey for Type3Glyph<'_> {
 pub(crate) struct Font<'a>(u128, FontType<'a>, Option<ObjRef>);
 
 impl<'a> Font<'a> {
+    /// Whether a simple font is drawn with a standard face because the PDF does not embed it.
+    pub(crate) fn is_substituted(&self) -> bool {
+        match &self.1 {
+            FontType::Type1(f) => f.is_substituted(),
+            FontType::TrueType(f) => f.is_substituted(),
+            _ => false,
+        }
+    }
+
     pub(crate) fn new(
         dict: &Dict<'a>,
         font_resolver: &FontResolverFn,

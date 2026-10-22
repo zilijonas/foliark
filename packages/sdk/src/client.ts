@@ -4,16 +4,32 @@ import type { OpName } from "./generated/OpName.js";
 import type { PageGeometry } from "./generated/PageGeometry.js";
 import { checkRequest, Correlator, FoliarkError, postTransfer } from "./protocol.js";
 
+export interface RenderOptions {
+  /** Pixels per point (1). */
+  scale?: number;
+  /** Display-space rect to render (the whole page). */
+  clip?: { x: number; y: number; width: number; height: number };
+  /** Draw annotation appearances (true). */
+  annotations?: boolean;
+  /** Straight-alpha sRGB, each 0..1 (opaque white). */
+  background?: [number, number, number, number];
+}
+
 export interface RenderedPage {
   width: number;
   height: number;
   data: Uint8ClampedArray; // RGBA8 straight alpha
+  scale: number;
+  clip: { x: number; y: number; width: number; height: number };
+  /** False iff `warnings` is not empty. */
+  complete: boolean;
+  warnings: { code: "FONT_SUBSTITUTED" | "IMAGE_DECODE_FAILED" | "ANNOTATION_APPEARANCE_MISSING" | "CMAP_MISSING"; detail: string }[];
 }
 
 export interface DocumentHandle {
   readonly pageCount: number;
   pageGeometry(page: number): Promise<PageGeometry>;
-  renderPage(page: number, o?: { scale?: number }): Promise<RenderedPage>;
+  renderPage(page: number, o?: RenderOptions): Promise<RenderedPage>;
   close(): Promise<void>;
 }
 
@@ -83,8 +99,8 @@ export async function createFoliark(o: FoliarkOptions): Promise<Foliark> {
           return g;
         },
         async renderPage(page, ro) {
-          const r = await call<{ width: number; height: number; data: ArrayBuffer }>("renderPage", { page, scale: ro?.scale ?? 1 }, docId);
-          return { width: r.width, height: r.height, data: new Uint8ClampedArray(r.data) };
+          const r = await call<Omit<RenderedPage, "data"> & { data: ArrayBuffer }>("renderPage", { page, ...ro }, docId);
+          return { ...r, data: new Uint8ClampedArray(r.data) };
         },
         close: () => call<null>("close", {}, docId).then(() => undefined),
       };

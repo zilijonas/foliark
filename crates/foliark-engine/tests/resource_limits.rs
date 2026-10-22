@@ -1,7 +1,7 @@
 //! Budgets (spec §9): each limit refuses before it allocates, and sits exactly at its edge.
 use flate2::{Compression, write::ZlibEncoder};
-use foliark_engine::Document as Engine;
 use foliark_engine::reader::Document;
+use foliark_engine::{Document as Engine, RenderOptions};
 use foliark_model::{ErrorCode, FoliarkError, Limits, PdfError};
 use pdf_writer::{Filter, Finish, Name, Pdf, Rect, Ref};
 use std::io::Write;
@@ -246,7 +246,7 @@ fn image_dimension_bomb_is_refused_from_the_dictionary() {
     assert_eq!(name, "maxImagePixels");
     // The renderer refuses it too, without decoding the image.
     let doc = Engine::open(image(40_000, 40_000), None).unwrap();
-    let (name, ..) = limit_of(doc.render_page(0, 1.0));
+    let (name, ..) = limit_of(doc.render_page(0, RenderOptions::at(1.0)));
     assert_eq!(name, "maxImagePixels");
     // Drawn images are checked as they are met, including ones the scan cannot see.
     let tight = Limits {
@@ -281,9 +281,9 @@ fn render_pixels_are_limited_per_render() {
         ..Default::default()
     };
     let doc = Engine::open_with_limits(page_pdf(b"", None, None), None, false, at).unwrap();
-    assert!(doc.render_page(0, 1.0).is_ok());
+    assert!(doc.render_page(0, RenderOptions::at(1.0)).is_ok());
     assert_eq!(
-        limit_of(doc.render_page(0, 1.01)),
+        limit_of(doc.render_page(0, RenderOptions::at(1.01))),
         ("maxRenderPixels".to_owned(), 10201, 10000)
     );
 }

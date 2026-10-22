@@ -29,10 +29,10 @@ try {
       const doc = w.open(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)));
       const n = w.pageCount(doc), t = { render: [], copy: [] };
       for (let r = 0; r < N + 1; r++) for (let p = 0; p < n; p++) {
-        const t0 = performance.now(); const x = w.renderPage(doc, p, SCALE); const t1 = performance.now(); x.takeData(); const t2 = performance.now(); x.free();
+        const t0 = performance.now(); const x = w.renderPage(doc, p, { scale: SCALE }); const t1 = performance.now(); x.takeData(); const t2 = performance.now(); x.free();
         if (r) { t.render.push(t1 - t0); t.copy.push(t2 - t1); }
       }
-      t.dump = n > 1 ? [0, 7, 19].map((p) => { const x = w.renderPage(doc, p, SCALE), d = x.takeData(); x.free(); return Array.from(d.subarray(0, 4e6)); }) : [];
+      t.dump = n > 1 ? [0, 7, 19].map((p) => { const x = w.renderPage(doc, p, { scale: SCALE }), d = x.takeData(); x.free(); return Array.from(d.subarray(0, 4e6)); }) : [];
       w.close(doc); return t;
     }, { b64, N, SCALE });
     if (arg("--dump") && split.dump.length) await writeFile(arg("--dump"), JSON.stringify(split.dump));

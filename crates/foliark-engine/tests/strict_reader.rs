@@ -1,6 +1,6 @@
 //! The reader never turns damage into an empty page (spec §0.1, §12).
-use foliark_engine::Document as Engine;
 use foliark_engine::reader::{ContentStream, Document};
+use foliark_engine::{Document as Engine, RenderOptions};
 use foliark_model::{ErrorCode, FoliarkError, ObjectId, PdfError};
 use pdf_writer::{Content, Filter, Finish, Pdf, Rect, Ref};
 
@@ -104,7 +104,7 @@ fn render_refuses_a_page_it_would_draw_blank() {
     let bytes = pdf_with(Some((b"garbage", Some(Filter::FlateDecode))));
     let doc = Engine::open(bytes, None).unwrap();
     assert_eq!(
-        doc.render_page(0, 1.0).err().unwrap(),
+        doc.render_page(0, RenderOptions::at(1.0)).err().unwrap(),
         PdfError::at(ErrorCode::DecodeFailed, OBJ4)
     );
 }
