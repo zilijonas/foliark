@@ -1,120 +1,15 @@
 //! Strict, fallible reader (spec §0.1): every failure is a typed error with the object it
 //! happened in. Nothing is silently skipped, emptied or repaired.
 use crate::limits::{self, Budget};
-use foliark_model::{ErrorCode, ErrorDetails, FoliarkError, Limits, ObjectId};
+use foliark_model::{ErrorCode, Limits, ObjectId, PageGeometry, PdfError, page_geometry};
 use hayro::hayro_syntax::content::TypedIter;
 use hayro::hayro_syntax::object::dict::keys::{CONTENTS, FILTER};
-use hayro::hayro_syntax::object::{Array, Name, ObjRef, Object, Stream};
+use hayro::hayro_syntax::object::{Array, Dict, Name, ObjRef, Object, Stream};
 use hayro::hayro_syntax::page::Page;
 use hayro::hayro_syntax::{DecryptionError, LoadPdfError, Pdf};
 use std::cell::OnceCell;
-use std::fmt;
 
 mod preflight;
-mod provenance;
-pub use provenance::{Item, ItemKind};
-
-/// Why a read failed. [`ReaderError::code`] is the spec §12 error code and
-/// `FoliarkError::from` adds the details (object, limit).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ReaderError {
-    /// Unparsable, no `%PDF-` header in the first 1024 bytes.
-    MalformedPdf,
-    /// The xref table was rebuilt by scanning the file and `allow_repaired` is off.
-    RepairedPdf,
-    PasswordRequired,
-    PasswordIncorrect,
-    EncryptionUnsupported,
-    PageOutOfRange {
-        page: usize,
-        count: usize,
-    },
-    /// A filter or decryption failed, or the Flate data is corrupt or truncated.
-    DecodeFailed {
-        obj: ObjectId,
-    },
-    /// The stream names a filter this reader does not implement.
-    UnsupportedFilter {
-        obj: ObjectId,
-    },
-    /// `/Contents` points at an object that cannot be read (for example a truncated file).
-    ContentUnreadable {
-        obj: ObjectId,
-    },
-    /// The decoded content stream stops parsing before its end.
-    ContentSyntax {
-        obj: ObjectId,
-        offset: usize,
-    },
-    /// A Form draws itself, directly or through other Forms.
-    FormCycle {
-        obj: ObjectId,
-    },
-    /// A spec §9 limit was exceeded. `limit` is the `Limits` field name; `actual` is a lower
-    /// bound when the check stops at the first byte over the cap.
-    LimitExceeded {
-        limit: &'static str,
-        actual: u64,
-        max: u64,
-    },
-}
-
-impl ReaderError {
-    pub fn code(&self) -> ErrorCode {
-        match self {
-            Self::MalformedPdf
-            | Self::ContentUnreadable { .. }
-            | Self::ContentSyntax { .. }
-            | Self::FormCycle { .. } => ErrorCode::MalformedPdf,
-            Self::PageOutOfRange { .. } => ErrorCode::InvalidArgument,
-            Self::RepairedPdf => ErrorCode::RepairedPdf,
-            Self::PasswordRequired => ErrorCode::PasswordRequired,
-            Self::PasswordIncorrect => ErrorCode::PasswordIncorrect,
-            Self::EncryptionUnsupported => ErrorCode::EncryptionUnsupported,
-            Self::DecodeFailed { .. } | Self::UnsupportedFilter { .. } => ErrorCode::DecodeFailed,
-            Self::LimitExceeded { .. } => ErrorCode::LimitExceeded,
-        }
-    }
-
-    fn details(&self) -> Option<ErrorDetails> {
-        let obj_ref = |o: &ObjectId| Some(format!("{} {} R", o.num, o.generation));
-        match self {
-            Self::DecodeFailed { obj }
-            | Self::UnsupportedFilter { obj }
-            | Self::ContentUnreadable { obj }
-            | Self::ContentSyntax { obj, .. }
-            | Self::FormCycle { obj } => Some(ErrorDetails {
-                obj_ref: obj_ref(obj),
-                ..Default::default()
-            }),
-            Self::LimitExceeded { limit, actual, max } => Some(ErrorDetails {
-                limit: Some((*limit).into()),
-                actual: Some(*actual as f64),
-                max: Some(*max as f64),
-                ..Default::default()
-            }),
-            _ => None,
-        }
-    }
-}
-
-impl fmt::Display for ReaderError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}: {self:?}", self.code())
-    }
-}
-
-impl std::error::Error for ReaderError {}
-
-impl From<&ReaderError> for FoliarkError {
-    fn from(e: &ReaderError) -> Self {
-        FoliarkError {
-            code: e.code(),
-            message: e.to_string(),
-            details: e.details(),
-        }
-    }
-}
 
 pub(crate) fn object_id(r: ObjRef) -> ObjectId {
     ObjectId {
@@ -135,7 +30,7 @@ pub struct Document {
     allow_repaired: bool,
     limits: Limits,
     /// Result of the whole-document budget scan, filled on first use.
-    scanned: OnceCell<Result<(), ReaderError>>,
+    scanned: OnceCell<Result<(), PdfError>>,
 }
 
 impl Document {
@@ -144,7 +39,7 @@ impl Document {
         bytes: Vec<u8>,
         password: Option<&str>,
         allow_repaired: bool,
-    ) -> Result<Self, ReaderError> {
+    ) -> Result<Self, PdfError> {
         Self::open_with_limits(bytes, password, allow_repaired, Limits::default())
     }
 
@@ -157,7 +52,7 @@ impl Document {
         password: Option<&str>,
         allow_repaired: bool,
         limits: Limits,
-    ) -> Result<Self, ReaderError> {
+    ) -> Result<Self, PdfError> {
         limits::check(
             "maxInputBytes",
             bytes.len() as u64,
@@ -168,19 +63,19 @@ impl Document {
             .windows(5)
             .any(|w| w == b"%PDF-")
         {
-            return Err(ReaderError::MalformedPdf);
+            return Err(PdfError::new(ErrorCode::MalformedPdf));
         }
         let pdf = Pdf::new_with_password(bytes, password).map_err(|e| match e {
             LoadPdfError::Decryption(DecryptionError::PasswordProtected) if password.is_empty() => {
-                ReaderError::PasswordRequired
+                PdfError::new(ErrorCode::PasswordRequired)
             }
             LoadPdfError::Decryption(DecryptionError::PasswordProtected) => {
-                ReaderError::PasswordIncorrect
+                PdfError::new(ErrorCode::PasswordIncorrect)
             }
             LoadPdfError::Decryption(DecryptionError::UnsupportedAlgorithm) => {
-                ReaderError::EncryptionUnsupported
+                PdfError::new(ErrorCode::EncryptionUnsupported)
             }
-            _ => ReaderError::MalformedPdf,
+            _ => PdfError::new(ErrorCode::MalformedPdf),
         })?;
         limits::check("maxObjects", pdf.len() as u64, limits.max_objects.into())?;
         limits::check(
@@ -216,17 +111,51 @@ impl Document {
         self.pdf.pages().len()
     }
 
-    pub(crate) fn page(&self, index: usize) -> Result<&Page<'_>, ReaderError> {
+    pub(crate) fn page(&self, index: usize) -> Result<&Page<'_>, PdfError> {
         let pages = self.pdf.pages();
-        pages.get(index).ok_or(ReaderError::PageOutOfRange {
-            page: index,
-            count: pages.len(),
-        })
+        pages.get(index).ok_or(PdfError::page_out_of_range(index))
     }
 
-    pub(crate) fn check_repaired(&self) -> Result<(), ReaderError> {
+    /// The spec §2 geometry of a page: boxes, inherited /Rotate, /UserUnit and both transforms.
+    pub fn page_geometry(&self, index: usize) -> Result<PageGeometry, PdfError> {
+        let page = self.page(index)?;
+        let bounds = |r: hayro::hayro_syntax::object::Rect| [r.x0, r.y0, r.x1, r.y1];
+        let malformed = || PdfError::new(ErrorCode::MalformedPdf);
+        // /Rotate is inheritable, a damaged /Parent chain may loop (bounded), and anything but
+        // an integer is malformed.
+        let mut node = page.raw().clone();
+        let mut rotate = None;
+        for _ in 0..64 {
+            if node.contains_key("Rotate") {
+                let v = node.get::<f64>("Rotate").ok_or_else(malformed)?;
+                if v.fract() != 0.0 || v.abs() > 1e9 {
+                    return Err(malformed());
+                }
+                rotate = Some(v as i64);
+                break;
+            }
+            match node.get::<Dict<'_>>("Parent") {
+                Some(parent) => node = parent,
+                None => break,
+            }
+        }
+        let unit = match page.raw().get::<f64>("UserUnit") {
+            Some(u) => u,
+            None if page.raw().contains_key("UserUnit") => return Err(malformed()),
+            None => 1.0,
+        };
+        page_geometry(
+            index as u32,
+            bounds(page.media_box()),
+            Some(bounds(page.crop_box())),
+            rotate.unwrap_or(0),
+            unit,
+        )
+    }
+
+    pub(crate) fn check_repaired(&self) -> Result<(), PdfError> {
         if self.was_repaired() && !self.allow_repaired {
-            return Err(ReaderError::RepairedPdf);
+            return Err(PdfError::new(ErrorCode::RepairedPdf));
         }
         Ok(())
     }
@@ -234,7 +163,7 @@ impl Document {
     /// The decoded content streams of a page, in drawing order. A page without `/Contents` is
     /// `Ok(vec![])`; an empty stream is `Ok` with empty data. Everything else that makes the
     /// content unreadable is an `Err`, never an empty page.
-    pub fn page_contents(&self, index: usize) -> Result<Vec<ContentStream>, ReaderError> {
+    pub fn page_contents(&self, index: usize) -> Result<Vec<ContentStream>, PdfError> {
         self.page_contents_with(index, &mut Budget::new(&self.limits))
     }
 
@@ -242,13 +171,14 @@ impl Document {
         &self,
         index: usize,
         budget: &mut Budget,
-    ) -> Result<Vec<ContentStream>, ReaderError> {
+    ) -> Result<Vec<ContentStream>, PdfError> {
         let dict = self.page(index)?.raw();
-        let unreadable = |r: Option<ObjRef>| ReaderError::ContentUnreadable {
-            obj: r.map(object_id).unwrap_or(ObjectId {
+        let unreadable = |r: Option<ObjRef>| {
+            let none = ObjectId {
                 num: 0,
                 generation: 0,
-            }),
+            };
+            PdfError::at(ErrorCode::MalformedPdf, r.map(object_id).unwrap_or(none))
         };
         let xref = self.pdf.xref();
         let streams: Vec<Stream<'_>> = match dict.get::<Object<'_>>(CONTENTS) {
@@ -287,7 +217,7 @@ fn decode_content(
     stream: &Stream<'_>,
     limits: &Limits,
     budget: &mut Budget,
-) -> Result<ContentStream, ReaderError> {
+) -> Result<ContentStream, PdfError> {
     let obj = object_id(stream.obj_id().into());
     let dict = stream.dict();
     let named = dict
@@ -300,17 +230,14 @@ fn decode_content(
         .unwrap_or(0);
     // The parser drops filter names it does not know instead of failing.
     if named != stream.filters().len() {
-        return Err(ReaderError::UnsupportedFilter { obj });
+        return Err(PdfError::at(ErrorCode::DecodeFailed, obj));
     }
     let data = limits::decode_stream(stream, obj, limits, budget)?.into_owned();
     // shortcut: an invalid path operator that is the very last instruction goes unnoticed.
     let mut ops = TypedIter::new(&data);
     while ops.next().is_some() {}
     if ops.offset() < data.len() {
-        return Err(ReaderError::ContentSyntax {
-            obj,
-            offset: ops.offset(),
-        });
+        return Err(PdfError::at(ErrorCode::MalformedPdf, obj));
     }
     Ok(ContentStream { obj, data })
 }

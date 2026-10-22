@@ -168,6 +168,7 @@ name = "foliark-wasm"
 version = "0.0.0"
 dependencies = [
  "foliark-engine",
+ "foliark-model",
  "serde-wasm-bindgen",
  "wasm-bindgen",
 ]

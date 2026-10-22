@@ -16,7 +16,7 @@ thread_local! {
 
 fn with_doc<T>(
     doc: u32,
-    f: impl FnOnce(&Document) -> Result<T, foliark_engine::EngineError>,
+    f: impl FnOnce(&Document) -> Result<T, foliark_model::PdfError>,
 ) -> Result<T, JsError> {
     DOCS.with(|d| match d.borrow().open.get(&doc) {
         Some(document) => f(document).map_err(|e| JsError::new(&e.to_string())),

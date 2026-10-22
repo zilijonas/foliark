@@ -127,9 +127,24 @@ impl Glyph<'_> {
 pub struct PositionedGlyph<'a> {
     pub(crate) glyph: Glyph<'a>,
     pub(crate) transform: Affine,
+    pub(crate) advance: (f64, f64),
+    pub(crate) code_index: u32,
 }
 
 impl PositionedGlyph<'_> {
+    /// Displacement to the next glyph origin in em (1 = font size), with character and word
+    /// spacing applied: `(x, 0)` for horizontal writing, `(0, y)` for vertical. Horizontal
+    /// scaling does not show in it (it scales the em itself).
+    pub fn advance(&self) -> (f64, f64) {
+        self.advance
+    }
+
+    /// Index of this glyph's character code within the show operator, counting codes that
+    /// were not drawn (a `TJ` array counts through all of its strings).
+    pub fn code_index(&self) -> u32 {
+        self.code_index
+    }
+
     /// Return the transform that places this glyph in text space.
     pub fn transform(&self) -> Affine {
         self.transform
@@ -147,9 +162,16 @@ impl<'a> Deref for PositionedGlyph<'a> {
 /// A fully materialized run of positioned glyphs.
 pub struct GlyphRun<'run, 'a> {
     pub(crate) glyphs: &'run [PositionedGlyph<'a>],
+    pub(crate) render_mode: u8,
 }
 
 impl<'run, 'a> GlyphRun<'run, 'a> {
+    /// The text rendering mode (`Tr`, 0 to 7) the run was shown with. Modes 2 and 6 report
+    /// two runs (fill, then stroke).
+    pub fn render_mode(&self) -> u8 {
+        self.render_mode
+    }
+
     /// Return the glyphs in the run.
     pub fn glyphs(&self) -> &'run [PositionedGlyph<'a>] {
         self.glyphs

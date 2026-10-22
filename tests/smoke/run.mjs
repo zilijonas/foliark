@@ -39,7 +39,7 @@ try {
   assert.deepEqual(r.red, [255, 0, 0, 255], "red rect pixel");
   assert.deepEqual(r.corner, [255, 255, 255, 255], "white background pixel");
   assert.ok(r.nonWhite > 1000, `expected rect + text pixels, got ${r.nonWhite}`);
-  assert.match(r.outOfRange, /out of range/);
+  assert.match(r.outOfRange, /InvalidArgument/);
   console.log(`smoke ${name}: ok (${r.width}x${r.height}, ${r.nonWhite} non-white px)`);
 } finally {
   await browser.close();

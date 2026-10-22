@@ -64,6 +64,8 @@ pub struct Context<'a> {
     pub(crate) ocg_state: OcgState,
     nesting_depth: u32,
     pub(crate) glyph_scratch: Vec<PositionedGlyph<'a>>,
+    /// Character codes seen so far by the current show operator, for `PositionedGlyph::code_index`.
+    pub(crate) glyph_codes: u32,
     /// The content stream being interpreted, for `Device::begin_operator`.
     pub(crate) source: Source,
 }
@@ -161,6 +163,7 @@ impl<'a> Context<'a> {
             ocg_state,
             nesting_depth,
             glyph_scratch: Vec::new(),
+            glyph_codes: 0,
             source: Source::default(),
         }
     }

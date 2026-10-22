@@ -296,6 +296,10 @@ impl<'a, T: Device<'a>> Device<'a> for StencilPatternDevice<'a, '_, T> {
         self.inner.begin_operator(stream, range);
     }
 
+    fn unknown_operator(&mut self, name: &[u8]) {
+        self.inner.unknown_operator(name);
+    }
+
     fn begin_form(&mut self, form: ObjRef, matrix: Affine) -> bool {
         self.inner.begin_form(form, matrix)
     }

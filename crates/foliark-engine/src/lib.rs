@@ -1,49 +1,16 @@
 //! Reader and renderer. Thin wrappers over hayro; the other §14 modules land with their tasks.
-use foliark_model::{Limits, Matrix, PageGeometry};
+use foliark_model::{ErrorCode, Limits, PageGeometry, PdfError};
 use hayro::hayro_interpret::InterpreterSettings;
-use hayro::hayro_syntax::page::Rotation;
 use hayro::vello_cpu::color::palette::css::WHITE;
 use hayro::vello_cpu::peniko::ImageAlphaType;
 use hayro::{PixmapSettings, RenderCache, RenderSettings, render};
-use std::fmt;
 
+pub mod interpret;
 pub mod limits;
 pub mod reader;
-use reader::ReaderError;
 
 /// Spec §1.3: each rendered side is at most 16384 px.
 const MAX_SIDE: f64 = 16384.0;
-
-#[derive(Debug, PartialEq)]
-pub enum EngineError {
-    Read(ReaderError),
-    PageOutOfRange { page: usize, count: usize },
-    BadScale(f64),
-    RenderTooLarge { width: f64, height: f64 },
-}
-
-impl fmt::Display for EngineError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Read(e) => write!(f, "cannot read PDF: {e}"),
-            Self::PageOutOfRange { page, count } => {
-                write!(f, "page {page} out of range (count {count})")
-            }
-            Self::BadScale(s) => write!(f, "scale must be finite and > 0, got {s}"),
-            Self::RenderTooLarge { width, height } => {
-                write!(f, "render {width}x{height} exceeds {MAX_SIDE} px per side")
-            }
-        }
-    }
-}
-
-impl std::error::Error for EngineError {}
-
-impl From<ReaderError> for EngineError {
-    fn from(e: ReaderError) -> Self {
-        Self::Read(e)
-    }
-}
 
 /// RGBA8 straight-alpha sRGB pixels, row-major (ImageData-compatible).
 pub struct Rendered {
@@ -55,7 +22,7 @@ pub struct Rendered {
 pub struct Document(reader::Document);
 
 impl Document {
-    pub fn open(bytes: Vec<u8>, password: Option<&str>) -> Result<Self, EngineError> {
+    pub fn open(bytes: Vec<u8>, password: Option<&str>) -> Result<Self, PdfError> {
         Self::open_with(bytes, password, false)
     }
 
@@ -64,7 +31,7 @@ impl Document {
         bytes: Vec<u8>,
         password: Option<&str>,
         allow_repaired: bool,
-    ) -> Result<Self, EngineError> {
+    ) -> Result<Self, PdfError> {
         Self::open_with_limits(bytes, password, allow_repaired, Limits::default())
     }
 
@@ -73,7 +40,7 @@ impl Document {
         password: Option<&str>,
         allow_repaired: bool,
         limits: Limits,
-    ) -> Result<Self, EngineError> {
+    ) -> Result<Self, PdfError> {
         Ok(Self(reader::Document::open_with_limits(
             bytes,
             password,
@@ -91,37 +58,18 @@ impl Document {
         self.0.page_count()
     }
 
-    pub fn page_geometry(&self, index: usize) -> Result<PageGeometry, EngineError> {
-        let page = self.page(index)?;
-        let (width, height) = page.render_dimensions();
-        let rotation = match page.rotation() {
-            Rotation::None => 0,
-            Rotation::Horizontal => 90,
-            Rotation::Flipped => 180,
-            Rotation::FlippedHorizontal => 270,
-        };
-        let user_to_display = Matrix(page.initial_transform(true).as_coeffs());
-        let (media, crop) = (page.media_box(), page.intersected_crop_box());
-        Ok(PageGeometry {
-            index: index as u32,
-            width: width.into(),
-            height: height.into(),
-            rotation,
-            // /UserUnit is not read yet (NEW-16); points == user units until then.
-            user_unit: 1.0,
-            media_box: [media.x0, media.y0, media.x1, media.y1],
-            crop_box: [crop.x0, crop.y0, crop.x1, crop.y1],
-            user_to_display,
-            display_to_user: user_to_display
-                .inverse()
-                .expect("page transform is a rotation plus translation"),
-        })
+    pub fn page_model(&self, index: usize) -> Result<interpret::SemanticPage, PdfError> {
+        self.0.page_model(index)
+    }
+
+    pub fn page_geometry(&self, index: usize) -> Result<PageGeometry, PdfError> {
+        self.0.page_geometry(index)
     }
 
     /// Render a page on an opaque white background at `scale` pixels per point.
-    pub fn render_page(&self, index: usize, scale: f64) -> Result<Rendered, EngineError> {
+    pub fn render_page(&self, index: usize, scale: f64) -> Result<Rendered, PdfError> {
         if !scale.is_finite() || scale <= 0.0 {
-            return Err(EngineError::BadScale(scale));
+            return Err(PdfError::new(ErrorCode::InvalidArgument));
         }
         let page = self.page(index)?;
         let (w, h) = page.render_dimensions();
@@ -130,7 +78,11 @@ impl Document {
             (f64::from(h) * scale).round().max(1.0),
         );
         if width > MAX_SIDE || height > MAX_SIDE {
-            return Err(EngineError::RenderTooLarge { width, height });
+            return Err(PdfError::limit(
+                "maxRenderSide",
+                width.max(height) as u64,
+                MAX_SIDE as u64,
+            ));
         }
         let max = u64::from(self.0.limits().max_render_pixels);
         limits::check("maxRenderPixels", (width * height) as u64, max)?;
@@ -157,12 +109,9 @@ impl Document {
         })
     }
 
-    fn page(&self, index: usize) -> Result<&hayro::hayro_syntax::page::Page<'_>, EngineError> {
+    fn page(&self, index: usize) -> Result<&hayro::hayro_syntax::page::Page<'_>, PdfError> {
         let pages = self.0.pdf().pages();
-        pages.get(index).ok_or(EngineError::PageOutOfRange {
-            page: index,
-            count: pages.len(),
-        })
+        pages.get(index).ok_or(PdfError::page_out_of_range(index))
     }
 }
 
@@ -201,19 +150,22 @@ mod tests {
         assert_eq!(px(190, 10), [255, 255, 255, 255]);
         assert_eq!(
             doc.render_page(1, 1.0).err().unwrap(),
-            EngineError::PageOutOfRange { page: 1, count: 1 }
+            PdfError::page_out_of_range(1)
         );
         assert_eq!(
-            doc.render_page(0, 0.0).err().unwrap(),
-            EngineError::BadScale(0.0)
+            doc.render_page(0, 0.0).err().unwrap().code,
+            ErrorCode::InvalidArgument
         );
-        assert!(matches!(
-            doc.render_page(0, 1e6),
-            Err(EngineError::RenderTooLarge { .. })
-        ));
-        assert!(matches!(
-            Document::open(b"not a pdf".to_vec(), None),
-            Err(EngineError::Read(_))
-        ));
+        assert_eq!(
+            doc.render_page(0, 1e6).err().unwrap().code,
+            ErrorCode::LimitExceeded
+        );
+        assert_eq!(
+            Document::open(b"not a pdf".to_vec(), None)
+                .err()
+                .unwrap()
+                .code,
+            ErrorCode::MalformedPdf
+        );
     }
 }

@@ -1,7 +1,7 @@
 //! The reader never turns damage into an empty page (spec §0.1, §12).
-use foliark_engine::reader::{ContentStream, Document, ReaderError};
-use foliark_engine::{Document as Engine, EngineError};
-use foliark_model::{ErrorCode, FoliarkError, ObjectId};
+use foliark_engine::Document as Engine;
+use foliark_engine::reader::{ContentStream, Document};
+use foliark_model::{ErrorCode, FoliarkError, ObjectId, PdfError};
 use pdf_writer::{Content, Filter, Finish, Pdf, Rect, Ref};
 
 const CONTENT: Ref = Ref::new(4);
@@ -55,7 +55,7 @@ fn zlib_stored(data: &[u8]) -> Vec<u8> {
     out
 }
 
-fn open(bytes: Vec<u8>) -> Result<Document, ReaderError> {
+fn open(bytes: Vec<u8>) -> Result<Document, PdfError> {
     Document::open(bytes, None, false)
 }
 
@@ -86,9 +86,8 @@ fn valid_flate_decodes_and_garbage_or_truncated_flate_names_the_object() {
     ))))
     .unwrap();
     let err = garbage.page_contents(0).unwrap_err();
-    assert_eq!(err, ReaderError::DecodeFailed { obj: OBJ4 });
-    assert_eq!(err.code(), ErrorCode::DecodeFailed);
-    let wire = FoliarkError::from(&err);
+    assert_eq!(err, PdfError::at(ErrorCode::DecodeFailed, OBJ4));
+    let wire = FoliarkError::from(err);
     assert_eq!(wire.details.unwrap().obj_ref.as_deref(), Some("4 0 R"));
 
     // The block header promises more bytes than the stream has.
@@ -96,7 +95,7 @@ fn valid_flate_decodes_and_garbage_or_truncated_flate_names_the_object() {
     let truncated = open(pdf_with(Some((cut, Some(Filter::FlateDecode))))).unwrap();
     assert_eq!(
         truncated.page_contents(0),
-        Err(ReaderError::DecodeFailed { obj: OBJ4 })
+        Err(PdfError::at(ErrorCode::DecodeFailed, OBJ4))
     );
 }
 
@@ -106,7 +105,7 @@ fn render_refuses_a_page_it_would_draw_blank() {
     let doc = Engine::open(bytes, None).unwrap();
     assert_eq!(
         doc.render_page(0, 1.0).err().unwrap(),
-        EngineError::Read(ReaderError::DecodeFailed { obj: OBJ4 })
+        PdfError::at(ErrorCode::DecodeFailed, OBJ4)
     );
 }
 
@@ -119,15 +118,15 @@ fn unknown_filter_and_broken_syntax_are_distinct_errors() {
     let doc = Document::open(bytes, None, true).unwrap();
     assert_eq!(
         doc.page_contents(0),
-        Err(ReaderError::UnsupportedFilter { obj: OBJ4 })
+        Err(PdfError::at(ErrorCode::DecodeFailed, OBJ4))
     );
 
     // `re` needs four operands: the parser stops here, and what follows would be dropped.
     let doc = open(pdf_with(Some((b"1 2 re 0 0 m 1 1 l S", None)))).unwrap();
-    assert!(matches!(
+    assert_eq!(
         doc.page_contents(0),
-        Err(ReaderError::ContentSyntax { obj: OBJ4, .. })
-    ));
+        Err(PdfError::at(ErrorCode::MalformedPdf, OBJ4))
+    );
 }
 
 #[test]
@@ -137,8 +136,8 @@ fn corrupt_xref_is_repaired_only_when_allowed() {
     let at = bytes.windows(9).rposition(|w| w == b"startxref").unwrap();
     bytes[at + 10] = b'9';
     let err = open(bytes.clone()).err().unwrap();
-    assert_eq!(err, ReaderError::RepairedPdf);
-    assert_eq!(err.code(), ErrorCode::RepairedPdf);
+    assert_eq!(err, PdfError::new(ErrorCode::RepairedPdf));
+    assert_eq!(err.code, ErrorCode::RepairedPdf);
 
     let doc = Document::open(bytes, None, true).unwrap();
     assert!(doc.was_repaired());
@@ -151,7 +150,10 @@ fn file_cut_inside_the_content_stream_is_an_error_not_an_empty_page() {
     let bytes = pdf_with(Some((&plain, None)));
     let at = bytes.windows(6).position(|w| w == b"stream").unwrap();
     let cut = bytes[..at + 6 + 20].to_vec();
-    assert_eq!(open(cut.clone()).err(), Some(ReaderError::RepairedPdf));
+    assert_eq!(
+        open(cut.clone()).err(),
+        Some(PdfError::new(ErrorCode::RepairedPdf))
+    );
     let outcome = Document::open(cut, None, true).and_then(|d| d.page_contents(0));
     assert!(outcome.is_err(), "got {outcome:?}");
 }
@@ -161,11 +163,11 @@ fn password_errors_are_typed_and_the_right_password_decrypts() {
     let bytes = include_bytes!("data/encrypted-aes256.pdf").to_vec();
     assert_eq!(
         Document::open(bytes.clone(), None, false).err(),
-        Some(ReaderError::PasswordRequired)
+        Some(PdfError::new(ErrorCode::PasswordRequired))
     );
     assert_eq!(
         Document::open(bytes.clone(), Some("nope"), false).err(),
-        Some(ReaderError::PasswordIncorrect)
+        Some(PdfError::new(ErrorCode::PasswordIncorrect))
     );
     let doc = Document::open(bytes, Some("user"), false).unwrap();
     let content = &doc.page_contents(0).unwrap()[0].data;
@@ -176,6 +178,6 @@ fn password_errors_are_typed_and_the_right_password_decrypts() {
 fn input_without_a_pdf_header_is_malformed() {
     assert_eq!(
         Document::open(b"hello".to_vec(), None, false).err(),
-        Some(ReaderError::MalformedPdf)
+        Some(PdfError::new(ErrorCode::MalformedPdf))
     );
 }

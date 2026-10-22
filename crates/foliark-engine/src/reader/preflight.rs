@@ -1,8 +1,8 @@
 //! Preflight: a cheap inventory of what a file contains, before any extraction. Reads
 //! dictionaries only; actions are never executed and signatures are only reported.
-use super::{Document, ReaderError, object_id};
+use super::{Document, object_id};
 use crate::limits::{self, Budget};
-use foliark_model::{DocumentFeatures, DocumentInfo};
+use foliark_model::{DocumentFeatures, DocumentInfo, ErrorCode, PdfError};
 use hayro::hayro_syntax::object::stream::Stream;
 use hayro::hayro_syntax::object::{Array, Dict, Name, Object};
 use std::collections::BTreeSet;
@@ -54,7 +54,7 @@ impl Scan {
 
 impl Document {
     /// Walk every object once: inventory plus the stream and image budgets.
-    fn scan(&self) -> Result<Scan, ReaderError> {
+    fn scan(&self) -> Result<Scan, PdfError> {
         let mut budget = Budget::new(&self.limits);
         let mut scan = Scan::default();
         for object in self.pdf.objects() {
@@ -74,7 +74,8 @@ impl Document {
                     }
                     if !is_image_codec(&s) {
                         match limits::decode_stream(&s, obj, &self.limits, &mut budget) {
-                            Err(ReaderError::DecodeFailed { .. }) | Ok(_) => {}
+                            Err(e) if e.code == ErrorCode::DecodeFailed => {}
+                            Ok(_) => {}
                             Err(e) => return Err(e),
                         }
                     }
@@ -86,20 +87,20 @@ impl Document {
     }
 
     /// Run the budget scan once per document (it is the render path's guard against bombs).
-    pub(crate) fn ensure_budgets(&self) -> Result<(), ReaderError> {
+    pub(crate) fn ensure_budgets(&self) -> Result<(), PdfError> {
         self.scanned.get_or_init(|| self.scan().map(|_| ())).clone()
     }
 
     /// The spec §1.1 `DocumentInfo`. Also checks every stream and image of the file against the
     /// budgets (spec §9) without keeping what it decodes, so a bomb is refused here and not
     /// while rendering. A stream that does not decode is only an error when it is read.
-    pub fn info(&self) -> Result<DocumentInfo, ReaderError> {
+    pub fn info(&self) -> Result<DocumentInfo, PdfError> {
         let pdf = &self.pdf;
         let scan = self.scan()?;
         let catalog = pdf
             .xref()
             .get::<Dict<'_>>(pdf.xref().root_id())
-            .ok_or(ReaderError::MalformedPdf)?;
+            .ok_or(PdfError::new(ErrorCode::MalformedPdf))?;
         let names = catalog.get::<Dict<'_>>("Names");
         let in_names = |k: &str| names.as_ref().is_some_and(|n| n.contains_key(k));
         let acro = catalog.get::<Dict<'_>>("AcroForm");

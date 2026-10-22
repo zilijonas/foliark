@@ -779,7 +779,8 @@ pub fn interpret<'a>(
                 text::next_line(context, 0.0, -context.get().text_state.leading as f64);
                 text::show_text_string(context, device, resources, t.2);
             }
-            _ => {
+            TypedInstruction::Fallback(op) => {
+                device.unknown_operator(op);
                 warn!("failed to read an operator");
             }
         }

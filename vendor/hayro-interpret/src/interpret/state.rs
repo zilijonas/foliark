@@ -201,7 +201,7 @@ impl<'a> TextState<'a> {
         self.text_matrix *= Affine::new([1.0, 0.0, 0.0, 1.0, tx as f64, ty as f64]);
     }
 
-    pub(crate) fn apply_code_advance(&mut self, char_code: u32, code_len: usize) {
+    pub(crate) fn apply_code_advance(&mut self, char_code: u32, code_len: usize) -> (f64, f64) {
         let glyph_advance = self
             .font
             .as_ref()
@@ -231,6 +231,19 @@ impl<'a> TextState<'a> {
         };
 
         self.text_matrix *= Affine::new([1.0, 0.0, 0.0, 1.0, tx as f64, ty as f64]);
+        // In em (1 = font size); horizontal scaling cancels out.
+        let em = |v: f32| {
+            if self.font_size == 0.0 {
+                0.0
+            } else {
+                f64::from(v / self.font_size)
+            }
+        };
+        if horizontal {
+            (em(base_advance(glyph_advance.x as f32)), 0.0)
+        } else {
+            (0.0, em(base_advance(glyph_advance.y as f32)))
+        }
     }
 
     pub(crate) fn full_transform(&self) -> Affine {

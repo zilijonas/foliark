@@ -1,20 +1,15 @@
 //! Resource budgets (spec §9). Every check uses checked arithmetic and runs before the
 //! allocation or work it guards; `LIMIT_EXCEEDED` carries which limit, the value and the max.
-use crate::reader::ReaderError;
-use foliark_model::{Limits, ObjectId};
+use foliark_model::{ErrorCode, Limits, ObjectId, PdfError};
 use hayro::hayro_syntax::object::Stream;
 use hayro::hayro_syntax::object::stream::DecodeFailure;
 use std::borrow::Cow;
 
 const MIB: u64 = 1 << 20;
 
-pub(crate) fn exceeded(limit: &'static str, actual: u64, max: u64) -> ReaderError {
-    ReaderError::LimitExceeded { limit, actual, max }
-}
-
-pub(crate) fn check(limit: &'static str, actual: u64, max: u64) -> Result<(), ReaderError> {
+pub(crate) fn check(limit: &'static str, actual: u64, max: u64) -> Result<(), PdfError> {
     if actual > max {
-        return Err(exceeded(limit, actual, max));
+        return Err(PdfError::limit(limit, actual, max));
     }
     Ok(())
 }
@@ -35,22 +30,22 @@ impl Budget {
         }
     }
 
-    pub fn charge(&mut self, units: u64) -> Result<(), ReaderError> {
+    pub fn charge(&mut self, units: u64) -> Result<(), PdfError> {
         self.used = self.used.saturating_add(units);
         check("maxWorkUnits", self.used, self.max)
     }
 
-    pub fn charge_bytes(&mut self, bytes: usize) -> Result<(), ReaderError> {
+    pub fn charge_bytes(&mut self, bytes: usize) -> Result<(), PdfError> {
         self.charge((bytes as u64).div_ceil(1024))
     }
 
-    pub fn charge_pixels(&mut self, pixels: u64) -> Result<(), ReaderError> {
+    pub fn charge_pixels(&mut self, pixels: u64) -> Result<(), PdfError> {
         self.charge(pixels.div_ceil(1000))
     }
 }
 
 /// An image of `width` x `height` (dimension bomb check). Returns the pixel count.
-pub(crate) fn image_pixels(limits: &Limits, width: u32, height: u32) -> Result<u64, ReaderError> {
+pub(crate) fn image_pixels(limits: &Limits, width: u32, height: u32) -> Result<u64, PdfError> {
     let pixels = u64::from(width).saturating_mul(u64::from(height));
     check("maxImagePixels", pixels, limits.max_image_pixels.into())?;
     Ok(pixels)
@@ -64,7 +59,7 @@ pub(crate) fn decode_stream<'a>(
     obj: ObjectId,
     limits: &Limits,
     budget: &mut Budget,
-) -> Result<Cow<'a, [u8]>, ReaderError> {
+) -> Result<Cow<'a, [u8]>, PdfError> {
     let max = u64::from(limits.max_stream_decoded_bytes);
     let ratio = u64::from(limits.max_decode_ratio);
     let allowed = (stream.raw_data().len() as u64)
@@ -80,9 +75,13 @@ pub(crate) fn decode_stream<'a>(
         }
         Err(DecodeFailure::TooLarge) if by_ratio => {
             let raw = stream.raw_data().len().max(1) as u64;
-            Err(exceeded("maxDecodeRatio", (cap + 1).div_ceil(raw), ratio))
+            Err(PdfError::limit(
+                "maxDecodeRatio",
+                (cap + 1).div_ceil(raw),
+                ratio,
+            ))
         }
-        Err(DecodeFailure::TooLarge) => Err(exceeded("maxStreamDecodedBytes", cap + 1, max)),
-        Err(_) => Err(ReaderError::DecodeFailed { obj }),
+        Err(DecodeFailure::TooLarge) => Err(PdfError::limit("maxStreamDecodedBytes", cap + 1, max)),
+        Err(_) => Err(PdfError::at(ErrorCode::DecodeFailed, obj)),
     }
 }

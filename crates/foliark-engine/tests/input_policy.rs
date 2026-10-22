@@ -1,7 +1,7 @@
 //! What a file may contain and who may open it (spec §0, §8.2, §12): passwords, damage,
 //! signatures and the feature inventory. Everything here is typed and nothing is mutated.
-use foliark_engine::reader::{Document, ReaderError};
-use foliark_model::{ErrorCode, FoliarkError};
+use foliark_engine::reader::Document;
+use foliark_model::{ErrorCode, FoliarkError, PdfError};
 use pdf_writer::{Finish, Name, Pdf, Rect, Ref, Str};
 
 fn fixture(path: &str) -> Vec<u8> {
@@ -12,7 +12,7 @@ fn fixture(path: &str) -> Vec<u8> {
     .unwrap()
 }
 
-fn open(path: &str, password: Option<&str>) -> Result<Document, ReaderError> {
+fn open(path: &str, password: Option<&str>) -> Result<Document, PdfError> {
     Document::open(fixture(path), password, false)
 }
 
@@ -22,12 +22,12 @@ fn password_challenge_wrong_user_and_owner_across_the_encryption_matrix() {
         let path = format!("generated/encrypted-{scheme}.pdf");
         assert_eq!(
             open(&path, None).err(),
-            Some(ReaderError::PasswordRequired),
+            Some(PdfError::new(ErrorCode::PasswordRequired)),
             "{scheme}"
         );
         assert_eq!(
             open(&path, Some("nope")).err(),
-            Some(ReaderError::PasswordIncorrect),
+            Some(PdfError::new(ErrorCode::PasswordIncorrect)),
             "{scheme}"
         );
         for password in ["user-pw", "owner-pw"] {
@@ -51,8 +51,8 @@ fn unknown_security_handler_is_a_typed_refusal() {
     let at = bytes.windows(9).position(|w| w == b"/Standard").unwrap();
     bytes[at + 8] = b'x';
     let err = Document::open(bytes, Some("user-pw"), false).err().unwrap();
-    assert_eq!(err, ReaderError::EncryptionUnsupported);
-    assert_eq!(err.code(), ErrorCode::EncryptionUnsupported);
+    assert_eq!(err, PdfError::new(ErrorCode::EncryptionUnsupported));
+    assert_eq!(err.code, ErrorCode::EncryptionUnsupported);
 }
 
 #[test]
@@ -60,7 +60,7 @@ fn damaged_files_are_typed_and_repair_is_reported_not_hidden() {
     for name in ["hddn/malformed-xref.pdf", "hddn/malformed-truncated.pdf"] {
         assert_eq!(
             open(name, None).err(),
-            Some(ReaderError::RepairedPdf),
+            Some(PdfError::new(ErrorCode::RepairedPdf)),
             "{name}"
         );
         let doc = Document::open(fixture(name), None, true).unwrap();
@@ -68,13 +68,13 @@ fn damaged_files_are_typed_and_repair_is_reported_not_hidden() {
         assert!(info.repaired, "{name}");
         assert_eq!(info.page_count, 1);
     }
-    let err = FoliarkError::from(&open("hddn/malformed-xref.pdf", None).err().unwrap());
+    let err = FoliarkError::from(open("hddn/malformed-xref.pdf", None).err().unwrap());
     assert_eq!(err.code, ErrorCode::RepairedPdf);
 
     // Cut off before the first object ends: nothing to repair.
     let cut = fixture("hddn/shared-vector.pdf")[..40].to_vec();
     let err = Document::open(cut, None, true).err().unwrap();
-    assert_eq!(err.code(), ErrorCode::MalformedPdf);
+    assert_eq!(err.code, ErrorCode::MalformedPdf);
 }
 
 /// A one-page file whose catalog and AcroForm come from the closure.

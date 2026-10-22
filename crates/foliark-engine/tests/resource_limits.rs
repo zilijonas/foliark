@@ -1,18 +1,30 @@
 //! Budgets (spec §9): each limit refuses before it allocates, and sits exactly at its edge.
 use flate2::{Compression, write::ZlibEncoder};
-use foliark_engine::reader::{Document, ReaderError};
-use foliark_engine::{Document as Engine, EngineError};
-use foliark_model::{ErrorCode, FoliarkError, Limits};
+use foliark_engine::Document as Engine;
+use foliark_engine::reader::Document;
+use foliark_model::{ErrorCode, FoliarkError, Limits, PdfError};
 use pdf_writer::{Filter, Finish, Name, Pdf, Rect, Ref};
 use std::io::Write;
 
 const MIB: usize = 1 << 20;
 
-fn limit(limit: &'static str, actual: u64, max: u64) -> ReaderError {
-    ReaderError::LimitExceeded { limit, actual, max }
+fn limit(limit: &'static str, actual: u64, max: u64) -> PdfError {
+    PdfError::limit(limit, actual, max)
 }
 
-fn open(bytes: Vec<u8>, limits: Limits) -> Result<Document, ReaderError> {
+/// The `LIMIT_EXCEEDED` details of a failed result: (limit, actual, max).
+fn limit_of<T>(r: Result<T, PdfError>) -> (String, u64, u64) {
+    let e = r.err().expect("a limit error");
+    assert_eq!(e.code, ErrorCode::LimitExceeded);
+    let d = e.details.expect("details");
+    (
+        d.limit.unwrap(),
+        d.actual.unwrap() as u64,
+        d.max.unwrap() as u64,
+    )
+}
+
+fn open(bytes: Vec<u8>, limits: Limits) -> Result<Document, PdfError> {
     Document::open_with_limits(bytes, None, false, limits)
 }
 
@@ -85,7 +97,7 @@ fn input_size_is_checked_before_parsing() {
         open(garbage, at(99)).err(),
         Some(limit("maxInputBytes", 100, 99))
     );
-    let wire = FoliarkError::from(&open(bytes, at(n - 1)).err().unwrap());
+    let wire = FoliarkError::from(open(bytes, at(n - 1)).err().unwrap());
     assert_eq!(wire.code, ErrorCode::LimitExceeded);
     let d = wire.details.unwrap();
     assert_eq!(
@@ -168,28 +180,17 @@ fn expansion_bomb_stops_at_the_cap_and_the_edge_passes() {
         max_decode_ratio: 100,
         ..Default::default()
     };
-    match open(pdf.clone(), ratio).unwrap().page_contents(0) {
-        Err(ReaderError::LimitExceeded {
-            limit: "maxDecodeRatio",
-            actual,
-            max: 100,
-        }) => {
-            assert!(actual > 100)
-        }
-        other => panic!("{other:?}"),
-    }
+    let (name, actual, max) = limit_of(open(pdf.clone(), ratio).unwrap().page_contents(0));
+    assert_eq!((name.as_str(), max), ("maxDecodeRatio", 100));
+    assert!(actual > 100);
     // The default ratio (1000) already refuses it: deflate manages about 1030 on zeros. The
     // same bytes pass a ratio limit above that, and the zeros parse as whitespace.
-    assert!(matches!(
+    let (name, _, max) = limit_of(
         open(pdf.clone(), Limits::default())
             .unwrap()
             .page_contents(0),
-        Err(ReaderError::LimitExceeded {
-            limit: "maxDecodeRatio",
-            max: 1000,
-            ..
-        })
-    ));
+    );
+    assert_eq!((name.as_str(), max), ("maxDecodeRatio", 1000));
     let loose = Limits {
         max_decode_ratio: 2000,
         ..Default::default()
@@ -237,24 +238,16 @@ fn image_dimension_bomb_is_refused_from_the_dictionary() {
         Some(limit("maxImagePixels", 100_010_000, 100_000_000))
     );
     // Both sides near u32::MAX: the product must not wrap.
-    assert!(matches!(
+    let (name, ..) = limit_of(
         open(image(i32::MAX, i32::MAX), Limits::default())
             .unwrap()
             .info(),
-        Err(ReaderError::LimitExceeded {
-            limit: "maxImagePixels",
-            ..
-        })
-    ));
+    );
+    assert_eq!(name, "maxImagePixels");
     // The renderer refuses it too, without decoding the image.
     let doc = Engine::open(image(40_000, 40_000), None).unwrap();
-    assert!(matches!(
-        doc.render_page(0, 1.0),
-        Err(EngineError::Read(ReaderError::LimitExceeded {
-            limit: "maxImagePixels",
-            ..
-        }))
-    ));
+    let (name, ..) = limit_of(doc.render_page(0, 1.0));
+    assert_eq!(name, "maxImagePixels");
     // Drawn images are checked as they are met, including ones the scan cannot see.
     let tight = Limits {
         max_image_pixels: 64,
@@ -266,7 +259,7 @@ fn image_dimension_bomb_is_refused_from_the_dictionary() {
             tight.clone()
         )
         .unwrap()
-        .page_items(0)
+        .page_model(0)
         .is_ok()
     );
     assert_eq!(
@@ -275,7 +268,7 @@ fn image_dimension_bomb_is_refused_from_the_dictionary() {
             tight
         )
         .unwrap()
-        .page_items(0)
+        .page_model(0)
         .err(),
         Some(limit("maxImagePixels", 72, 64))
     );
@@ -289,14 +282,10 @@ fn render_pixels_are_limited_per_render() {
     };
     let doc = Engine::open_with_limits(page_pdf(b"", None, None), None, false, at).unwrap();
     assert!(doc.render_page(0, 1.0).is_ok());
-    assert!(matches!(
-        doc.render_page(0, 1.01),
-        Err(EngineError::Read(ReaderError::LimitExceeded {
-            limit: "maxRenderPixels",
-            actual: 10201,
-            max: 10000
-        }))
-    ));
+    assert_eq!(
+        limit_of(doc.render_page(0, 1.01)),
+        ("maxRenderPixels".to_owned(), 10201, 10000)
+    );
 }
 
 #[test]
@@ -308,17 +297,16 @@ fn deep_and_cyclic_form_graphs_are_typed_errors() {
         ))
         .unwrap()
     };
-    assert!(matches!(
-        open(fixture("forms-cyclic.pdf"), Limits::default())
-            .unwrap()
-            .page_items(0),
-        Err(ReaderError::FormCycle { .. })
-    ));
+    let cycle = open(fixture("forms-cyclic.pdf"), Limits::default())
+        .unwrap()
+        .page_model(0)
+        .unwrap_err();
+    assert_eq!(cycle.code, ErrorCode::MalformedPdf);
     let deep = fixture("forms-deep-40.pdf");
     assert_eq!(
         open(deep.clone(), Limits::default())
             .unwrap()
-            .page_items(0)
+            .page_model(0)
             .err(),
         Some(limit("maxNesting", 33, 32))
     );
@@ -326,9 +314,9 @@ fn deep_and_cyclic_form_graphs_are_typed_errors() {
         max_nesting,
         ..Default::default()
     };
-    assert!(open(deep.clone(), at(40)).unwrap().page_items(0).is_ok());
+    assert!(open(deep.clone(), at(40)).unwrap().page_model(0).is_ok());
     assert_eq!(
-        open(deep, at(39)).unwrap().page_items(0).err(),
+        open(deep, at(39)).unwrap().page_model(0).err(),
         Some(limit("maxNesting", 40, 39))
     );
 }
@@ -358,7 +346,7 @@ fn a_lying_stream_length_neither_allocates_nor_reads_past_the_stream() {
         // Either the parser recovered the real stream or it said so; nothing in between.
         match outcome {
             Ok(streams) => assert_eq!(streams[0].data, content, "/Length {bad}"),
-            Err(e) => assert_ne!(e.code(), ErrorCode::Internal, "/Length {bad}"),
+            Err(e) => assert_ne!(e.code, ErrorCode::Internal, "/Length {bad}"),
         }
     }
 }
@@ -372,7 +360,7 @@ fn work_units_cap_the_interpreter_exactly() {
             max_work_units,
             ..Default::default()
         };
-        open(pdf.clone(), limits).unwrap().page_items(0)
+        open(pdf.clone(), limits).unwrap().page_model(0)
     };
     assert!(items(5_000_000_000).is_ok());
     // Find the smallest budget that passes; one less must fail with the work-unit limit.

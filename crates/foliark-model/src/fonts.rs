@@ -1,5 +1,5 @@
 //! Font registration DTOs (spec §1.4) and the Rust error carried by every fallible op (spec §12).
-use crate::{ErrorCode, ErrorDetails};
+use crate::{ErrorCode, ErrorDetails, FoliarkError, ObjectId};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use ts_rs::TS;
@@ -63,6 +63,53 @@ impl PdfError {
         Self {
             code,
             details: Some(Box::new(details)),
+        }
+    }
+}
+
+impl PdfError {
+    /// A failure inside one indirect object (`details.objRef`, spec §12).
+    pub fn at(code: ErrorCode, obj: ObjectId) -> Self {
+        Self::with(
+            code,
+            ErrorDetails {
+                obj_ref: Some(format!("{} {} R", obj.num, obj.generation)),
+                ..Default::default()
+            },
+        )
+    }
+
+    /// `LIMIT_EXCEEDED`: `limit` is the `Limits` field name; `actual` may be a lower bound.
+    pub fn limit(limit: &str, actual: u64, max: u64) -> Self {
+        Self::with(
+            ErrorCode::LimitExceeded,
+            ErrorDetails {
+                limit: Some(limit.into()),
+                actual: Some(actual as f64),
+                max: Some(max as f64),
+                ..Default::default()
+            },
+        )
+    }
+
+    /// `INVALID_ARGUMENT` for a page index that does not exist.
+    pub fn page_out_of_range(page: usize) -> Self {
+        Self::with(
+            ErrorCode::InvalidArgument,
+            ErrorDetails {
+                pages: Some(vec![page as u32]),
+                ..Default::default()
+            },
+        )
+    }
+}
+
+impl From<PdfError> for FoliarkError {
+    fn from(e: PdfError) -> Self {
+        Self {
+            message: e.to_string(),
+            code: e.code,
+            details: e.details.map(|d| *d),
         }
     }
 }

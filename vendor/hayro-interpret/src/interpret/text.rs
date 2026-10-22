@@ -20,6 +20,7 @@ pub(crate) fn show_text_string<'a>(
 
 pub(crate) fn begin_glyph_run(ctx: &mut Context<'_>) {
     ctx.glyph_scratch.clear();
+    ctx.glyph_codes = 0;
 }
 
 pub(crate) fn append_text_string<'a>(
@@ -46,17 +47,28 @@ pub(crate) fn append_text_string<'a>(
         let (code, adv) = font.read_code(bytes, cur_idx);
         cur_idx += adv;
 
-        if show_glyphs && ctx.ocg_state.is_visible() {
+        let drawn = if show_glyphs && ctx.ocg_state.is_visible() {
             let origin_displacement = font.origin_displacement(code);
             let transform = ctx.get().text_state.full_transform()
                 * Affine::scale(1.0 / UNITS_PER_EM as f64)
                 * Affine::translate(origin_displacement);
             let glyph = font.get_glyph(font.map_code(code), code, ctx, resources);
+            Some((glyph, transform))
+        } else {
+            None
+        };
 
-            ctx.glyph_scratch.push(PositionedGlyph { glyph, transform });
+        let advance = ctx.get_mut().text_state.apply_code_advance(code, adv);
+        if let Some((glyph, transform)) = drawn {
+            let code_index = ctx.glyph_codes;
+            ctx.glyph_scratch.push(PositionedGlyph {
+                glyph,
+                transform,
+                advance,
+                code_index,
+            });
         }
-
-        ctx.get_mut().text_state.apply_code_advance(code, adv);
+        ctx.glyph_codes += 1;
     }
 }
 
@@ -85,6 +97,7 @@ pub(crate) fn show_glyph_run<'a>(ctx: &mut Context<'a>, device: &mut impl Device
     let clip_path = {
         let run = GlyphRun {
             glyphs: &ctx.glyph_scratch,
+            render_mode: render_mode.as_u8(),
         };
 
         let clip_path = if matches!(
@@ -129,7 +142,10 @@ pub(crate) fn show_glyph_run<'a>(ctx: &mut Context<'a>, device: &mut impl Device
                 device.draw_glyph_run(&run, fill_props, &DrawMode::Fill(FillRule::NonZero));
                 device.draw_glyph_run(&run, stroke_draw_props, &DrawMode::Stroke(stroke_props));
             }
-            TextRenderingMode::Clip => {}
+            TextRenderingMode::Clip => {
+                // Nothing is painted, but the text is still reported (as for mode 3).
+                device.draw_glyph_run(&run, fill_props, &DrawMode::Invisible);
+            }
         }
 
         clip_path
@@ -169,4 +185,20 @@ pub(crate) enum TextRenderingMode {
     StrokeAndClip,
     FillAndStrokeAndClip,
     Clip,
+}
+
+impl TextRenderingMode {
+    /// The `Tr` operand.
+    fn as_u8(self) -> u8 {
+        match self {
+            Self::Fill => 0,
+            Self::Stroke => 1,
+            Self::FillStroke => 2,
+            Self::Invisible => 3,
+            Self::FillAndClip => 4,
+            Self::StrokeAndClip => 5,
+            Self::FillAndStrokeAndClip => 6,
+            Self::Clip => 7,
+        }
+    }
 }

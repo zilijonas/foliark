@@ -64,6 +64,9 @@ pub trait Device<'a> {
     }
     /// Called after the content announced by [`Device::begin_form`] was interpreted.
     fn end_form(&mut self) {}
+    /// Called for an operator the interpreter does not know (after its `begin_operator`).
+    /// It is skipped; `name` is the operator keyword.
+    fn unknown_operator(&mut self, _name: &[u8]) {}
     /// Called before an item is drawn: whether optional content currently shows it. Only
     /// `false` when [`crate::InterpreterSettings::ocg_override`] made hidden content visible.
     fn oc_state(&mut self, _visible: bool) {}
