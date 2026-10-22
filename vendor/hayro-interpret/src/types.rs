@@ -65,6 +65,28 @@ impl<'a, 'b> StencilImage<'a, 'b> {
     }
 }
 
+impl<'b> StencilImage<'static, 'b> {
+    /// A stencil (`ImageMask`) image decoded outside an interpretation, painted black. `None`
+    /// if `stream` is not an image mask. Decode failures show as `with_stencil` not calling back.
+    pub fn from_stream(stream: &Stream<'b>) -> Option<Self> {
+        let image_xobject = ImageXObject::new(
+            stream,
+            |_| None,
+            &(std::sync::Arc::new(|_| ()) as crate::WarningSinkFn),
+            &crate::cache::Cache::new(),
+            None,
+        )?;
+        (image_xobject.kind == crate::x_object::ImageKind::StencilMask).then(|| Self {
+            paint: Paint::Color(Color::new(
+                crate::color::ColorSpace::device_gray(),
+                smallvec![0.0],
+                1.0,
+            )),
+            image_xobject,
+        })
+    }
+}
+
 impl CacheKey for StencilImage<'_, '_> {
     fn cache_key(&self) -> u128 {
         self.image_xobject.cache_key()
@@ -109,6 +131,22 @@ impl RasterImage<'_> {
     #[doc(hidden)]
     pub fn height(&self) -> u32 {
         self.0.height()
+    }
+}
+
+impl<'b> RasterImage<'b> {
+    /// A raster image decoded outside an interpretation: an image XObject or an inline image
+    /// stream with device or self-contained color spaces. `None` if `stream` is not a raster
+    /// image. Decode failures show as `with_rgba` not calling back.
+    pub fn from_stream(stream: &Stream<'b>) -> Option<Self> {
+        let image = ImageXObject::new(
+            stream,
+            |_| None,
+            &(std::sync::Arc::new(|_| ()) as crate::WarningSinkFn),
+            &crate::cache::Cache::new(),
+            None,
+        )?;
+        (image.kind != crate::x_object::ImageKind::StencilMask).then_some(Self(image))
     }
 }
 

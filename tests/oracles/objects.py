@@ -2,10 +2,11 @@
 """Independent privacy oracle for OUTPUT PDFs (NEW-7). Never imports foliark; uses pypdf + pikepdf + PyMuPDF only.
 
   .venv/bin/python objects.py out.pdf --forbid SECRET_A --forbid SECRET_B [--allow metadata] [--password pw]
-  .venv/bin/python objects.py out.pdf --spec spec.json        # {"forbidden":[], "allow":[], "image_regions":[{"page":0,"rect":[x0,y0,x1,y1],"color":[0,0,0]}], "vector_regions":[{"page":0,"rect":[...],"fill":[0,0,0],"allow":[[...]],"tol":0.25}], "cap":N}
+  .venv/bin/python objects.py out.pdf --spec spec.json        # {"forbidden":[], "allow":[], "image_regions":[{"page":0,"rect":[x0,y0,x1,y1],"color":[0,0,0]}], "vector_regions":[{"page":0,"rect":[...],"fill":[0,0,0],"allow":[[...]],"tol":0.25}], "cap":N,
+  "occurrences":[{"page":0,"path":[0],"forbid":[],"require":[]}], "no_unused_xobjects":true}
 
 Exit 0 iff no finding. Importable: check_isolated(path, spec) -> [finding strings "CODE: detail"].
-Finding codes: OPEN TEXT_PYPDF TEXT_FITZ BYTES_RAW STREAM STRING REVISION ORPHAN FEATURE DECODE UNSUPPORTED CAP IMAGE_REGION VECTOR_REGION TIMEOUT CRASH.
+Finding codes: OPEN TEXT_PYPDF TEXT_FITZ BYTES_RAW STREAM STRING REVISION ORPHAN FEATURE DECODE UNSUPPORTED CAP IMAGE_REGION VECTOR_REGION OCCURRENCE UNUSED_XOBJECT TIMEOUT CRASH.
 Every decode problem, unsupported filter or unsupported geometry is a finding, never a silent pass.
 """
 import json
@@ -77,6 +78,74 @@ def shown_text(s):
     except Exception:
         pass
     return out
+
+
+def _res(o):
+    return (o.obj if isinstance(o, pikepdf.Page) else o).get("/Resources")
+
+
+def _draws(o):
+    """(Form XObjects drawn by `Do` in the content of page/Form `o`, in order; every Do name; the XObject map)."""
+    xo = _res(o)
+    xo = xo.get("/XObject") if xo is not None else None
+    xo = {str(k): v for k, v in xo.items()} if xo is not None else {}
+    forms, names = [], []
+    for ins in pikepdf.parse_content_stream(o):
+        if str(ins.operator) == "Do":
+            n = str(ins.operands[0])
+            names.append(n)
+            x = xo.get(n)
+            if x is not None and str(x.get("/Subtype", "")) == "/Form":
+                forms.append(x)
+    return forms, names, xo
+
+
+def _reach(form, cap, seen=()):
+    """Decoded bytes and shown text of `form` and of every Form its content draws, at any depth."""
+    data = decode(form, cap) + b"\0" + shown_text(form)
+    for sub in _draws(form)[0]:
+        if sub.objgen not in seen:
+            data += b"\0" + _reach(sub, cap, seen + (form.objgen,))
+    return data
+
+
+def occurrence_leaks(pdf, r, cap):
+    """The Form reached by `path` (indices of the n-th Form drawn by the page, then by that Form, ...): nothing it
+    reaches (nested Forms included) may hold a `forbid` string, everything it reaches must hold each `require`."""
+    path = r["path"]
+    where = "form draw %s of page %d" % (path, r["page"])
+    node = pdf.pages[r["page"]]
+    for i in path:
+        forms = _draws(node)[0]
+        if i >= len(forms):
+            return ["OCCURRENCE: %s does not exist (%d form draws)" % (where, len(forms))]
+        node = forms[i]
+    try:
+        data = _reach(node, cap)
+    except ValueError as e:
+        return [str(e)]
+    hit = lambda s: any(n in data for n in needles(s))
+    return ["OCCURRENCE: %r reachable from %s" % (s, where) for s in r.get("forbid", []) if hit(s)] + [
+        "OCCURRENCE: %r missing from %s" % (s, where) for s in r.get("require", []) if not hit(s)]
+
+
+def unused_xobjects(pdf):
+    """Every XObject resource of a page or a drawn Form is drawn by that owner's own content: an original that
+    every occurrence was redirected away from must not stay in the resources."""
+    F, seen = [], set()
+
+    def walk(o, label):
+        forms, names, xo = _draws(o)
+        F.extend("UNUSED_XOBJECT: %s in %s is not drawn" % (n, label) for n in xo if n not in names)
+        for n in set(names):
+            x = xo.get(n)
+            if x is not None and str(x.get("/Subtype", "")) == "/Form" and x.objgen not in seen:
+                seen.add(x.objgen)
+                walk(x, "form %s" % (x.objgen,))
+
+    for i, pg in enumerate(pdf.pages):
+        walk(pg, "page %d" % i)
+    return F
 
 
 def children(o):
@@ -199,6 +268,11 @@ def check(path, spec):
     # (f) vector paths inside display-space rects
     for r in spec.get("vector_regions", []):
         F += vector_region(doc, r)
+    # (g) per-occurrence reachability and stale resources (Form clones)
+    for r in spec.get("occurrences", []):
+        F += occurrence_leaks(pdf, r, cap)
+    if spec.get("no_unused_xobjects"):
+        F += unused_xobjects(pdf)
     return F
 
 
@@ -245,6 +319,15 @@ def region_colors(pix, m, reg, cap=8_000_000):
     return seen, count
 
 
+def plane_pixmap(doc, x):
+    """Samples of image xref x. A 1-bit /ImageMask stencil has no colour space (PyMuPDF refuses it), so it is unpacked to gray by hand."""
+    if doc.xref_get_key(x, "ImageMask")[1] != "true":
+        return fitz.Pixmap(doc, x)
+    w, h = int(doc.xref_get_key(x, "Width")[1]), int(doc.xref_get_key(x, "Height")[1])
+    data, row = doc.xref_stream(x), (w + 7) // 8
+    return fitz.Pixmap(fitz.csGRAY, w, h, bytes(255 * (data[j * row + i // 8] >> (7 - i % 8) & 1) for j in range(h) for i in range(w)), False)
+
+
 def image_users(doc, xref, cache={}):
     """Pages (0-based) whose occurrences use xref; computed lazily, only to explain a failure."""
     key = id(doc)
@@ -279,7 +362,7 @@ def image_region(doc, r):
                     planes.append((key, int(v.split()[0]), None))
             bad = []
             for name, px, want in planes:
-                seen, cnt = region_colors(fitz.Pixmap(doc, px), m, reg)
+                seen, cnt = region_colors(plane_pixmap(doc, px), m, reg)
                 if not cnt:
                     bad.append("%s: no sample under region (placement not mapped)" % name)
                 elif len(seen) != 1 or (want and seen != {want}):

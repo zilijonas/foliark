@@ -9,9 +9,8 @@
 //!
 //! Limits, all typed or reported, none silent:
 //! - A cluster drawn through a Form (or a content stream) that something else draws too is
-//!   refused with `INVALID_ARGUMENT`, `details.feature = "redactionSharedFormText"` and the
-//!   pages: rewriting it in place would change the other occurrences. NEW-38 clones Forms.
-//!   A Form drawn exactly once in the document is rewritten in place.
+//!   rewritten in a clone of that occurrence's chain (`forms`); the other occurrences keep
+//!   the original. A Form drawn exactly once in the document is rewritten in place.
 //! - A removed glyph of a font whose dictionary is a direct object cannot get a rebuilt
 //!   ToUnicode: `FONT_UNSUPPORTED`. Type0 fonts other than Identity-H/V likewise (their code
 //!   width is unknown).
@@ -20,15 +19,17 @@
 //! - Two font dictionaries sharing one TrueType program: the later one's survivors win.
 //!
 //! On `Err` the writer may hold part of the work: drop it.
+use super::forms::Targets;
 use super::plan::{PlannedCluster, RedactionPlan};
 use crate::Document;
 use crate::limits::{self, Budget};
 use crate::writer::Writer;
 use crate::writer::fonts::{self, Program};
-use foliark_model::{ErrorCode, ErrorDetails, InstancePath, ObjectId, PdfError};
+use foliark_model::{ErrorCode, ObjectId, PdfError};
 use hayro::hayro_syntax::content::UntypedIter;
 use hayro::hayro_syntax::object::{Dict, Name, Object, ObjectIdentifier, Stream};
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::hash_map::Entry;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write as _;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -42,19 +43,8 @@ pub struct TextReport {
     pub fonts_with_glyph_inventory: Vec<(ObjectId, String)>,
 }
 
-fn at(id: ObjectId) -> ObjectIdentifier {
+pub(super) fn at(id: ObjectId) -> ObjectIdentifier {
     ObjectIdentifier::new(id.num as i32, i32::from(id.generation))
-}
-
-fn refuse_shared(pages: BTreeSet<u32>) -> PdfError {
-    PdfError::with(
-        ErrorCode::InvalidArgument,
-        ErrorDetails {
-            feature: Some("redactionSharedFormText".into()),
-            pages: Some(pages.into_iter().collect()),
-            ..ErrorDetails::default()
-        },
-    )
 }
 
 /// Remove the clusters of `plan` from `w`'s output. `doc` is the working copy the plan was
@@ -66,27 +56,16 @@ pub fn redact_text(
 ) -> Result<TextReport, PdfError> {
     let mut report = TextReport::default();
     // Operators to rewrite, in file order, and what makes each of them safe to rewrite.
+    // Keyed by the stream the operator is written into (a clone for a shared occurrence).
+    let targets = Targets::new(doc, plan)?;
     let mut ops: BTreeMap<(ObjectId, u32, u32), Vec<&PlannedCluster>> = BTreeMap::new();
     for page in &plan.pages {
-        let shared: HashSet<&InstancePath> = page
-            .forms
-            .iter()
-            .filter(|f| f.shared)
-            .map(|f| &f.path)
-            .collect();
         for c in &page.clusters {
-            let steps = &c.id.path.0;
-            let form_shared =
-                (1..=steps.len()).any(|n| shared.contains(&InstancePath(steps[..n].to_vec())));
-            let stream_pages = plan.stream_pages.get(&c.id.loc.stream);
-            if form_shared || stream_pages.is_some_and(|p| p.len() > 1) {
-                let pages = stream_pages.cloned().unwrap_or_default();
-                return Err(refuse_shared(pages));
-            }
             if c.font.is_none() {
                 return Err(PdfError::at(ErrorCode::FontUnsupported, c.id.loc.stream));
             }
-            ops.entry((c.id.loc.stream, c.id.loc.start, c.id.loc.end))
+            let target = targets.stream(page.page_index, &c.id.path.0, c.id.loc.stream);
+            ops.entry((target, c.id.loc.start, c.id.loc.end))
                 .or_default()
                 .push(c);
             report.clusters_removed += 1;
@@ -96,18 +75,20 @@ pub fn redact_text(
 
     let mut streams: HashMap<ObjectId, Vec<u8>> = HashMap::new();
     let mut rewrites = Vec::new();
-    for ((stream, start, end), group) in &ops {
-        if !streams.contains_key(stream) {
-            streams.insert(*stream, decode(doc, *stream)?);
-        }
-        let data = &streams[stream];
+    for ((target, start, end), group) in &ops {
+        let stream = group[0].id.loc.stream;
+        let data = match streams.entry(stream) {
+            Entry::Occupied(e) => e.into_mut(),
+            Entry::Vacant(e) => e.insert(decode(doc, stream)?),
+        };
         let span = *start as usize..*end as usize;
         let font = group[0].font.ok_or(PdfError::new(ErrorCode::Internal))?;
         let width = code_width(doc, font)?;
-        let new = rewrite(&data[span.clone()], *stream, width, group)?;
-        rewrites.push((*stream, span, new));
+        let new = rewrite(&data[span.clone()], stream, width, group)?;
+        rewrites.push((*target, span, new));
     }
     report.operators_rewritten = rewrites.len() as u32;
+    targets.apply(doc, plan, w)?;
     for (stream, span, new) in rewrites {
         w.replace_span(stream, span, new.as_bytes());
     }
@@ -123,7 +104,7 @@ pub fn redact_text(
     Ok(report)
 }
 
-fn decode(doc: &Document, id: ObjectId) -> Result<Vec<u8>, PdfError> {
+pub(super) fn decode(doc: &Document, id: ObjectId) -> Result<Vec<u8>, PdfError> {
     let r = doc.reader();
     let Some(s) = r.pdf().xref().get::<Stream<'_>>(at(id)) else {
         return Err(PdfError::at(ErrorCode::MalformedPdf, id));

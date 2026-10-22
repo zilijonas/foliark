@@ -6,7 +6,7 @@
 //! that is neither Image nor Form, a font Subtype we do not know, a stream where a plain
 //! value belongs) is a typed `MALFORMED_PDF` refusal, never a silent skip. Direct values are
 //! copied; indirect values in plain positions are inlined; dangling references are errors.
-use super::{Extra, NewStream, PageFonts, Spans, Val, content, err, err_obj};
+use super::{Extra, NewStream, PageFonts, Redirects, Spans, Val, content, err, err_obj};
 use crate::limits::{self, Budget};
 use crate::reader::{self, object_id};
 use foliark_model::{ErrorCode, Limits, ObjectId, PdfError};
@@ -396,6 +396,7 @@ pub(crate) struct Walk<'a> {
     spans: &'a Spans,
     extras: &'a [Extra],
     to_unicode: &'a BTreeMap<ObjectId, Vec<u8>>,
+    redirects: &'a Redirects,
     extra_refs: HashMap<usize, Ref>,
     budget: Budget,
     pub nodes: Vec<Node>,
@@ -422,6 +423,7 @@ impl<'a> Walk<'a> {
         repl: &'a BTreeMap<ObjectId, NewStream>,
         spans: &'a Spans,
         (extras, to_unicode): (&'a [Extra], &'a BTreeMap<ObjectId, Vec<u8>>),
+        redirects: &'a Redirects,
     ) -> Self {
         Self {
             doc,
@@ -430,6 +432,7 @@ impl<'a> Walk<'a> {
             spans,
             extras,
             to_unicode,
+            redirects,
             extra_refs: HashMap::new(),
             budget: Budget::new(limits),
             nodes: Vec::new(),
@@ -734,6 +737,7 @@ impl<'a> Walk<'a> {
 
     fn process(&mut self, id: ObjectId, class: Class, r: Ref) -> Result<(), PdfError> {
         let repl = self.repl.get(&id);
+        let source = self.redirects.aliases.get(&id).copied().unwrap_or(id);
         let (val, stream) = match repl {
             Some(n) => (
                 Val::Dict(
@@ -744,8 +748,9 @@ impl<'a> Walk<'a> {
                 ),
                 None,
             ),
-            None => self.load(id)?,
+            None => self.load(source)?,
         };
+        let val = self.edit_form_resources(id, val)?;
         let class = refine(class, &val, id)?;
         // A rebuilt ToUnicode replaces the source one, which must not be copied at all: an
         // orphaned copy would still hold the mapping of every removed code.
@@ -786,6 +791,27 @@ impl<'a> Walk<'a> {
             val: dict,
             data,
         })
+    }
+
+    /// A Form's dictionary with the XObject resources `Writer::add_form_xobject` and
+    /// `drop_form_xobject` changed (copied, never edited in place).
+    fn edit_form_resources(&self, id: ObjectId, val: Val) -> Result<Val, PdfError> {
+        let Some((add, drop)) = self.redirects.form_xobjects.get(&id) else {
+            return Ok(val);
+        };
+        let Val::Dict(mut entries) = val else {
+            return Err(err_obj(ErrorCode::MalformedPdf, "Form is not a stream", id));
+        };
+        let Some(i) = entries.iter().position(|(k, _)| k == b"Resources") else {
+            return Err(err_obj(
+                ErrorCode::InvalidArgument,
+                "Form has no /Resources",
+                id,
+            ));
+        };
+        let res = entries[i].1.clone();
+        entries[i].1 = self.with_entries(Some(res), b"XObject", add, drop)?;
+        Ok(Val::Dict(entries))
     }
 
     /// Encoded bytes and `/Filter`, `/DecodeParms` entries for a source stream. Content
@@ -931,7 +957,8 @@ impl<'a> Walk<'a> {
     pub fn build(
         &mut self,
         appended: &BTreeMap<usize, Vec<u8>>,
-        page_fonts: &PageFonts,
+        [page_fonts, page_xobjects]: [&PageFonts; 2],
+        dropped_xobjects: &BTreeMap<usize, Vec<Vec<u8>>>,
     ) -> Result<Vec<Ref>, PdfError> {
         self.alloc()?;
         let pages = self.alloc()?;
@@ -955,10 +982,18 @@ impl<'a> Walk<'a> {
                 let mut v = self
                     .inherited(&raw, key.as_bytes())?
                     .filter(|v| *v != Val::Null);
-                if key == "Resources"
-                    && let Some(add) = page_fonts.get(&i)
-                {
-                    v = Some(self.with_fonts(v, add)?);
+                if key == "Resources" {
+                    let none = Vec::new();
+                    let dropped = dropped_xobjects.get(&i).unwrap_or(&none);
+                    for (category, added, drop) in [
+                        (&b"Font"[..], page_fonts, &none),
+                        (b"XObject", page_xobjects, dropped),
+                    ] {
+                        if added.contains_key(&i) || !drop.is_empty() {
+                            let add = added.get(&i).map_or(&[][..], Vec::as_slice);
+                            v = Some(self.with_entries(v, category, add, drop)?);
+                        }
+                    }
                 }
                 if let Some(v) = v {
                     e.push((key.as_bytes().to_vec(), self.emit(&v, spec, 0)?));
@@ -975,6 +1010,12 @@ impl<'a> Walk<'a> {
             let mut parts = Vec::new();
             if let Some(m) = raw.get_raw::<Object<'a>>(b"Contents") {
                 for id in self.content_ids(m)? {
+                    let id = self
+                        .redirects
+                        .page_streams
+                        .get(&(i, id))
+                        .copied()
+                        .unwrap_or(id);
                     parts.push(self.object(id, C::Content)?);
                 }
             }
@@ -1004,8 +1045,15 @@ impl<'a> Walk<'a> {
         Ok(refs)
     }
 
-    /// `/Resources` with `fonts` added to its `/Font` dictionary (copied, never edited in place).
-    fn with_fonts(&self, res: Option<Val>, fonts: &[(Vec<u8>, Val)]) -> Result<Val, PdfError> {
+    /// `/Resources` with `added` put into its `category` dictionary (`/Font`, `/XObject`),
+    /// copied, never edited in place.
+    fn with_entries(
+        &self,
+        res: Option<Val>,
+        category: &[u8],
+        added: &[(Vec<u8>, Val)],
+        drop: &[Vec<u8>],
+    ) -> Result<Val, PdfError> {
         let bad = || err(ErrorCode::MalformedPdf, "resources are not a dictionary");
         let dict = |v: Option<Val>| match v.map(|v| self.resolve(&v)).transpose()? {
             None | Some(Val::Null) => Ok(Vec::new()),
@@ -1013,15 +1061,20 @@ impl<'a> Walk<'a> {
             Some(_) => Err(bad()),
         };
         let mut res = dict(res)?;
-        let mut map = dict(get(&res, "Font").cloned())?;
-        for (name, font) in fonts {
+        let mut map = dict(
+            res.iter()
+                .find(|(k, _)| k == category)
+                .map(|(_, v)| v.clone()),
+        )?;
+        map.retain(|(k, _)| !drop.contains(k));
+        for (name, val) in added {
             if map.iter().any(|(k, _)| k == name) {
-                return Err(err(ErrorCode::InvalidArgument, "font resource name in use"));
+                return Err(err(ErrorCode::InvalidArgument, "resource name in use"));
             }
-            map.push((name.clone(), font.clone()));
+            map.push((name.clone(), val.clone()));
         }
-        res.retain(|(k, _)| k != b"Font");
-        res.push((b"Font".to_vec(), Val::Dict(map)));
+        res.retain(|(k, _)| k != category);
+        res.push((category.to_vec(), Val::Dict(map)));
         Ok(Val::Dict(res))
     }
 

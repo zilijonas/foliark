@@ -42,6 +42,16 @@ pub struct SemanticPage {
     /// Every font a glyph of this page uses whose dictionary is an indirect object.
     pub fonts: BTreeMap<ObjectId, FontInfo>,
     pub diagnostics: Vec<Diagnostic>,
+    /// Every Form occurrence the page enters, outermost first.
+    pub forms: Vec<FormUse>,
+}
+
+/// One Form drawn by a `Do`: `path` ends with the Form's own step and `loc` is the `Do`
+/// operator, in the stream of the parent (the page's content or the enclosing Form).
+#[derive(Debug, Clone)]
+pub struct FormUse {
+    pub path: InstancePath,
+    pub loc: SourceLoc,
 }
 
 #[derive(Debug, Clone)]
@@ -117,8 +127,9 @@ pub struct PathItem {
     /// The fill rule, or the clip rule of a clip-only item.
     pub fill: Option<FillRule>,
     pub stroke: Option<StrokeProps>,
-    /// Factor from the stroke's line width (the CTM's user units) to page user space:
-    /// `sqrt(|det CTM|)`. 1 for a clip-only item.
+    /// Factor from the stroke's line width (the CTM's user units) to page user space: the
+    /// CTM's largest singular value, so a non-uniform scale cannot under-state how far a
+    /// stroke reaches. 1 for a clip-only item.
     pub stroke_scale: f64,
     pub clip_only: bool,
 }
@@ -171,6 +182,7 @@ struct Builder<'x> {
     loc: SourceLoc,
     hidden: bool,
     items: Vec<Item>,
+    forms: Vec<FormUse>,
     fonts: BTreeMap<ObjectId, FontInfo>,
     diagnostics: Vec<Diagnostic>,
     /// Fonts that already have a `Type3NotDescended` (`NO_OBJECT` = direct dictionary).
@@ -302,7 +314,7 @@ impl Builder<'_> {
             geometry: props.transform * path.clone(),
             fill,
             stroke,
-            stroke_scale: props.transform.determinant().abs().sqrt(),
+            stroke_scale: widest_axis(props.transform),
             clip_only: false,
         };
         match &props.paint {
@@ -316,6 +328,13 @@ impl Builder<'_> {
             Paint::Color(_) => self.push(ItemKind::Path(item)),
         }
     }
+}
+
+/// The largest singular value of the linear part of `m`.
+fn widest_axis(m: Affine) -> f64 {
+    let [a, b, c, d, ..] = m.as_coeffs();
+    let (p, q, r) = (a * a + b * b, c * c + d * d, a * c + b * d);
+    (((p + q) + ((p - q).powi(2) + 4.0 * r * r).sqrt()) / 2.0).sqrt()
 }
 
 fn id_to_ref(id: ObjectId) -> ObjRef {
@@ -447,6 +466,11 @@ impl<'a> Device<'a> for Builder<'_> {
             owner,
             drawn: HashMap::new(),
         });
+        let path = InstancePath(self.stack[1..].iter().map(|f| f.step).collect());
+        self.forms.push(FormUse {
+            path,
+            loc: self.loc,
+        });
         true
     }
 
@@ -527,6 +551,7 @@ impl Document {
             },
             hidden: false,
             items: Vec::new(),
+            forms: Vec::new(),
             fonts: BTreeMap::new(),
             diagnostics: Vec::new(),
             type3: HashSet::new(),
@@ -575,6 +600,7 @@ impl Document {
             items: device.items,
             fonts: device.fonts,
             diagnostics,
+            forms: device.forms,
         })
     }
 }

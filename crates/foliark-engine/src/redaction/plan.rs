@@ -16,7 +16,7 @@ use foliark_model::{
     Point, Quad, Rect, RedactionReport, SharedKind, SharedSurvivor, SourceLoc,
 };
 use hayro::hayro_syntax::object::{Array, Dict, Name};
-use hayro::vello_cpu::peniko::kurbo::{Affine, BezPath, PathEl, Shape};
+use hayro::vello_cpu::peniko::kurbo::{Affine, BezPath, Cap, PathEl, Shape};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 /// Spec §5.1: a cluster goes when this share of its quad lies in a region.
@@ -148,6 +148,9 @@ pub struct PlannedForm {
     /// The Form object is drawn more than once in the document, so it must be cloned rather
     /// than edited in place.
     pub shared: bool,
+    /// The `Do` that draws this occurrence, in the stream of its parent (the page's content or
+    /// the enclosing Form).
+    pub do_loc: SourceLoc,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -354,7 +357,7 @@ fn affine(m: Matrix) -> Affine {
     Affine::new(m.0)
 }
 
-fn subpaths(path: &BezPath) -> Vec<BezPath> {
+pub(super) fn subpaths(path: &BezPath) -> Vec<BezPath> {
     let mut out: Vec<BezPath> = Vec::new();
     for el in path.elements() {
         match el {
@@ -542,7 +545,12 @@ impl Scan {
         let mut survivors = self.survivors;
         let removed_streams: BTreeSet<ObjectId> = pages
             .iter()
-            .flat_map(|p| p.clusters.iter().map(|c| c.id.loc.stream))
+            .flat_map(|p| {
+                let text = p.clusters.iter().map(|c| c.id.loc.stream);
+                let images = p.images.iter().map(|i| i.loc.stream);
+                text.chain(p.vectors.iter().map(|v| v.loc.stream))
+                    .chain(images)
+            })
             .collect();
         RedactionPlan {
             binding,
@@ -626,6 +634,8 @@ fn plan_page(
     };
     let mut resolved: HashSet<&ClusterId> = HashSet::new();
     let mut form_seen: HashSet<Vec<InstanceStep>> = HashSet::new();
+    let form_uses: HashMap<&InstancePath, SourceLoc> =
+        model.forms.iter().map(|f| (&f.path, f.loc)).collect();
     let mut effective: Vec<B> = boxes.clone();
     let mut affect =
         |regions: &mut Vec<PlannedRegion>, hit: &[u32], b: B, f: fn(&mut PlannedRegion)| {
@@ -729,6 +739,20 @@ fn plan_page(
             ItemKind::Path(p) if !p.clip_only && (p.fill.is_some() || p.stroke.is_some()) => {
                 let found = plan_vectors(item.loc, &item.path, p, to_display, disp_scale, &boxes);
                 changed = !found.is_empty();
+                if p.stroke.is_some() {
+                    // `B` reaches the model as a fill item, then a stroke item whose larger box
+                    // decides: the fill item's entries (a rectangle cut) are replaced.
+                    let (stale, keep): (Vec<_>, Vec<_>) = plan
+                        .vectors
+                        .drain(..)
+                        .partition(|v| v.loc == item.loc && v.path == item.path);
+                    plan.vectors = keep;
+                    for v in stale {
+                        for &i in &v.regions {
+                            regions[i as usize].vectors -= 1;
+                        }
+                    }
+                }
                 for v in found {
                     affect(&mut regions, &v.regions, bounds_of(&v.bounds), |r| {
                         r.vectors += 1
@@ -749,10 +773,16 @@ fn plan_page(
                 let chain = item.path.0[..n].to_vec();
                 if form_seen.insert(chain.clone()) {
                     scan.changed.insert((page, chain.clone()));
+                    let path = InstancePath(chain.clone());
+                    let do_loc = form_uses
+                        .get(&path)
+                        .copied()
+                        .ok_or(PdfError::at(ErrorCode::Internal, chain[n - 1].form))?;
                     plan.forms.push(PlannedForm {
-                        path: InstancePath(chain.clone()),
+                        path,
                         form: chain[n - 1].form,
                         shared: false,
+                        do_loc,
                     });
                 }
             }
@@ -783,26 +813,46 @@ fn plan_vectors(
     disp_scale: f64,
     boxes: &[B],
 ) -> Vec<PlannedVector> {
+    // Half the width times the miter limit (spec §5.4), at least the square-cap corner, along
+    // the CTM's widest axis (`stroke_scale`).
     let grow = item.stroke.as_ref().map_or(0.0, |s| {
-        f64::from(s.line_width) * item.stroke_scale * disp_scale / 2.0
-            * f64::from(s.miter_limit).max(1.0)
+        let cap = if matches!(s.line_cap, Cap::Square) {
+            std::f64::consts::SQRT_2
+        } else {
+            1.0
+        };
+        f64::from(s.line_width)
+            * item.stroke_scale
+            * disp_scale
+            * 0.5
+            * f64::from(s.miter_limit).max(1.0).max(cap)
     });
-    let mut out = Vec::new();
-    for (n, sub) in subpaths(&(to_display * item.geometry.clone()))
+    let shapes = subpaths(&(to_display * item.geometry.clone()));
+    let subs: Vec<B> = shapes
         .iter()
-        .enumerate()
-    {
-        let r = sub.bounding_box();
-        let b = [r.x0 - grow, r.y0 - grow, r.x1 + grow, r.y1 + grow];
+        .map(|sub| {
+            let r = sub.bounding_box();
+            [r.x0, r.y0, r.x1, r.y1]
+        })
+        .collect();
+    let mut out = Vec::new();
+    for (n, r) in subs.iter().enumerate() {
+        let b = [r[0] - grow, r[1] - grow, r[2] + grow, r[3] + grow];
         let hit: Vec<u32> = (0..boxes.len() as u32)
             .filter(|&i| overlap(b, boxes[i as usize]))
             .collect();
         if hit.is_empty() {
             continue;
         }
+        // A rectangle is cut only when it is the whole story of its area: another subpath over
+        // it (a hole, a winding or even-odd interaction) makes the cut ambiguous, so it goes whole.
+        let alone = !subs
+            .iter()
+            .enumerate()
+            .any(|(m, o)| m != n && overlap(b, *o));
         let class = if covered(b, boxes) {
             VectorClass::Inside
-        } else if item.stroke.is_none() && is_axis_rect(sub) {
+        } else if item.stroke.is_none() && is_axis_rect(&shapes[n]) && alone {
             VectorClass::RectCut
         } else {
             VectorClass::Collateral

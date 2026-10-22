@@ -3,7 +3,7 @@
 
   .venv/bin/python fidelity.py in.pdf out.pdf --changed 0:x0,y0,x1,y1 [--changed ...] [--preserve TEXT] [--raster] [--spec spec.json]
   spec: {"changed":[{"page":0,"rect":[x0,y0,x1,y1]}], "preserve":["TEXT"], "raster":false, "dpi":72, "margin":2, "threshold":32,
-         "max_frac":0.0002, "text_tol":1.0, "password":""}      rects are display space (spec section 2), points
+         "max_frac":0.0002, "text_tol":1.0, "password":"", "pypdf_chunks":true}      rects are display space (spec section 2), points
 
 Everything outside the declared changed regions (+margin) must look and read the same. Exit 0 iff no finding.
 Importable: check_isolated(in, out, spec) -> (findings ["CODE: detail"], notes [str]).
@@ -133,7 +133,11 @@ def check(out_path, spec):
             if miss:
                 F.append("WORDS_FITZ: page %d %d words %s outside changed regions (tol %.1f pt): %s" % (i, len(miss), side, tol, miss[:4]))
         # text mapping, pypdf: chunk start points of lines that do not touch a region
+        # pypdf cannot place text drawn inside Forms (it reports it at the origin, merged): `pypdf_chunks: false`
+        # leaves Form pages to PyMuPDF words, pixels and the structural oracles.
         ca, cb = pypdf_chunks(pa, ra.pages[i]), pypdf_chunks(pb, rb.pages[i])
+        if not spec.get("pypdf_chunks", True):
+            ca = []
         touched = [ln for ln in la if any(ln.intersects(g) for g in regs)]
         miss = []
         for t, x, y in ca:
