@@ -77,15 +77,15 @@ pub struct Ladder<'a> {
     pub font_match: &'a [FontMatchRule],
 }
 
-struct Candidate<'a> {
-    face: &'a dyn FontFace,
+pub struct Candidate<'a> {
+    pub face: &'a dyn FontFace,
     /// `None` = the source font itself.
-    rule: Option<FontRule>,
+    pub rule: Option<FontRule>,
 }
 
 impl<'a> Ladder<'a> {
     /// Rungs 1 to 4 in order. A matching rule whose family is not registered is skipped.
-    fn candidates(&self) -> Result<Vec<Candidate<'a>>, PdfError> {
+    pub fn candidates(&self) -> Result<Vec<Candidate<'a>>, PdfError> {
         let reg = self.registry;
         let f = self.flags;
         let mut out = Vec::new();

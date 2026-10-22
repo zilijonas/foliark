@@ -1,6 +1,7 @@
 //! Reader and renderer. Thin wrappers over hayro; the other §14 modules land with their tasks.
 use foliark_model::{Limits, PageGeometry, PdfError};
 
+pub mod edit;
 pub mod interpret;
 pub mod limits;
 pub mod reader;

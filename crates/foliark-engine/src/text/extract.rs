@@ -17,13 +17,15 @@ pub struct TextLayout {
     pub page: TextPage,
     /// Parallel to `page.clusters`: the visual line (page-wide id) and the index into
     /// `page.words` of each cluster.
-    pub(super) meta: Vec<ClusterMeta>,
+    pub(crate) meta: Vec<ClusterMeta>,
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(super) struct ClusterMeta {
+pub(crate) struct ClusterMeta {
     pub line: u32,
     pub word: u32,
+    /// Display y of the glyph origin (the baseline of upright text).
+    pub baseline: f64,
 }
 
 /// One shown glyph in display space, before grouping.
@@ -358,6 +360,7 @@ fn assemble(
             meta.push(ClusterMeta {
                 line: w.line,
                 word: n as u32,
+                baseline: g.origin.y,
             });
             offset += len;
             stats.unmapped_glyphs += u32::from(g.flags & UNMAPPED != 0);
