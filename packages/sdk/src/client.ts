@@ -19,7 +19,7 @@ export interface FoliarkOptions {
   /** Exactly one of `workerUrl` and `worker`. */
   workerUrl?: string | URL;
   worker?: () => Worker;
-  /** Optional CMap pack base (spec 10.3). */
+  /** Reserved (spec 10.3). 0.1.0 ships no CMap pack and never fetches this URL; pages that need a predefined CMap report `requiredAssets` and render with a `CMAP_MISSING` warning. */
   cmapsUrl?: string | URL;
   limits?: Partial<Limits>;
   fontMatch?: FontMatchRule[];

@@ -478,7 +478,7 @@ fn ten_edits_and_undos_leave_one_font_object_and_a_bounded_working_copy() {
 #[test]
 fn a_later_edit_over_earlier_text_replaces_it_and_ids_cannot_repeat() {
     // Spec §4: each edit's rects are evaluated on the state after the previous edits, so an edit
-    // over what an earlier edit drew replaces it. EDIT_OVERLAP is never produced: nothing is
+    // over what an earlier edit drew replaces it. Overlap is not an error: nothing is
     // merged and the earlier text does not linger anywhere in the export.
     let (mut e, doc) = engine(page());
     let res = changes(

@@ -56,7 +56,6 @@ pub enum ErrorCode {
     EditNoFont,
     EditNoFit,
     EditUnsupportedScript,
-    EditOverlap,
     StaleRevision,
     StalePlan,
     PlanConsumed,

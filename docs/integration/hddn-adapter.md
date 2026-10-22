@@ -3,6 +3,21 @@
 HDDN worktree `~/ai/repos/hddn-foliark`, branch `foliark/integration` (from `codex/hddn-export-buffer` 2fe0f9a), local only. The adapter is
 `src/workers/lib/foliark.ts` there; this page is the contract it implements and what is left.
 
+## Status (HDDN worktree `~/ai/repos/hddn-foliark`, branch `foliark/integration`, local commits, nothing pushed)
+| Task | What | Commit | State |
+|---|---|---|---|
+| NEW-66 | adapter: load, inspect, extract, render, lane, failure codes | 2cd43c5 | done |
+| NEW-67 | signature scan, OCR route, selection/search proof, real-browser e2e | 2ac3d92 | done |
+| NEW-68 | paragraph editing on `prepareParagraph` / `layoutEdit` / `applyChanges` | 61fc5bd | done |
+| NEW-69 | export: native redaction, image-only fallback behind explicit consent, report notices | 7a19c1b | done |
+| NEW-70 | AbortSignal cancellation, typed OCR failure, cache name bump, 3-browser e2e | 1c7d255 | committed, owned by another agent (board is the source of truth) |
+| NEW-71 | remove Pyodide and the `PUBLIC_PDF_ENGINE` switch | - | not started |
+| NEW-76 | complete-replacement and rollback proof | - | blocked on NEW-71 and this candidate |
+
+SDK surface HDDN relies on: `createInlineFoliark`, `open`, `pages`, `extractText`, `renderPage`, `prepareParagraph`, `applyChanges`, `prepareExport`, `export`,
+`FoliarkError` codes, and the exported types `ChangeSet`, `TextEdit`, `Redaction`, `ExportReport`, `Loss` (NEW-74 added them to the public index so the adapter no longer derives them from `ChangeSet`).
+Not wired: `search`, `quadsFor`, `select` (nothing in HDDN's UI would use them), `cmapsUrl` (no pack ships).
+
 ## Decision: in-worker entry, not a nested worker
 HDDN already runs one dedicated worker (`redactor.worker.ts`) whose router serializes whole requests and whose `documentFaulted` / generation
 recovery (HDDN-23) replaces the worker on a fatal error. A second Foliark worker underneath would give two supervisors, two generations, a
@@ -25,9 +40,9 @@ feeds HDDN's existing recovery path); `wasm` option (bytes or module) lets tests
 | GET_PAGE_PREVIEW | `renderPage(i,{scale})` -> RGB PNG made in the worker (CompressionStream, no canvas) | the UI still receives `image/png` bytes; unrotated crop for OCR by undoing `/Rotate` on the RGBA |
 
 ## Switch
-`PUBLIC_PDF_ENGINE=pyodide` (build) or `INIT {engine}` (runtime) keeps the PyMuPDF path; default on this branch is Foliark. Under Foliark, operations
-that still need the Pyodide document (`PREPARE_PARAGRAPH_EDIT`, `SET_TEXT_EDITS` with edits, `APPLY_REDACTIONS`, signature scan) refuse with code
-`foliark-operation-pending` (no silent fallback); `SET_TEXT_EDITS []` is a no-op. Pyodide is not booted under Foliark.
+`PUBLIC_PDF_ENGINE=pyodide` (build) or `INIT {engine}` (runtime) keeps the PyMuPDF path; default on this branch is Foliark. Under Foliark every operation runs on the engine
+(NEW-66 to NEW-69); an operation the engine refuses fails with its mapped HDDN code and is never retried on Pyodide (no silent fallback). Pyodide is not booted under Foliark.
+The switch goes away with NEW-71.
 
 ## Parity (tests: `src/workers/lib/foliark.test.ts`, `router.foliark.test.ts`)
 Oracle: HDDN's shipped `stage_document_from_bytes` under native PyMuPDF 1.26.5 (app ships 1.26.3), recorded by
@@ -42,7 +57,7 @@ Accepted differences:
   fixtures' `inputPolicy` asks for explicit resource rejection, so `resource-exhausted` is correct.
 - Page sizes ignore `/UserUnit` in PyMuPDF and include it in Foliark (normalized boxes are invariant); no fixture sets it.
 
-## Limits of this task
+## Limits of NEW-66 (historical: NEW-67 added scanned fixtures and the signature scan, NEW-70 bumped the cache name)
 Scanned-page OCR is wired through the same `renderPng(...,true)` seam but has no scanned fixture here; signature regions return none under Foliark;
 the offline precache lists the wasm but the service-worker cache name was not bumped (NEW-70).
 
@@ -54,6 +69,4 @@ the offline precache lists the wasm but the service-worker cache name was not bu
 - Findings: Tesseract start-up failure (unreadable or unreachable language data) makes HDDN's `errorHandler` throw in the worker: UI shows the worker-crash/recovery banner and the import is lost (engine independent, tesseract.ts). Page-level OCR failure behaves as designed (warning, manual-review gate).
 
 ## Next
-- NEW-68: `PREPARE_PARAGRAPH_EDIT` / `SET_TEXT_EDITS` on `prepareParagraph`, `layoutEdit`, `applyChanges`; re-extract `changedPages`; keep the generation/revision binding.
-- NEW-69: `APPLY_REDACTIONS` on `prepareExport` / `export`; map `FORM_APPEARANCE_MISSING`, `OPTIONAL_CONTENT_UNSUPPORTED` etc. to the `native-*` codes; delete `export-renderer.ts`.
-- NEW-70: service-worker cache name, `onReset` -> recovery replay, offline gate. NEW-71: remove Pyodide once 67-69 land.
+NEW-71 (remove Pyodide once 66 to 70 are accepted), then NEW-76. Open items carried here: scanned-page OCR timing is not part of the engine comparison, signature regions are an HDDN-side port over `renderRgba`.

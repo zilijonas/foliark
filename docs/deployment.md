@@ -90,8 +90,10 @@ fetchable), promptly (about half a second locally); the document is never touche
 stops the origin there instead; real Safari is NEW-64.
 
 ## cmapsUrl
-`cmapsUrl` (spec 10.3, a base URL for an optional `cmaps/<name>.bcmap` pack) is accepted and passed to the worker, but 0.1.0 neither ships a pack nor fetches one. Leave it
-unset. When the pack exists it is a third offline asset: host it beside the wasm, version it the same way and add it to the precache list.
+Not supported in 0.1.0. `cmapsUrl` (spec 10.3, a base URL for an optional `cmaps/<name>.bcmap` pack) is accepted and passed to the worker, but no pack ships and nothing is fetched,
+so leave it unset. A document that uses a predefined, non-Identity CMap (legacy CJK encodings such as `90ms-RKSJ-H`) lists it in `DocumentInfo.requiredAssets` (`cmap:<name>`),
+and `renderPage` returns a `CMAP_MISSING` warning (`tests/render.rs`); text extraction on those fonts is not proven. Identity-H/V fonts need no pack.
+Shipping the pack (about 0.26 MB, hayro-cmap bcmaps) is an owner decision (spec 17.5) and would add a wasm entry point, a loader and a third offline asset.
 
 ## Checks
 `tests/package-consumers/run.sh` (6 builds, chromium) and `tests/browser/run.sh` (21 tests) are the reproducible commands; both take the memory queue from outside, never inside.

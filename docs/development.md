@@ -35,8 +35,6 @@ Run from the repo root, each wrapped as above.
 
 Order for a full local check: fmt, clippy, test, `scripts/build-wasm.sh`, SDK build, smoke. CI (`.github/workflows/ci.yml`) mirrors it and has never run (local git only).
 
-Ops the spec defines but this build does not implement yet (`capabilities`, `prepareParagraph`, `applyChanges`, `prepareExport`, `export`) reject with `INVALID_ARGUMENT` and `details.feature` set to the op name (the spec has no dedicated code; `INTERNAL` would reset the worker). The owning task replaces the stub in `crates/foliark-engine/src/engine.rs`; the wasm facade and SDK need no change.
-
 ts-rs writes TypeScript DTOs to `packages/sdk/src/generated/` during `cargo test`; commit the result, never hand-edit it.
 
 ## Dependencies and the hayro fork

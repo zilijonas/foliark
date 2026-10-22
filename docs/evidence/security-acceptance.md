@@ -30,7 +30,7 @@ inputs exports (spec 7 is independent of native limits) and is judged like any r
 | D3 | unused Form/Image XObject (and unused fonts) stay reachable from page Resources with their text, in every native mode (case unused-xobject: `SECRET_UNUSED_FORM`; unused-font keeps BaseFont/ToUnicode names) | RESOLVED by NEW-80 (ADR 0007): the last export stage drops every resource entry no surviving content uses; case unused-xobject now SAFE in S/R/T, `known_blockers.json` is empty |
 Spec drift, not privacy defects: the engine evaluates `/VE` (And/Not) correctly instead of refusing `OPTIONAL_CONTENT_UNSUPPORTED` (ocg-ve visible kept, ocg-ve-hidden removed; MuPDF itself ignores /VE, so
 fidelity pixels are skipped for that case and the secret must be absent); redaction over a soft-mask group is refused `INVALID_ARGUMENT feature=redactionSoftMaskGroup`, not supported as spec 5.3 says
-(safe, no bytes); `EDIT_OVERLAP` never produced (NEW-53). Untouched Type3 CharProcs (`SECRET_T3_UNUSED_PROC`) survive sanitize-only by spec 5.6 and are dropped once the font is touched (R, T pass).
+(safe, no bytes); `EDIT_OVERLAP` was never produced (NEW-53) and is removed from the contract (NEW-74): overlapping edits replay in order (spec 4). Untouched Type3 CharProcs (`SECRET_T3_UNUSED_PROC`) survive sanitize-only by spec 5.6 and are dropped once the font is touched (R, T pass).
 Harness bugs I fixed on the way (not engine): pre-NEW-47 oracle expectations for raster edge pixels (inset 0.26 pt), gray inline image colour, ActualText word glue, pypdf `'`/`"` placement.
 
 ## Correct refusals (typed, no bytes)
