@@ -58,9 +58,10 @@ fn byte(c: f64) -> u8 {
     (c * 255.0).round().clamp(0.0, 255.0) as u8
 }
 
-/// `null` fill is black, as in the native export (spec §1.5, §5.5): the region is always erased.
+/// Spec §7: a `null` fill erases to WHITE in raster mode (native paints black); any other fill
+/// is its colour. The region is always erased.
 fn fill(f: Option<[f64; 3]>) -> [u8; 3] {
-    f.unwrap_or([0.0; 3]).map(byte)
+    f.unwrap_or([1.0; 3]).map(byte)
 }
 
 fn widgets(doc: &crate::reader::Document) -> u32 {

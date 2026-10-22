@@ -96,7 +96,7 @@ fn red_box_pt(src: &[u8], name: &str) -> Rect {
     }
 }
 
-fn redact(e: &mut Engine, doc: &str, base: u32, rect: Rect) {
+fn redact(e: &mut Engine, doc: &str, base: u32, rect: Rect, fill: Option<[f64; 3]>) {
     let t = e.apply_changes(
         doc,
         ChangeSet {
@@ -106,7 +106,7 @@ fn redact(e: &mut Engine, doc: &str, base: u32, rect: Rect) {
                 id: "r".into(),
                 page_index: 0,
                 rect,
-                fill: None,
+                fill,
             }]),
         },
     );
@@ -131,14 +131,14 @@ fn burned(r: &Rect, w: usize, h: usize) -> (usize, usize, usize, usize) {
     )
 }
 
-/// Burned pixels are black, nothing else differs from the engine's unburned render of the same
+/// Burned pixels are the fill (white for null, spec §7), nothing else differs from the engine's unburned render of the same
 /// document, and the pure-red marker is gone from the decoded output.
-fn check_burn(src: &[u8], region: Rect, label: &str) -> Decoded {
+fn check_burn(src: &[u8], region: Rect, fill: Option<[f64; 3]>, label: &str) -> Decoded {
     let mut e = Engine::new(Limits::default());
     let (doc, _) = e.open(src.to_vec(), None, false).unwrap();
     let t = e.render(&doc, 0, RenderOptions::at(SCALE));
     let reference = run(&mut e, t).unwrap();
-    redact(&mut e, &doc, 0, region);
+    redact(&mut e, &doc, 0, region, fill);
     let out = decode(&export(&mut e, &doc), label);
     let (w, h) = (
         reference.header.width as usize,
@@ -147,13 +147,14 @@ fn check_burn(src: &[u8], region: Rect, label: &str) -> Decoded {
     assert_eq!((out.width, out.height), (w, h), "{label}: pixel grid");
     let (x0, y0, x1, y1) = burned(&region, w, h);
     assert!(x1 > x0 && y1 > y0);
+    let burn = fill.map_or([255u8; 3], |f| f.map(|c| (c * 255.0).round() as u8));
     let mut wrong = 0;
     for y in 0..h {
         for x in 0..w {
             let got = &out.rgb[(y * w + x) * 3..][..3];
             let inside = (x0..x1).contains(&x) && (y0..y1).contains(&y);
             let want = if inside {
-                &[0u8, 0, 0][..]
+                &burn[..]
             } else {
                 &reference.data[(y * w + x) * 4..][..3]
             };
@@ -201,7 +202,11 @@ fn burned_pixels_follow_display_space_on_rotated_cropped_and_scaled_pages() {
             width: m.width + 2.0,
             height: m.height + 2.0,
         };
-        check_burn(&src, region, name);
+        check_burn(&src, region.clone(), None, name);
+        if name == "r90-crop" {
+            // A colour fill burns that colour, not white.
+            check_burn(&src, region, Some([0.0, 1.0, 0.0]), "r90-crop-green");
+        }
     }
 }
 
@@ -218,7 +223,7 @@ fn a_region_on_a_pixel_edge_burns_exactly_the_squares_it_touches_with_area() {
         width: 10.25,
         height: 9.75,
     };
-    redact(&mut e, &doc, 0, region);
+    redact(&mut e, &doc, 0, region, Some([0.0; 3]));
     let out = decode(&export(&mut e, &doc), "edge");
     let black = |x: usize, y: usize| out.rgb[(y * out.width + x) * 3..][..3] == [0, 0, 0];
     assert!(black(20, 60) && black(40, 79));
@@ -294,7 +299,7 @@ fn a_redaction_over_edited_text_burns_the_edited_pixels_not_the_original_ones() 
         "export is not the stale original"
     );
 
-    // Redact the 4th and 5th glyph boxes of the edited line: those boxes are black, whole.
+    // Redact the 4th and 5th glyph boxes of the edited line: those boxes are the (black) fill, whole.
     let t = e.extract_text(
         &doc,
         0,
@@ -317,6 +322,7 @@ fn a_redaction_over_edited_text_burns_the_edited_pixels_not_the_original_ones() 
             width: a.width / 2.0 + b.width,
             height: a.height,
         },
+        Some([0.0; 3]),
     );
     let out = decode(&export(&mut e, &doc), "edited-redacted");
     let black_in = |r: &Rect| {
