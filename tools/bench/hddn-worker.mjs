@@ -13,17 +13,18 @@ const ARGS = ["--enable-features=SharedArrayBuffer"];
 
 // extended: the full op set of docs/performance/comparison.json (paragraph prepare, DETECT, N-box native + flattened export, memory).
 // lines: {fixtureId: [{x, y, width, height, text, pageW, pageH}]} (SDK display-space lines) so both engines get identical regions.
-export async function runHddn({ smoke = false, browserName = "chromium", extended = false, lines = {} } = {}) {
+// only/scales (NEW-81): run just these fixtures, previews only, at each scale.
+export async function runHddn({ smoke = false, browserName = "chromium", extended = false, lines = {}, only, scales = [SCALE] } = {}) {
   const N = smoke ? { cold: 1, warmInit: 2, op: 2, heavy: 2 } : { cold: 3, warmInit: 5, op: 5, heavy: 3 };
   const workerFile = (await readdir(join(HDDN_DIST, "_astro"))).find((f) => /^redactor\.worker-.*\.js$/.test(f));
   if (!workerFile) throw new Error("HDDN dist missing; build with `pnpm exec astro build` in .worktrees/hddn-2fe0f9a");
   // Worker behind the memory probe: same origin, so HDDN keeps resolving its assets against "/".
   await mkdir(join(BENCH, ".cache"), { recursive: true });
   await writeFile(join(BENCH, ".cache/hddn-wrap.js"), `import "/__bench/memprobe.js";\nimport "/_astro/${workerFile}";\n`);
-  const fixtures = await loadFixtures(smoke ? FIXTURES.filter((f) => f[0] === "native-small" || f[0] === "native-30p") : extended ? EXTENDED_FIXTURES : FIXTURES);
+  const fixtures = await loadFixtures(only ? only : smoke ? FIXTURES.filter((f) => f[0] === "native-small" || f[0] === "native-30p") : extended ? EXTENDED_FIXTURES : FIXTURES);
   const srv = await serve([{ prefix: "/__bench/", dir: BENCH }, { prefix: "/", dir: HDDN_DIST }]);
   const url = `${srv.origin}/__bench/hddn-page.html`;
-  const measurements = [], unavailable = [], assets = {};
+  const measurements = [], unavailable = [], assets = {}, workerLog = [];
   const add = (op, input, run, samples, extra = {}) => measurements.push({ op, input, run, ...stat1(samples), ...extra });
   const launch = async (dir) => {
     const ctx = await playwright[browserName].launchPersistentContext(dir, { args: browserName === "chromium" ? ARGS : [] });
@@ -32,17 +33,21 @@ export async function runHddn({ smoke = false, browserName = "chromium", extende
   const open = async (ctx) => {
     const page = await ctx.newPage();
     page.on("pageerror", (e) => console.error("pageerror:", e.message));
+    // worker console output is the only place HDDN's Python tracebacks show up (the protocol reports "errors.unknown")
+    const logWorker = (w) => w.on("console", (m) => { if (/error|traceback|exception|memory/i.test(m.text())) workerLog.push(m.text().slice(0, 400)); });
+    page.on("worker", logWorker); page.on("console", (m) => { if (/error|traceback|exception|memory/i.test(m.text())) workerLog.push(m.text().slice(0, 400)); });
     await page.goto(url);
     await page.evaluate((w) => startWorker(w), "/__bench/.cache/hddn-wrap.js");
     return page;
   };
   const init = (page) => page.evaluate(async () => (await W.req("INIT", { baseUrl: "/" })).ms);
   let importSeq = 0;
+  // allowIncompleteOcr: a scanned page is in the OCR lane and COMMIT_IMPORT refuses it until OCR ran (NEW-81: this refusal was the cause of the GET_PAGE_PREVIEW "errors.unknown" on image-heavy files; OCR itself is not measured here).
   // LOAD_PDF stages the import under an importId; COMMIT_IMPORT (timed separately) makes it the active document, as the app does.
   const loadPdf = (page, f, nSpans = 1) => page.evaluate(async ({ b64, name, size, importId, nSpans }) => {
     const bin = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
     const r = await W.req("LOAD_PDF", { importId, file: bin.buffer, name, size, mimeType: "application/pdf" }, [bin.buffer]);
-    if (r.type === "PDF_LOADED") { const c = await W.req("COMMIT_IMPORT", { importId }); r.commitMs = c.ms; r.commitType = c.type; }
+    if (r.type === "PDF_LOADED") { const c = await W.req("COMMIT_IMPORT", { importId, allowIncompleteOcr: true }); r.commitMs = c.ms; r.commitType = c.type; }
     return { ms: r.ms, commitMs: r.commitMs, commitType: r.commitType, type: r.type, spans: r.payload.spans?.slice(0, nSpans), pages: r.payload.pages?.length, err: r.type === "ERROR" ? r.payload : undefined };
   }, { b64: f.buf.toString("base64"), name: `${f.id}.pdf`, size: f.bytes, importId: `bench-${++importSeq}`, nSpans });
   const extendedOps = async (page, f, first) => {
@@ -121,14 +126,17 @@ export async function runHddn({ smoke = false, browserName = "chromium", extende
       add("LOAD_PDF", f.id, "warm", loads, { pages: first.pages });
       add("COMMIT_IMPORT", f.id, "warm", commits);
       if (f.id === "native-30p") measurements.push({ op: "rss-after-LOAD_PDF", input: f.id, run: "warm", rssBytes: treeRssBytes() });
-      // previews, every page, N rounds
-      const perPage = Array.from({ length: first.pages }, () => []);
-      for (let r = 0; r < N.op; r++) for (let p = 0; p < first.pages; p++) {
-        const res = await page.evaluate(async ({ p, s }) => { const x = await W.req("GET_PAGE_PREVIEW", { pageIndex: p, scale: s }); return { ms: x.ms, type: x.type, len: x.payload.bytes?.byteLength }; }, { p, s: SCALE });
-        if (res.type !== "PAGE_PREVIEW") { unavailable.push({ op: "GET_PAGE_PREVIEW", input: f.id, reason: res.type }); break; }
-        perPage[p].push(res.ms);
+      // previews, every page, N rounds, at each scale
+      for (const sc of scales) {
+        const perPage = Array.from({ length: first.pages }, () => []);
+        for (let r = 0; r < N.op; r++) for (let p = 0; p < first.pages; p++) {
+          const res = await page.evaluate(async ({ p, s }) => { const x = await W.req("GET_PAGE_PREVIEW", { pageIndex: p, scale: s }); return { ms: x.ms, type: x.type, len: x.payload.bytes?.byteLength, err: x.type === "ERROR" ? JSON.stringify(x.payload).slice(0, 300) : undefined }; }, { p, s: sc });
+          if (res.type !== "PAGE_PREVIEW") { unavailable.push({ op: "GET_PAGE_PREVIEW", input: f.id, reason: `${res.type} ${res.err ?? ""} | worker log: ${workerLog.splice(0).slice(-3).join(" // ")}`.trim() }); break; }
+          perPage[p].push(res.ms);
+        }
+        if (perPage.every((a) => a.length)) add(`GET_PAGE_PREVIEW@${sc}`, f.id, "warm", perPage.flat(), { pages: first.pages, perPageMedianMs: perPage.map((a) => stat1(a).ms) });
       }
-      add("GET_PAGE_PREVIEW@1.35", f.id, "warm", perPage.flat(), { pages: first.pages, perPageMedianMs: perPage.map((a) => stat1(a).ms) });
+      if (only) continue;
       // native redaction with one manual box over the first span
       const span = first.spans?.[0];
       if (extended && span && (f.id === "native-30p" || f.id === "native-small")) await extendedOps(page, f, first);
