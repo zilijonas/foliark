@@ -118,6 +118,7 @@ Receipts: attach one Markdown receipt per task (at most about 1500 chars): commi
 - The budgets gate (`tools/bench/budgets.json`) fails on regressions; do not raise a budget to make a change pass without a recorded reason.
 - ts-rs DTOs regenerate during `cargo test`; commit them and run the parity check.
 - Re-cutting a release candidate: follow `docs/release/process.md` and record bytes and sha256 in `docs/release/candidate.md`; the version in `packages/sdk/package.json`, the `CHANGELOG.md` heading and the workflow input must agree. Do not publish from an agent unless authorized (section 4).
+- Waiting on a long command: run it in the background and wait for its completion notification. Never poll with `pgrep -f "<pattern>"` loops: the pattern matches the watcher's own command line, so the loop never ends.
 
 ## 6. Optional local tooling
 
