@@ -43,3 +43,12 @@ opt-level = 3
 opt-level = 3
 [profile.release.package.kurbo]
 opt-level = 3
+# Image decode/resample path (progressive JPEG entropy decode + downscale dominate an image-heavy page), docs/performance/comparison.md
+[profile.release.package.zune-jpeg]
+opt-level = 3
+[profile.release.package.zune-core]
+opt-level = 3
+[profile.release.package.moxcms]
+opt-level = 3
+[profile.release.package.pic-scale]
+opt-level = 3

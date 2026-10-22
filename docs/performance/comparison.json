@@ -1,0 +1,2534 @@
+{
+ "schema": 1,
+ "kind": "foliark-vs-hddn-comparison",
+ "createdAt": "2026-10-22T07:55:30.913Z",
+ "mode": "full",
+ "command": "node tools/bench/compare.mjs --browsers chromium,webkit   (through ~/ai/bin/memory-queue run --need-gb 2)",
+ "machine": {
+  "cpu": "Apple M4",
+  "cores": 10,
+  "ramGB": 24,
+  "macOS": "26.6.2",
+  "arch": "arm64",
+  "loadAvg1mAtStart": 3.4
+ },
+ "engines": {
+  "hddn": {
+   "rev": "2fe0f9a",
+   "engine": "Pyodide + PyMuPDF (wasm), pdf-lib flatten",
+   "workerSha256": "6c4728ac72fcce36106363574f73685552e26e06b1f434a2673e3368b14423a8",
+   "distDir": ".worktrees/hddn-2fe0f9a/dist"
+  },
+  "sdk": {
+   "rev": "d7a1a7f",
+   "dirtySources": true,
+   "wasmSha256": "a91b34a5f83fd8abc7a6dffd070bcd1948ea8fcaff8f1c695da9a297c08a99b7",
+   "wasmBytes": 5359831,
+   "wasmGzip9Bytes": 2050728
+  }
+ },
+ "inputs": [
+  {
+   "id": "native-small",
+   "sha256": "03e27e03b6096e429f76b25eb3a6e21aa4f318becd3fcb031dffcb220c1acbe3",
+   "pages": 1,
+   "bytes": 1218,
+   "origin": "tests/fixtures/hddn/metadata-xmp.pdf"
+  },
+  {
+   "id": "native-30p",
+   "sha256": "bf4b9caeb78cae52cd2aad00ac333fe4ef89237a30c0a3f900cadd7abc5440d5",
+   "pages": 30,
+   "bytes": 311713,
+   "origin": "tools/bench/make-native30.py (PyMuPDF, dev-only)"
+  },
+  {
+   "id": "image-heavy",
+   "sha256": "4d627708bc9d9774aa130970effdd46e0311f329df2a1bd7ac21134ba3f7350c",
+   "pages": 2,
+   "bytes": 61355,
+   "origin": "tests/fixtures/hddn/shared-image.pdf"
+  },
+  {
+   "id": "rotation-crop",
+   "sha256": "37e25c655f903fe6a305683e571f84b9dbb0d6a6c9d2251ab78535f740c1219f",
+   "pages": 4,
+   "bytes": 1915,
+   "origin": "tests/fixtures/hddn/rotation-crop.pdf"
+  },
+  {
+   "id": "image-heavy-6p",
+   "sha256": "fb9cdd95aaf2f061e72b92227a4ecd5b4654432efae87d4156c225e45f99e0e3",
+   "pages": 6,
+   "bytes": 7754466,
+   "origin": "tools/bench/make-imageheavy.py (PyMuPDF, dev-only)"
+  }
+ ],
+ "editLines": {
+  "native-small": [
+   {
+    "x": 72,
+    "y": 50.39999999999998,
+    "width": 186.71999526023865,
+    "height": 12,
+    "text": "KEEP_PUBLIC_METADATA_XMP",
+    "pageW": 600,
+    "pageH": 800
+   },
+   {
+    "x": 72,
+    "y": 140.39999999999998,
+    "width": 153.35999608039856,
+    "height": 12,
+    "text": "SECRET_METADATA_XMP",
+    "pageW": 600,
+    "pageH": 800
+   }
+  ],
+  "native-30p": [
+   {
+    "x": 56,
+    "y": 49.60000000000002,
+    "width": 111.07799482345581,
+    "height": 18,
+    "text": "Bench page 1",
+    "pageW": 595,
+    "pageH": 842
+   },
+   {
+    "x": 56,
+    "y": 92,
+    "width": 364.58999741077423,
+    "height": 10,
+    "text": "alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november",
+    "pageW": 595,
+    "pageH": 842
+   },
+   {
+    "x": 56,
+    "y": 109,
+    "width": 365.15999722480774,
+    "height": 10,
+    "text": "delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa quebec",
+    "pageW": 595,
+    "pageH": 842
+   },
+   {
+    "x": 56,
+    "y": 126,
+    "width": 372.36999702453613,
+    "height": 10,
+    "text": "golf hotel india juliet kilo lima mike november oscar papa quebec romeo sierra tango",
+    "pageW": 595,
+    "pageH": 842
+   },
+   {
+    "x": 56,
+    "y": 143,
+    "width": 392.36999678611755,
+    "height": 10,
+    "text": "juliet kilo lima mike november oscar papa quebec romeo sierra tango alpha bravo charlie",
+    "pageW": 595,
+    "pageH": 842
+   },
+   {
+    "x": 56,
+    "y": 160,
+    "width": 409.62999629974365,
+    "height": 10,
+    "text": "mike november oscar papa quebec romeo sierra tango alpha bravo charlie delta echo foxtrot",
+    "pageW": 595,
+    "pageH": 842
+   },
+   {
+    "x": 56,
+    "y": 177,
+    "width": 378.52999663352966,
+    "height": 10,
+    "text": "papa quebec romeo sierra tango alpha bravo charlie delta echo foxtrot golf hotel india",
+    "pageW": 595,
+    "pageH": 842
+   },
+   {
+    "x": 56,
+    "y": 194,
+    "width": 349.03999733924866,
+    "height": 10,
+    "text": "sierra tango alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima",
+    "pageW": 595,
+    "pageH": 842
+   },
+   {
+    "x": 56,
+    "y": 211,
+    "width": 364.579997420311,
+    "height": 10,
+    "text": "bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar",
+    "pageW": 595,
+    "pageH": 842
+   },
+   {
+    "x": 56,
+    "y": 228,
+    "width": 371.81999707221985,
+    "height": 10,
+    "text": "echo foxtrot golf hotel india juliet kilo lima mike november oscar papa quebec romeo",
+    "pageW": 595,
+    "pageH": 842
+   }
+  ]
+ },
+ "browsers": {
+  "chromium": {
+   "browser": "chromium 151.0.7922.34",
+   "measurements": [
+    {
+     "engine": "hddn",
+     "op": "INIT",
+     "input": "-",
+     "run": "cold",
+     "ms": 1596,
+     "p95": 1687.7,
+     "n": 3,
+     "bytes": 30407948
+    },
+    {
+     "engine": "hddn",
+     "op": "LOAD_PDF",
+     "input": "native-small",
+     "run": "cold",
+     "ms": 24.9,
+     "p95": 26.4,
+     "n": 3
+    },
+    {
+     "engine": "hddn",
+     "op": "INIT",
+     "input": "-",
+     "run": "warm",
+     "ms": 1416.1,
+     "p95": 1463.4,
+     "n": 5,
+     "bytes": 0
+    },
+    {
+     "engine": "hddn",
+     "op": "LOAD_PDF",
+     "input": "native-small",
+     "run": "warm",
+     "ms": 2.9,
+     "p95": 24.5,
+     "n": 5,
+     "pages": 1
+    },
+    {
+     "engine": "hddn",
+     "op": "COMMIT_IMPORT",
+     "input": "native-small",
+     "run": "warm",
+     "ms": 0.2,
+     "p95": 0.6,
+     "n": 5
+    },
+    {
+     "engine": "hddn",
+     "op": "GET_PAGE_PREVIEW@1.35",
+     "input": "native-small",
+     "run": "warm",
+     "ms": 6.9,
+     "p95": 17.8,
+     "n": 5,
+     "pages": 1,
+     "perPageMedianMs": [
+      6.9
+     ]
+    },
+    {
+     "engine": "hddn",
+     "op": "PREPARE_PARAGRAPH_EDIT",
+     "input": "native-small",
+     "run": "warm",
+     "ms": 16.3,
+     "p95": 60.4,
+     "n": 3,
+     "pages": 1
+    },
+    {
+     "engine": "hddn",
+     "op": "SET_TEXT_EDITS (same line + text as SDK)",
+     "input": "native-small",
+     "run": "warm",
+     "ms": 9.1,
+     "p95": 20.7,
+     "n": 3,
+     "pages": 1
+    },
+    {
+     "engine": "hddn",
+     "op": "DETECT keywords ['alpha'] (rules + names + signatures, NOT a plain search)",
+     "input": "native-small",
+     "run": "warm",
+     "ms": 8.5,
+     "p95": 70.3,
+     "n": 3,
+     "pages": 1,
+     "groups": 0
+    },
+    {
+     "engine": "hddn",
+     "op": "APPLY_REDACTIONS native (N boxes)",
+     "input": "native-small",
+     "run": "warm",
+     "ms": 7.9,
+     "p95": 10.8,
+     "n": 3,
+     "pages": 1,
+     "regions": 2,
+     "outBytes": 800
+    },
+    {
+     "engine": "hddn",
+     "op": "APPLY_REDACTIONS flattened @2 (N boxes)",
+     "input": "native-small",
+     "run": "warm",
+     "ms": 91.6,
+     "p95": 107.2,
+     "n": 3,
+     "pages": 1,
+     "regions": 2,
+     "outBytes": 6971
+    },
+    {
+     "engine": "hddn",
+     "op": "memory after ops",
+     "input": "native-small",
+     "run": "warm",
+     "rssBytes": 1012137984,
+     "wasmMemoryBytes": 249692160,
+     "memories": 2
+    },
+    {
+     "engine": "hddn",
+     "op": "APPLY_REDACTIONS native (1 manual box)",
+     "input": "native-small",
+     "run": "warm",
+     "ms": 7.1,
+     "p95": 7.5,
+     "n": 3,
+     "outBytes": 841
+    },
+    {
+     "engine": "hddn",
+     "op": "SET_TEXT_EDITS (1 span)",
+     "input": "native-small",
+     "run": "warm",
+     "ms": 8.7,
+     "p95": 8.8,
+     "n": 3
+    },
+    {
+     "engine": "hddn",
+     "op": "LOAD_PDF",
+     "input": "native-30p",
+     "run": "warm",
+     "ms": 1000.8,
+     "p95": 1067.1,
+     "n": 5,
+     "pages": 30
+    },
+    {
+     "engine": "hddn",
+     "op": "COMMIT_IMPORT",
+     "input": "native-30p",
+     "run": "warm",
+     "ms": 0.7,
+     "p95": 2.2,
+     "n": 5
+    },
+    {
+     "engine": "hddn",
+     "op": "rss-after-LOAD_PDF",
+     "input": "native-30p",
+     "run": "warm",
+     "rssBytes": 1081966592
+    },
+    {
+     "engine": "hddn",
+     "op": "GET_PAGE_PREVIEW@1.35",
+     "input": "native-30p",
+     "run": "warm",
+     "ms": 16.4,
+     "p95": 16.8,
+     "n": 150,
+     "pages": 30,
+     "perPageMedianMs": [
+      16.2,
+      16.3,
+      16.3,
+      16.5,
+      16.4,
+      16.3,
+      16.4,
+      16.4,
+      16.4,
+      16.4,
+      16.3,
+      16.3,
+      16.3,
+      16.3,
+      16.4,
+      16.6,
+      16.4,
+      16.3,
+      16.4,
+      16.5,
+      16.4,
+      16.5,
+      16.4,
+      16.5,
+      16.5,
+      16.4,
+      16.4,
+      16.4,
+      16.4,
+      16.3
+     ]
+    },
+    {
+     "engine": "hddn",
+     "op": "PREPARE_PARAGRAPH_EDIT",
+     "input": "native-30p",
+     "run": "warm",
+     "ms": 68.2,
+     "p95": 69.4,
+     "n": 3,
+     "pages": 30
+    },
+    {
+     "engine": "hddn",
+     "op": "SET_TEXT_EDITS (same line + text as SDK)",
+     "input": "native-30p",
+     "run": "warm",
+     "ms": 1003.8,
+     "p95": 1008.4,
+     "n": 3,
+     "pages": 30
+    },
+    {
+     "engine": "hddn",
+     "op": "DETECT keywords ['alpha'] (rules + names + signatures, NOT a plain search)",
+     "input": "native-30p",
+     "run": "warm",
+     "ms": 43.4,
+     "p95": 53.6,
+     "n": 3,
+     "pages": 30,
+     "groups": 841
+    },
+    {
+     "engine": "hddn",
+     "op": "APPLY_REDACTIONS native (N boxes)",
+     "input": "native-30p",
+     "run": "warm",
+     "ms": 399.3,
+     "p95": 432.4,
+     "n": 3,
+     "pages": 30,
+     "regions": 10,
+     "outBytes": 213136
+    },
+    {
+     "engine": "hddn",
+     "op": "APPLY_REDACTIONS flattened @2 (N boxes)",
+     "input": "native-30p",
+     "run": "warm",
+     "ms": 4132.4,
+     "p95": 4193.9,
+     "n": 3,
+     "pages": 30,
+     "regions": 10,
+     "outBytes": 9075784
+    },
+    {
+     "engine": "hddn",
+     "op": "memory after ops",
+     "input": "native-30p",
+     "run": "warm",
+     "rssBytes": 1368915968,
+     "wasmMemoryBytes": 249692160,
+     "memories": 2
+    },
+    {
+     "engine": "hddn",
+     "op": "APPLY_REDACTIONS native (1 manual box)",
+     "input": "native-30p",
+     "run": "warm",
+     "ms": 386.9,
+     "p95": 387.2,
+     "n": 3,
+     "outBytes": 213126
+    },
+    {
+     "engine": "hddn",
+     "op": "SET_TEXT_EDITS (1 span)",
+     "input": "native-30p",
+     "run": "warm",
+     "ms": 992.2,
+     "p95": 995.9,
+     "n": 3
+    },
+    {
+     "engine": "hddn",
+     "op": "LOAD_PDF",
+     "input": "image-heavy",
+     "run": "warm",
+     "ms": 8,
+     "p95": 9.4,
+     "n": 5,
+     "pages": 2
+    },
+    {
+     "engine": "hddn",
+     "op": "COMMIT_IMPORT",
+     "input": "image-heavy",
+     "run": "warm",
+     "ms": 0.2,
+     "p95": 0.7,
+     "n": 5
+    },
+    {
+     "engine": "hddn",
+     "op": "GET_PAGE_PREVIEW@1.35",
+     "input": "image-heavy",
+     "run": "warm",
+     "ms": 7,
+     "p95": 8.1,
+     "n": 10,
+     "pages": 2,
+     "perPageMedianMs": [
+      7.1,
+      6.7
+     ]
+    },
+    {
+     "engine": "hddn",
+     "op": "APPLY_REDACTIONS native (1 manual box)",
+     "input": "image-heavy",
+     "run": "warm",
+     "ms": 7.4,
+     "p95": 7.6,
+     "n": 3,
+     "outBytes": 3512
+    },
+    {
+     "engine": "hddn",
+     "op": "LOAD_PDF",
+     "input": "rotation-crop",
+     "run": "warm",
+     "ms": 2.9,
+     "p95": 3.2,
+     "n": 5,
+     "pages": 4
+    },
+    {
+     "engine": "hddn",
+     "op": "COMMIT_IMPORT",
+     "input": "rotation-crop",
+     "run": "warm",
+     "ms": 0.2,
+     "p95": 0.2,
+     "n": 5
+    },
+    {
+     "engine": "hddn",
+     "op": "GET_PAGE_PREVIEW@1.35",
+     "input": "rotation-crop",
+     "run": "warm",
+     "ms": 5.9,
+     "p95": 6.1,
+     "n": 20,
+     "pages": 4,
+     "perPageMedianMs": [
+      5.7,
+      6,
+      5.7,
+      6
+     ]
+    },
+    {
+     "engine": "hddn",
+     "op": "APPLY_REDACTIONS native (1 manual box)",
+     "input": "rotation-crop",
+     "run": "warm",
+     "ms": 7.9,
+     "p95": 8.4,
+     "n": 3,
+     "outBytes": 1557
+    },
+    {
+     "engine": "hddn",
+     "op": "LOAD_PDF",
+     "input": "image-heavy-6p",
+     "run": "warm",
+     "ms": 11565,
+     "p95": 11767.4,
+     "n": 5,
+     "pages": 6
+    },
+    {
+     "engine": "hddn",
+     "op": "COMMIT_IMPORT",
+     "input": "image-heavy-6p",
+     "run": "warm",
+     "ms": 0.1,
+     "p95": 0.1,
+     "n": 5
+    },
+    {
+     "engine": "hddn",
+     "op": "GET_PAGE_PREVIEW@1.35",
+     "input": "image-heavy-6p",
+     "run": "warm",
+     "ms": 6,
+     "p95": 6.3,
+     "n": 20,
+     "pages": 6,
+     "perPageMedianMs": [
+      5.9,
+      6.1,
+      5.7,
+      6,
+      null,
+      null
+     ]
+    },
+    {
+     "engine": "hddn",
+     "op": "rss-after-INIT+first-LOAD_PDF",
+     "input": "native-small",
+     "run": "cold",
+     "rssBytes": 924336128
+    },
+    {
+     "engine": "sdk",
+     "op": "init (worker + wasm instantiate)",
+     "input": "-",
+     "run": "cold",
+     "ms": 18.8,
+     "p95": 20.5,
+     "n": 3,
+     "bytes": 5407581
+    },
+    {
+     "engine": "sdk",
+     "op": "init (worker + wasm instantiate)",
+     "input": "-",
+     "run": "warm",
+     "ms": 12.4,
+     "p95": 12.6,
+     "n": 5
+    },
+    {
+     "engine": "sdk",
+     "op": "open",
+     "input": "native-small",
+     "run": "warm",
+     "ms": 0.2,
+     "p95": 2.7,
+     "n": 5,
+     "pages": 1
+    },
+    {
+     "engine": "sdk",
+     "op": "first renderPage@1.35 right after open (incl. one-time document scan)",
+     "input": "native-small",
+     "run": "warm",
+     "ms": 0.8,
+     "p95": 7.3,
+     "n": 5,
+     "pages": 1
+    },
+    {
+     "engine": "sdk",
+     "op": "renderPage@1.35",
+     "input": "native-small",
+     "run": "warm",
+     "ms": 0.7,
+     "p95": 0.8,
+     "n": 5,
+     "pages": 1,
+     "perPageMedianMs": [
+      0.7
+     ]
+    },
+    {
+     "engine": "sdk",
+     "op": "extractText all pages",
+     "input": "native-small",
+     "run": "warm",
+     "ms": 0.1,
+     "p95": 0.1,
+     "n": 5,
+     "pages": 1,
+     "words": 2
+    },
+    {
+     "engine": "sdk",
+     "op": "open+extract+render@1.35 all pages (HDDN LOAD_PDF equivalent)",
+     "input": "native-small",
+     "run": "warm",
+     "ms": 0.8,
+     "p95": 1,
+     "n": 5,
+     "pages": 1
+    },
+    {
+     "engine": "sdk",
+     "op": "search 'alpha'",
+     "input": "native-small",
+     "run": "warm",
+     "ms": 0.1,
+     "p95": 0.4,
+     "n": 5,
+     "pages": 1,
+     "hits": 0
+    },
+    {
+     "engine": "sdk",
+     "op": "registerFonts (Liberation Sans, the HDDN edit fallback)",
+     "input": "-",
+     "run": "warm",
+     "ms": 2.8,
+     "p95": 2.8,
+     "n": 1,
+     "bytes": 410712
+    },
+    {
+     "engine": "sdk",
+     "op": "paragraph edit: prepareParagraph",
+     "input": "native-small",
+     "run": "warm",
+     "ms": 0.4,
+     "p95": 3.6,
+     "n": 3,
+     "pages": 1
+    },
+    {
+     "engine": "sdk",
+     "op": "paragraph edit: applyChanges (1 edit)",
+     "input": "native-small",
+     "run": "warm",
+     "ms": 0.8,
+     "p95": 7.3,
+     "n": 3,
+     "pages": 1
+    },
+    {
+     "engine": "sdk",
+     "op": "native export, N region redactions (apply+prepare+export)",
+     "input": "native-small",
+     "run": "warm",
+     "ms": 0.8,
+     "p95": 4.8,
+     "n": 3,
+     "pages": 1,
+     "regions": 2,
+     "outBytes": 1316,
+     "losses": 1,
+     "removed": {
+      "metadata": 2
+     },
+     "breakdownMedianMs": {
+      "applyMs": 0.1,
+      "prepareMs": 0.7,
+      "exportMs": 0
+     }
+    },
+    {
+     "engine": "sdk",
+     "op": "raster export @2, N region redactions (apply+prepare+export)",
+     "input": "native-small",
+     "run": "warm",
+     "ms": 14.7,
+     "p95": 18,
+     "n": 3,
+     "pages": 1,
+     "regions": 2,
+     "outBytes": 6615,
+     "losses": 3,
+     "removed": {
+      "metadata": 2
+     },
+     "breakdownMedianMs": {
+      "applyMs": 0.1,
+      "prepareMs": 14.4,
+      "exportMs": 0.1
+     }
+    },
+    {
+     "engine": "sdk",
+     "op": "memory after ops",
+     "input": "native-small",
+     "run": "warm",
+     "rssBytes": 489062400,
+     "wasmMemoryBytes": 13565952,
+     "memories": 1
+    },
+    {
+     "engine": "sdk",
+     "op": "close",
+     "input": "native-small",
+     "run": "warm",
+     "ms": 0.1,
+     "p95": 0.2,
+     "n": 5
+    },
+    {
+     "engine": "sdk",
+     "op": "open",
+     "input": "native-30p",
+     "run": "warm",
+     "ms": 5.2,
+     "p95": 6.9,
+     "n": 5,
+     "pages": 30
+    },
+    {
+     "engine": "sdk",
+     "op": "first renderPage@1.35 right after open (incl. one-time document scan)",
+     "input": "native-30p",
+     "run": "warm",
+     "ms": 4.9,
+     "p95": 5.5,
+     "n": 5,
+     "pages": 30
+    },
+    {
+     "engine": "sdk",
+     "op": "renderPage@1.35",
+     "input": "native-30p",
+     "run": "warm",
+     "ms": 4.3,
+     "p95": 4.5,
+     "n": 150,
+     "pages": 30,
+     "perPageMedianMs": [
+      4.3,
+      4.3,
+      4.4,
+      4.4,
+      4.2,
+      4.3,
+      4.3,
+      4.3,
+      4.3,
+      4.2,
+      4.3,
+      4.4,
+      4.2,
+      4.3,
+      4.4,
+      4.3,
+      4.3,
+      4.2,
+      4.3,
+      4.2,
+      4.4,
+      4.4,
+      4.3,
+      4.3,
+      4.3,
+      4.4,
+      4.4,
+      4.3,
+      4.2,
+      4.3
+     ]
+    },
+    {
+     "engine": "sdk",
+     "op": "rss-after-open+render",
+     "input": "native-30p",
+     "run": "warm",
+     "rssBytes": 497549312
+    },
+    {
+     "engine": "sdk",
+     "op": "extractText all pages",
+     "input": "native-30p",
+     "run": "warm",
+     "ms": 28.1,
+     "p95": 87.2,
+     "n": 5,
+     "pages": 30,
+     "words": 16890
+    },
+    {
+     "engine": "sdk",
+     "op": "open+extract+render@1.35 all pages (HDDN LOAD_PDF equivalent)",
+     "input": "native-30p",
+     "run": "warm",
+     "ms": 223.4,
+     "p95": 226.2,
+     "n": 3,
+     "pages": 30
+    },
+    {
+     "engine": "sdk",
+     "op": "search 'alpha'",
+     "input": "native-30p",
+     "run": "warm",
+     "ms": 9.9,
+     "p95": 11.1,
+     "n": 5,
+     "pages": 30,
+     "hits": 840
+    },
+    {
+     "engine": "sdk",
+     "op": "registerFonts (Liberation Sans, the HDDN edit fallback)",
+     "input": "-",
+     "run": "warm",
+     "ms": 1.4,
+     "p95": 1.4,
+     "n": 1,
+     "bytes": 410712
+    },
+    {
+     "engine": "sdk",
+     "op": "paragraph edit: prepareParagraph",
+     "input": "native-30p",
+     "run": "warm",
+     "ms": 5.5,
+     "p95": 6.6,
+     "n": 3,
+     "pages": 30
+    },
+    {
+     "engine": "sdk",
+     "op": "paragraph edit: applyChanges (1 edit)",
+     "input": "native-30p",
+     "run": "warm",
+     "ms": 69.1,
+     "p95": 72.2,
+     "n": 3,
+     "pages": 30
+    },
+    {
+     "engine": "sdk",
+     "op": "native export, N region redactions (apply+prepare+export)",
+     "input": "native-30p",
+     "run": "warm",
+     "ms": 248.5,
+     "p95": 254.3,
+     "n": 3,
+     "pages": 30,
+     "regions": 10,
+     "outBytes": 322769,
+     "losses": 1,
+     "removed": {
+      "metadata": 1
+     },
+     "breakdownMedianMs": {
+      "applyMs": 0.2,
+      "prepareMs": 248.1,
+      "exportMs": 0.1
+     }
+    },
+    {
+     "engine": "sdk",
+     "op": "raster export @2, N region redactions (apply+prepare+export)",
+     "input": "native-30p",
+     "run": "warm",
+     "ms": 1028.8,
+     "p95": 1031,
+     "n": 3,
+     "pages": 30,
+     "regions": 10,
+     "outBytes": 13360325,
+     "losses": 3,
+     "removed": {
+      "metadata": 1
+     },
+     "breakdownMedianMs": {
+      "applyMs": 0.3,
+      "prepareMs": 1027.5,
+      "exportMs": 1.1
+     }
+    },
+    {
+     "engine": "sdk",
+     "op": "memory after ops",
+     "input": "native-30p",
+     "run": "warm",
+     "rssBytes": 629751808,
+     "wasmMemoryBytes": 74842112,
+     "memories": 1
+    },
+    {
+     "engine": "sdk",
+     "op": "close",
+     "input": "native-30p",
+     "run": "warm",
+     "ms": 0.1,
+     "p95": 0.1,
+     "n": 5
+    },
+    {
+     "engine": "sdk",
+     "op": "open",
+     "input": "image-heavy",
+     "run": "warm",
+     "ms": 0.1,
+     "p95": 0.2,
+     "n": 5,
+     "pages": 2
+    },
+    {
+     "engine": "sdk",
+     "op": "first renderPage@1.35 right after open (incl. one-time document scan)",
+     "input": "image-heavy",
+     "run": "warm",
+     "ms": 0.9,
+     "p95": 2.2,
+     "n": 5,
+     "pages": 2
+    },
+    {
+     "engine": "sdk",
+     "op": "renderPage@1.35",
+     "input": "image-heavy",
+     "run": "warm",
+     "ms": 0.7,
+     "p95": 0.8,
+     "n": 10,
+     "pages": 2,
+     "perPageMedianMs": [
+      0.7,
+      0.7
+     ]
+    },
+    {
+     "engine": "sdk",
+     "op": "close",
+     "input": "image-heavy",
+     "run": "warm",
+     "ms": 0,
+     "p95": 0.3,
+     "n": 5
+    },
+    {
+     "engine": "sdk",
+     "op": "open",
+     "input": "rotation-crop",
+     "run": "warm",
+     "ms": 0.1,
+     "p95": 0.1,
+     "n": 5,
+     "pages": 4
+    },
+    {
+     "engine": "sdk",
+     "op": "first renderPage@1.35 right after open (incl. one-time document scan)",
+     "input": "rotation-crop",
+     "run": "warm",
+     "ms": 0.5,
+     "p95": 0.6,
+     "n": 5,
+     "pages": 4
+    },
+    {
+     "engine": "sdk",
+     "op": "renderPage@1.35",
+     "input": "rotation-crop",
+     "run": "warm",
+     "ms": 0.5,
+     "p95": 0.6,
+     "n": 20,
+     "pages": 4,
+     "perPageMedianMs": [
+      0.5,
+      0.5,
+      0.5,
+      0.5
+     ]
+    },
+    {
+     "engine": "sdk",
+     "op": "close",
+     "input": "rotation-crop",
+     "run": "warm",
+     "ms": 0,
+     "p95": 0,
+     "n": 5
+    },
+    {
+     "engine": "sdk",
+     "op": "open",
+     "input": "image-heavy-6p",
+     "run": "warm",
+     "ms": 1.3,
+     "p95": 1.7,
+     "n": 5,
+     "pages": 6
+    },
+    {
+     "engine": "sdk",
+     "op": "first renderPage@1.35 right after open (incl. one-time document scan)",
+     "input": "image-heavy-6p",
+     "run": "warm",
+     "ms": 111.1,
+     "p95": 136,
+     "n": 5,
+     "pages": 6
+    },
+    {
+     "engine": "sdk",
+     "op": "renderPage@1.35",
+     "input": "image-heavy-6p",
+     "run": "warm",
+     "ms": 108.6,
+     "p95": 110.2,
+     "n": 30,
+     "pages": 6,
+     "perPageMedianMs": [
+      107.8,
+      107.7,
+      108.3,
+      108.5,
+      108.8,
+      108.8
+     ]
+    },
+    {
+     "engine": "sdk",
+     "op": "open+extract+render@1.35 all pages (HDDN LOAD_PDF equivalent)",
+     "input": "image-heavy-6p",
+     "run": "warm",
+     "ms": 661.7,
+     "p95": 662.3,
+     "n": 3,
+     "pages": 6
+    },
+    {
+     "engine": "sdk",
+     "op": "close",
+     "input": "image-heavy-6p",
+     "run": "warm",
+     "ms": 0.1,
+     "p95": 0.1,
+     "n": 5
+    }
+   ],
+   "assets": {
+    "hddn": {
+     "runtime": 29596638,
+     "fonts": 0,
+     "ocr": 0,
+     "app": 811310,
+     "files": {
+      "/_astro/redactor.worker-EObQjSMz.js": 809054,
+      "/pyodide/pyodide.mjs": 17579,
+      "/pyodide/pyodide-lock.json": 120010,
+      "/pyodide/pyodide.asm.js": 1074322,
+      "/pyodide/python_stdlib.zip": 2423989,
+      "/pyodide/pyodide.asm.wasm": 8647684,
+      "/pyodide/pymupdf-1.26.3-cp313-none-pyodide_2025_0_wasm32.whl": 17313054
+     },
+     "warmRefetchBytes": 0,
+     "workerSha256": "6c4728ac72fcce36106363574f73685552e26e06b1f434a2673e3368b14423a8",
+     "fontsBytesWarmRun": 410712
+    },
+    "sdk": {
+     "wasmBytes": 5359831,
+     "initBytes": 5407581
+    }
+   },
+   "unavailable": [
+    {
+     "engine": "hddn",
+     "op": "GET_PAGE_PREVIEW",
+     "input": "image-heavy-6p",
+     "reason": "ERROR"
+    },
+    {
+     "engine": "hddn",
+     "op": "GET_PAGE_PREVIEW",
+     "input": "image-heavy-6p",
+     "reason": "ERROR"
+    },
+    {
+     "engine": "hddn",
+     "op": "GET_PAGE_PREVIEW",
+     "input": "image-heavy-6p",
+     "reason": "ERROR"
+    },
+    {
+     "engine": "hddn",
+     "op": "GET_PAGE_PREVIEW",
+     "input": "image-heavy-6p",
+     "reason": "ERROR"
+    },
+    {
+     "engine": "hddn",
+     "op": "GET_PAGE_PREVIEW",
+     "input": "image-heavy-6p",
+     "reason": "ERROR"
+    },
+    {
+     "engine": "hddn",
+     "op": "APPLY_REDACTIONS",
+     "input": "image-heavy-6p",
+     "reason": "no text span to box"
+    },
+    {
+     "engine": "hddn",
+     "op": "JS heap (worker)",
+     "reason": "performance.measureUserAgentSpecificMemory throws SecurityError 'not available' in headless Chromium even with COOP/COEP (crossOriginIsolated page) and is absent in WebKit; process-tree RSS recorded instead (whole browser, not JS heap)"
+    },
+    {
+     "engine": "hddn",
+     "op": "optional fonts / OCR (Tesseract) bytes",
+     "reason": "not fetched by these ops (fonts load lazily for edits with fallback; OCR only for scanned pages); see assets.fonts/ocr counters"
+    },
+    {
+     "engine": "sdk",
+     "op": "JS heap",
+     "reason": "performance.measureUserAgentSpecificMemory not available in headless Chromium or WebKit; process-tree RSS recorded instead"
+    }
+   ],
+   "verifiedOutputs": [
+    {
+     "file": "sdk-native-small-native.pdf",
+     "pages": 1,
+     "bytes": 1316,
+     "words": 0,
+     "page0Words": 0,
+     "page1Words": null,
+     "images": 0,
+     "hasTextLayer": false,
+     "wordsInRegions": 0,
+     "wordsInRegionsOfInput": 2,
+     "inputPage0Words": 2,
+     "metadataKeysSet": [],
+     "embeddedFiles": 0
+    },
+    {
+     "file": "sdk-native-small-raster.pdf",
+     "pages": 1,
+     "bytes": 6615,
+     "words": 0,
+     "page0Words": 0,
+     "page1Words": null,
+     "images": 1,
+     "hasTextLayer": false,
+     "wordsInRegions": 0,
+     "wordsInRegionsOfInput": 2,
+     "inputPage0Words": 2,
+     "metadataKeysSet": [],
+     "embeddedFiles": 0
+    },
+    {
+     "file": "hddn-native-small-native.pdf",
+     "pages": 1,
+     "bytes": 800,
+     "words": 0,
+     "page0Words": 0,
+     "page1Words": null,
+     "images": 0,
+     "hasTextLayer": false,
+     "wordsInRegions": 0,
+     "wordsInRegionsOfInput": 2,
+     "inputPage0Words": 2,
+     "metadataKeysSet": [],
+     "embeddedFiles": 0
+    },
+    {
+     "file": "hddn-native-small-flattened.pdf",
+     "pages": 1,
+     "bytes": 6971,
+     "words": 0,
+     "page0Words": 0,
+     "page1Words": null,
+     "images": 1,
+     "hasTextLayer": false,
+     "wordsInRegions": 0,
+     "wordsInRegionsOfInput": 2,
+     "inputPage0Words": 2,
+     "metadataKeysSet": [
+      "creationDate",
+      "creator",
+      "modDate",
+      "producer"
+     ],
+     "embeddedFiles": 0
+    },
+    {
+     "file": "sdk-native-30p-native.pdf",
+     "pages": 30,
+     "bytes": 322769,
+     "words": 16761,
+     "page0Words": 434,
+     "page1Words": 563,
+     "images": 0,
+     "hasTextLayer": true,
+     "wordsInRegions": 0,
+     "wordsInRegionsOfInput": 129,
+     "inputPage0Words": 563,
+     "metadataKeysSet": [],
+     "embeddedFiles": 0
+    },
+    {
+     "file": "sdk-native-30p-raster.pdf",
+     "pages": 30,
+     "bytes": 13360325,
+     "words": 0,
+     "page0Words": 0,
+     "page1Words": 0,
+     "images": 30,
+     "hasTextLayer": false,
+     "wordsInRegions": 0,
+     "wordsInRegionsOfInput": 129,
+     "inputPage0Words": 563,
+     "metadataKeysSet": [],
+     "embeddedFiles": 0
+    },
+    {
+     "file": "hddn-native-30p-native.pdf",
+     "pages": 30,
+     "bytes": 213136,
+     "words": 16761,
+     "page0Words": 434,
+     "page1Words": 563,
+     "images": 0,
+     "hasTextLayer": true,
+     "wordsInRegions": 0,
+     "wordsInRegionsOfInput": 129,
+     "inputPage0Words": 563,
+     "metadataKeysSet": [],
+     "embeddedFiles": 0
+    },
+    {
+     "file": "hddn-native-30p-flattened.pdf",
+     "pages": 30,
+     "bytes": 9075784,
+     "words": 0,
+     "page0Words": 0,
+     "page1Words": 0,
+     "images": 30,
+     "hasTextLayer": false,
+     "wordsInRegions": 0,
+     "wordsInRegionsOfInput": 129,
+     "inputPage0Words": 563,
+     "metadataKeysSet": [
+      "creationDate",
+      "creator",
+      "modDate",
+      "producer"
+     ],
+     "embeddedFiles": 0
+    }
+   ]
+  },
+  "webkit": {
+   "browser": "webkit 26.5",
+   "measurements": [
+    {
+     "engine": "hddn",
+     "op": "INIT",
+     "input": "-",
+     "run": "cold",
+     "ms": 1621.1,
+     "p95": 2195.8,
+     "n": 3,
+     "bytes": 30407948
+    },
+    {
+     "engine": "hddn",
+     "op": "LOAD_PDF",
+     "input": "native-small",
+     "run": "cold",
+     "ms": 17.7,
+     "p95": 19.4,
+     "n": 3
+    },
+    {
+     "engine": "hddn",
+     "op": "INIT",
+     "input": "-",
+     "run": "warm",
+     "ms": 1577.6,
+     "p95": 1604.3,
+     "n": 5,
+     "bytes": 86565270
+    },
+    {
+     "engine": "hddn",
+     "op": "LOAD_PDF",
+     "input": "native-small",
+     "run": "warm",
+     "ms": 5.5,
+     "p95": 18.3,
+     "n": 5,
+     "pages": 1
+    },
+    {
+     "engine": "hddn",
+     "op": "COMMIT_IMPORT",
+     "input": "native-small",
+     "run": "warm",
+     "ms": 0.6,
+     "p95": 0.8,
+     "n": 5
+    },
+    {
+     "engine": "hddn",
+     "op": "GET_PAGE_PREVIEW@1.35",
+     "input": "native-small",
+     "run": "warm",
+     "ms": 8.4,
+     "p95": 14.8,
+     "n": 5,
+     "pages": 1,
+     "perPageMedianMs": [
+      8.4
+     ]
+    },
+    {
+     "engine": "hddn",
+     "op": "PREPARE_PARAGRAPH_EDIT",
+     "input": "native-small",
+     "run": "warm",
+     "ms": 16.3,
+     "p95": 67.5,
+     "n": 3,
+     "pages": 1
+    },
+    {
+     "engine": "hddn",
+     "op": "SET_TEXT_EDITS (same line + text as SDK)",
+     "input": "native-small",
+     "run": "warm",
+     "ms": 11.4,
+     "p95": 16.2,
+     "n": 3,
+     "pages": 1
+    },
+    {
+     "engine": "hddn",
+     "op": "DETECT keywords ['alpha'] (rules + names + signatures, NOT a plain search)",
+     "input": "native-small",
+     "run": "warm",
+     "ms": 0.4,
+     "p95": 54.9,
+     "n": 3,
+     "pages": 1,
+     "groups": 0
+    },
+    {
+     "engine": "hddn",
+     "op": "APPLY_REDACTIONS native (N boxes)",
+     "input": "native-small",
+     "run": "warm",
+     "ms": 8,
+     "p95": 12.8,
+     "n": 3,
+     "pages": 1,
+     "regions": 2,
+     "outBytes": 800
+    },
+    {
+     "engine": "hddn",
+     "op": "APPLY_REDACTIONS flattened @2 (N boxes)",
+     "input": "native-small",
+     "run": "warm",
+     "ms": 89.8,
+     "p95": 122.5,
+     "n": 3,
+     "pages": 1,
+     "regions": 2,
+     "outBytes": 6972
+    },
+    {
+     "engine": "hddn",
+     "op": "memory after ops",
+     "input": "native-small",
+     "run": "warm",
+     "rssBytes": 120422400,
+     "wasmMemoryBytes": 249692160,
+     "memories": 2
+    },
+    {
+     "engine": "hddn",
+     "op": "APPLY_REDACTIONS native (1 manual box)",
+     "input": "native-small",
+     "run": "warm",
+     "ms": 6.8,
+     "p95": 8.5,
+     "n": 3,
+     "outBytes": 841
+    },
+    {
+     "engine": "hddn",
+     "op": "SET_TEXT_EDITS (1 span)",
+     "input": "native-small",
+     "run": "warm",
+     "ms": 8.8,
+     "p95": 9.2,
+     "n": 3
+    },
+    {
+     "engine": "hddn",
+     "op": "LOAD_PDF",
+     "input": "native-30p",
+     "run": "warm",
+     "ms": 1124.1,
+     "p95": 1173.8,
+     "n": 5,
+     "pages": 30
+    },
+    {
+     "engine": "hddn",
+     "op": "COMMIT_IMPORT",
+     "input": "native-30p",
+     "run": "warm",
+     "ms": 0.8,
+     "p95": 1,
+     "n": 5
+    },
+    {
+     "engine": "hddn",
+     "op": "rss-after-LOAD_PDF",
+     "input": "native-30p",
+     "run": "warm",
+     "rssBytes": 122437632
+    },
+    {
+     "engine": "hddn",
+     "op": "GET_PAGE_PREVIEW@1.35",
+     "input": "native-30p",
+     "run": "warm",
+     "ms": 16.2,
+     "p95": 16.7,
+     "n": 150,
+     "pages": 30,
+     "perPageMedianMs": [
+      16.1,
+      16.3,
+      16.3,
+      16.2,
+      16.3,
+      16.3,
+      16.3,
+      16.3,
+      16.3,
+      16.3,
+      16.2,
+      16.1,
+      16.2,
+      16,
+      16.3,
+      16.3,
+      16.3,
+      16.2,
+      16.1,
+      16.1,
+      16.2,
+      16.1,
+      16.1,
+      16.2,
+      16.1,
+      16.1,
+      16.2,
+      16.3,
+      16.3,
+      16.3
+     ]
+    },
+    {
+     "engine": "hddn",
+     "op": "PREPARE_PARAGRAPH_EDIT",
+     "input": "native-30p",
+     "run": "warm",
+     "ms": 90.4,
+     "p95": 90.7,
+     "n": 3,
+     "pages": 30
+    },
+    {
+     "engine": "hddn",
+     "op": "SET_TEXT_EDITS (same line + text as SDK)",
+     "input": "native-30p",
+     "run": "warm",
+     "ms": 1133.5,
+     "p95": 1134.9,
+     "n": 3,
+     "pages": 30
+    },
+    {
+     "engine": "hddn",
+     "op": "DETECT keywords ['alpha'] (rules + names + signatures, NOT a plain search)",
+     "input": "native-30p",
+     "run": "warm",
+     "ms": 249.2,
+     "p95": 259.4,
+     "n": 3,
+     "pages": 30,
+     "groups": 841
+    },
+    {
+     "engine": "hddn",
+     "op": "APPLY_REDACTIONS native (N boxes)",
+     "input": "native-30p",
+     "run": "warm",
+     "ms": 465.8,
+     "p95": 469.4,
+     "n": 3,
+     "pages": 30,
+     "regions": 10,
+     "outBytes": 213136
+    },
+    {
+     "engine": "hddn",
+     "op": "APPLY_REDACTIONS flattened @2 (N boxes)",
+     "input": "native-30p",
+     "run": "warm",
+     "ms": 4005.9,
+     "p95": 4025.4,
+     "n": 3,
+     "pages": 30,
+     "regions": 10,
+     "outBytes": 9075784
+    },
+    {
+     "engine": "hddn",
+     "op": "memory after ops",
+     "input": "native-30p",
+     "run": "warm",
+     "rssBytes": 234258432,
+     "wasmMemoryBytes": 249692160,
+     "memories": 2
+    },
+    {
+     "engine": "hddn",
+     "op": "APPLY_REDACTIONS native (1 manual box)",
+     "input": "native-30p",
+     "run": "warm",
+     "ms": 446.2,
+     "p95": 448.2,
+     "n": 3,
+     "outBytes": 213126
+    },
+    {
+     "engine": "hddn",
+     "op": "SET_TEXT_EDITS (1 span)",
+     "input": "native-30p",
+     "run": "warm",
+     "ms": 1113.7,
+     "p95": 1138.7,
+     "n": 3
+    },
+    {
+     "engine": "hddn",
+     "op": "LOAD_PDF",
+     "input": "image-heavy",
+     "run": "warm",
+     "ms": 9.5,
+     "p95": 10.9,
+     "n": 5,
+     "pages": 2
+    },
+    {
+     "engine": "hddn",
+     "op": "COMMIT_IMPORT",
+     "input": "image-heavy",
+     "run": "warm",
+     "ms": 0.2,
+     "p95": 0.7,
+     "n": 5
+    },
+    {
+     "engine": "hddn",
+     "op": "GET_PAGE_PREVIEW@1.35",
+     "input": "image-heavy",
+     "run": "warm",
+     "ms": 7.3,
+     "p95": 8.2,
+     "n": 10,
+     "pages": 2,
+     "perPageMedianMs": [
+      7.4,
+      7.1
+     ]
+    },
+    {
+     "engine": "hddn",
+     "op": "APPLY_REDACTIONS native (1 manual box)",
+     "input": "image-heavy",
+     "run": "warm",
+     "ms": 6.7,
+     "p95": 7.4,
+     "n": 3,
+     "outBytes": 3512
+    },
+    {
+     "engine": "hddn",
+     "op": "LOAD_PDF",
+     "input": "rotation-crop",
+     "run": "warm",
+     "ms": 3.3,
+     "p95": 3.3,
+     "n": 5,
+     "pages": 4
+    },
+    {
+     "engine": "hddn",
+     "op": "COMMIT_IMPORT",
+     "input": "rotation-crop",
+     "run": "warm",
+     "ms": 0.2,
+     "p95": 0.3,
+     "n": 5
+    },
+    {
+     "engine": "hddn",
+     "op": "GET_PAGE_PREVIEW@1.35",
+     "input": "rotation-crop",
+     "run": "warm",
+     "ms": 6.1,
+     "p95": 6.5,
+     "n": 20,
+     "pages": 4,
+     "perPageMedianMs": [
+      6,
+      6.2,
+      5.9,
+      6.1
+     ]
+    },
+    {
+     "engine": "hddn",
+     "op": "APPLY_REDACTIONS native (1 manual box)",
+     "input": "rotation-crop",
+     "run": "warm",
+     "ms": 8.1,
+     "p95": 8.4,
+     "n": 3,
+     "outBytes": 1557
+    },
+    {
+     "engine": "hddn",
+     "op": "LOAD_PDF",
+     "input": "image-heavy-6p",
+     "run": "warm",
+     "ms": 11713.2,
+     "p95": 12252.2,
+     "n": 5,
+     "pages": 6
+    },
+    {
+     "engine": "hddn",
+     "op": "COMMIT_IMPORT",
+     "input": "image-heavy-6p",
+     "run": "warm",
+     "ms": 0.1,
+     "p95": 0.4,
+     "n": 5
+    },
+    {
+     "engine": "hddn",
+     "op": "GET_PAGE_PREVIEW@1.35",
+     "input": "image-heavy-6p",
+     "run": "warm",
+     "ms": 6.2,
+     "p95": 6.7,
+     "n": 20,
+     "pages": 6,
+     "perPageMedianMs": [
+      6.1,
+      6.3,
+      5.9,
+      6.3,
+      null,
+      null
+     ]
+    },
+    {
+     "engine": "hddn",
+     "op": "rss-after-INIT+first-LOAD_PDF",
+     "input": "native-small",
+     "run": "cold",
+     "rssBytes": 118702080
+    },
+    {
+     "engine": "sdk",
+     "op": "init (worker + wasm instantiate)",
+     "input": "-",
+     "run": "cold",
+     "ms": 26.7,
+     "p95": 32.8,
+     "n": 3,
+     "bytes": 5407581
+    },
+    {
+     "engine": "sdk",
+     "op": "init (worker + wasm instantiate)",
+     "input": "-",
+     "run": "warm",
+     "ms": 20.6,
+     "p95": 22.7,
+     "n": 5
+    },
+    {
+     "engine": "sdk",
+     "op": "open",
+     "input": "native-small",
+     "run": "warm",
+     "ms": 0.5,
+     "p95": 2.3,
+     "n": 5,
+     "pages": 1
+    },
+    {
+     "engine": "sdk",
+     "op": "first renderPage@1.35 right after open (incl. one-time document scan)",
+     "input": "native-small",
+     "run": "warm",
+     "ms": 1.5,
+     "p95": 7.6,
+     "n": 5,
+     "pages": 1
+    },
+    {
+     "engine": "sdk",
+     "op": "renderPage@1.35",
+     "input": "native-small",
+     "run": "warm",
+     "ms": 1,
+     "p95": 2,
+     "n": 5,
+     "pages": 1,
+     "perPageMedianMs": [
+      1
+     ]
+    },
+    {
+     "engine": "sdk",
+     "op": "extractText all pages",
+     "input": "native-small",
+     "run": "warm",
+     "ms": 0.1,
+     "p95": 0.2,
+     "n": 5,
+     "pages": 1,
+     "words": 2
+    },
+    {
+     "engine": "sdk",
+     "op": "open+extract+render@1.35 all pages (HDDN LOAD_PDF equivalent)",
+     "input": "native-small",
+     "run": "warm",
+     "ms": 1.4,
+     "p95": 1.7,
+     "n": 5,
+     "pages": 1
+    },
+    {
+     "engine": "sdk",
+     "op": "search 'alpha'",
+     "input": "native-small",
+     "run": "warm",
+     "ms": 0.1,
+     "p95": 0.3,
+     "n": 5,
+     "pages": 1,
+     "hits": 0
+    },
+    {
+     "engine": "sdk",
+     "op": "registerFonts (Liberation Sans, the HDDN edit fallback)",
+     "input": "-",
+     "run": "warm",
+     "ms": 2.9,
+     "p95": 2.9,
+     "n": 1,
+     "bytes": 410712
+    },
+    {
+     "engine": "sdk",
+     "op": "paragraph edit: prepareParagraph",
+     "input": "native-small",
+     "run": "warm",
+     "ms": 1.2,
+     "p95": 2.1,
+     "n": 3,
+     "pages": 1
+    },
+    {
+     "engine": "sdk",
+     "op": "paragraph edit: applyChanges (1 edit)",
+     "input": "native-small",
+     "run": "warm",
+     "ms": 3.5,
+     "p95": 6.7,
+     "n": 3,
+     "pages": 1
+    },
+    {
+     "engine": "sdk",
+     "op": "native export, N region redactions (apply+prepare+export)",
+     "input": "native-small",
+     "run": "warm",
+     "ms": 2.9,
+     "p95": 4.5,
+     "n": 3,
+     "pages": 1,
+     "regions": 2,
+     "outBytes": 1316,
+     "losses": 1,
+     "removed": {
+      "metadata": 2
+     },
+     "breakdownMedianMs": {
+      "applyMs": 0.4,
+      "prepareMs": 2.4,
+      "exportMs": 0.1
+     }
+    },
+    {
+     "engine": "sdk",
+     "op": "raster export @2, N region redactions (apply+prepare+export)",
+     "input": "native-small",
+     "run": "warm",
+     "ms": 14.1,
+     "p95": 16.2,
+     "n": 3,
+     "pages": 1,
+     "regions": 2,
+     "outBytes": 6615,
+     "losses": 3,
+     "removed": {
+      "metadata": 2
+     },
+     "breakdownMedianMs": {
+      "applyMs": 0.2,
+      "prepareMs": 13.8,
+      "exportMs": 0.1
+     }
+    },
+    {
+     "engine": "sdk",
+     "op": "memory after ops",
+     "input": "native-small",
+     "run": "warm",
+     "rssBytes": 124928000,
+     "wasmMemoryBytes": 13565952,
+     "memories": 1
+    },
+    {
+     "engine": "sdk",
+     "op": "close",
+     "input": "native-small",
+     "run": "warm",
+     "ms": 0.2,
+     "p95": 0.3,
+     "n": 5
+    },
+    {
+     "engine": "sdk",
+     "op": "open",
+     "input": "native-30p",
+     "run": "warm",
+     "ms": 5.5,
+     "p95": 10.2,
+     "n": 5,
+     "pages": 30
+    },
+    {
+     "engine": "sdk",
+     "op": "first renderPage@1.35 right after open (incl. one-time document scan)",
+     "input": "native-30p",
+     "run": "warm",
+     "ms": 5.4,
+     "p95": 10.8,
+     "n": 5,
+     "pages": 30
+    },
+    {
+     "engine": "sdk",
+     "op": "renderPage@1.35",
+     "input": "native-30p",
+     "run": "warm",
+     "ms": 4.5,
+     "p95": 4.8,
+     "n": 150,
+     "pages": 30,
+     "perPageMedianMs": [
+      4.4,
+      4.4,
+      4.3,
+      4.6,
+      4.4,
+      4.5,
+      4.5,
+      4.5,
+      4.5,
+      4.4,
+      4.5,
+      4.4,
+      4.5,
+      4.5,
+      4.5,
+      4.4,
+      4.4,
+      4.4,
+      4.5,
+      4.6,
+      4.7,
+      4.5,
+      4.6,
+      4.6,
+      4.6,
+      4.7,
+      4.5,
+      4.5,
+      4.5,
+      4.4
+     ]
+    },
+    {
+     "engine": "sdk",
+     "op": "rss-after-open+render",
+     "input": "native-30p",
+     "run": "warm",
+     "rssBytes": 126320640
+    },
+    {
+     "engine": "sdk",
+     "op": "extractText all pages",
+     "input": "native-30p",
+     "run": "warm",
+     "ms": 33.6,
+     "p95": 86.7,
+     "n": 5,
+     "pages": 30,
+     "words": 16890
+    },
+    {
+     "engine": "sdk",
+     "op": "open+extract+render@1.35 all pages (HDDN LOAD_PDF equivalent)",
+     "input": "native-30p",
+     "run": "warm",
+     "ms": 223,
+     "p95": 225.1,
+     "n": 3,
+     "pages": 30
+    },
+    {
+     "engine": "sdk",
+     "op": "search 'alpha'",
+     "input": "native-30p",
+     "run": "warm",
+     "ms": 13.2,
+     "p95": 15.9,
+     "n": 5,
+     "pages": 30,
+     "hits": 840
+    },
+    {
+     "engine": "sdk",
+     "op": "registerFonts (Liberation Sans, the HDDN edit fallback)",
+     "input": "-",
+     "run": "warm",
+     "ms": 1.6,
+     "p95": 1.6,
+     "n": 1,
+     "bytes": 410712
+    },
+    {
+     "engine": "sdk",
+     "op": "paragraph edit: prepareParagraph",
+     "input": "native-30p",
+     "run": "warm",
+     "ms": 6,
+     "p95": 7.8,
+     "n": 3,
+     "pages": 30
+    },
+    {
+     "engine": "sdk",
+     "op": "paragraph edit: applyChanges (1 edit)",
+     "input": "native-30p",
+     "run": "warm",
+     "ms": 63.3,
+     "p95": 67.9,
+     "n": 3,
+     "pages": 30
+    },
+    {
+     "engine": "sdk",
+     "op": "native export, N region redactions (apply+prepare+export)",
+     "input": "native-30p",
+     "run": "warm",
+     "ms": 215.5,
+     "p95": 218.8,
+     "n": 3,
+     "pages": 30,
+     "regions": 10,
+     "outBytes": 322769,
+     "losses": 1,
+     "removed": {
+      "metadata": 1
+     },
+     "breakdownMedianMs": {
+      "applyMs": 0.3,
+      "prepareMs": 214.5,
+      "exportMs": 0.2
+     }
+    },
+    {
+     "engine": "sdk",
+     "op": "raster export @2, N region redactions (apply+prepare+export)",
+     "input": "native-30p",
+     "run": "warm",
+     "ms": 919.7,
+     "p95": 924.8,
+     "n": 3,
+     "pages": 30,
+     "regions": 10,
+     "outBytes": 13360325,
+     "losses": 3,
+     "removed": {
+      "metadata": 1
+     },
+     "breakdownMedianMs": {
+      "applyMs": 0.4,
+      "prepareMs": 918.3,
+      "exportMs": 1
+     }
+    },
+    {
+     "engine": "sdk",
+     "op": "memory after ops",
+     "input": "native-30p",
+     "run": "warm",
+     "rssBytes": 252411904,
+     "wasmMemoryBytes": 74842112,
+     "memories": 1
+    },
+    {
+     "engine": "sdk",
+     "op": "close",
+     "input": "native-30p",
+     "run": "warm",
+     "ms": 0.1,
+     "p95": 0.2,
+     "n": 5
+    },
+    {
+     "engine": "sdk",
+     "op": "open",
+     "input": "image-heavy",
+     "run": "warm",
+     "ms": 0.1,
+     "p95": 0.3,
+     "n": 5,
+     "pages": 2
+    },
+    {
+     "engine": "sdk",
+     "op": "first renderPage@1.35 right after open (incl. one-time document scan)",
+     "input": "image-heavy",
+     "run": "warm",
+     "ms": 0.8,
+     "p95": 1.6,
+     "n": 5,
+     "pages": 2
+    },
+    {
+     "engine": "sdk",
+     "op": "renderPage@1.35",
+     "input": "image-heavy",
+     "run": "warm",
+     "ms": 0.7,
+     "p95": 1.4,
+     "n": 10,
+     "pages": 2,
+     "perPageMedianMs": [
+      0.7,
+      0.6
+     ]
+    },
+    {
+     "engine": "sdk",
+     "op": "close",
+     "input": "image-heavy",
+     "run": "warm",
+     "ms": 0.1,
+     "p95": 0.1,
+     "n": 5
+    },
+    {
+     "engine": "sdk",
+     "op": "open",
+     "input": "rotation-crop",
+     "run": "warm",
+     "ms": 0.1,
+     "p95": 0.1,
+     "n": 5,
+     "pages": 4
+    },
+    {
+     "engine": "sdk",
+     "op": "first renderPage@1.35 right after open (incl. one-time document scan)",
+     "input": "rotation-crop",
+     "run": "warm",
+     "ms": 0.5,
+     "p95": 0.6,
+     "n": 5,
+     "pages": 4
+    },
+    {
+     "engine": "sdk",
+     "op": "renderPage@1.35",
+     "input": "rotation-crop",
+     "run": "warm",
+     "ms": 0.4,
+     "p95": 0.5,
+     "n": 20,
+     "pages": 4,
+     "perPageMedianMs": [
+      0.4,
+      0.4,
+      0.4,
+      0.4
+     ]
+    },
+    {
+     "engine": "sdk",
+     "op": "close",
+     "input": "rotation-crop",
+     "run": "warm",
+     "ms": 0.1,
+     "p95": 0.1,
+     "n": 5
+    },
+    {
+     "engine": "sdk",
+     "op": "open",
+     "input": "image-heavy-6p",
+     "run": "warm",
+     "ms": 1.2,
+     "p95": 1.7,
+     "n": 5,
+     "pages": 6
+    },
+    {
+     "engine": "sdk",
+     "op": "first renderPage@1.35 right after open (incl. one-time document scan)",
+     "input": "image-heavy-6p",
+     "run": "warm",
+     "ms": 96.5,
+     "p95": 108.5,
+     "n": 5,
+     "pages": 6
+    },
+    {
+     "engine": "sdk",
+     "op": "renderPage@1.35",
+     "input": "image-heavy-6p",
+     "run": "warm",
+     "ms": 96.8,
+     "p95": 98.7,
+     "n": 30,
+     "pages": 6,
+     "perPageMedianMs": [
+      96.7,
+      96.7,
+      96.8,
+      97,
+      97.1,
+      97.1
+     ]
+    },
+    {
+     "engine": "sdk",
+     "op": "open+extract+render@1.35 all pages (HDDN LOAD_PDF equivalent)",
+     "input": "image-heavy-6p",
+     "run": "warm",
+     "ms": 571.7,
+     "p95": 580.1,
+     "n": 3,
+     "pages": 6
+    },
+    {
+     "engine": "sdk",
+     "op": "close",
+     "input": "image-heavy-6p",
+     "run": "warm",
+     "ms": 0.1,
+     "p95": 0.1,
+     "n": 5
+    }
+   ],
+   "assets": {
+    "hddn": {
+     "runtime": 29596638,
+     "fonts": 0,
+     "ocr": 0,
+     "app": 811310,
+     "files": {
+      "/_astro/redactor.worker-EObQjSMz.js": 809054,
+      "/pyodide/pyodide.mjs": 17579,
+      "/pyodide/pyodide-lock.json": 120010,
+      "/pyodide/pyodide.asm.js": 1074322,
+      "/pyodide/python_stdlib.zip": 2423989,
+      "/pyodide/pyodide.asm.wasm": 8647684,
+      "/pyodide/pymupdf-1.26.3-cp313-none-pyodide_2025_0_wasm32.whl": 17313054
+     },
+     "warmRefetchBytes": 86565270,
+     "workerSha256": "6c4728ac72fcce36106363574f73685552e26e06b1f434a2673e3368b14423a8",
+     "fontsBytesWarmRun": 410712
+    },
+    "sdk": {
+     "wasmBytes": 5359831,
+     "initBytes": 5407581
+    }
+   },
+   "unavailable": [
+    {
+     "engine": "hddn",
+     "op": "GET_PAGE_PREVIEW",
+     "input": "image-heavy-6p",
+     "reason": "ERROR"
+    },
+    {
+     "engine": "hddn",
+     "op": "GET_PAGE_PREVIEW",
+     "input": "image-heavy-6p",
+     "reason": "ERROR"
+    },
+    {
+     "engine": "hddn",
+     "op": "GET_PAGE_PREVIEW",
+     "input": "image-heavy-6p",
+     "reason": "ERROR"
+    },
+    {
+     "engine": "hddn",
+     "op": "GET_PAGE_PREVIEW",
+     "input": "image-heavy-6p",
+     "reason": "ERROR"
+    },
+    {
+     "engine": "hddn",
+     "op": "GET_PAGE_PREVIEW",
+     "input": "image-heavy-6p",
+     "reason": "ERROR"
+    },
+    {
+     "engine": "hddn",
+     "op": "APPLY_REDACTIONS",
+     "input": "image-heavy-6p",
+     "reason": "no text span to box"
+    },
+    {
+     "engine": "hddn",
+     "op": "JS heap (worker)",
+     "reason": "performance.measureUserAgentSpecificMemory throws SecurityError 'not available' in headless Chromium even with COOP/COEP (crossOriginIsolated page) and is absent in WebKit; process-tree RSS recorded instead (whole browser, not JS heap)"
+    },
+    {
+     "engine": "hddn",
+     "op": "optional fonts / OCR (Tesseract) bytes",
+     "reason": "not fetched by these ops (fonts load lazily for edits with fallback; OCR only for scanned pages); see assets.fonts/ocr counters"
+    },
+    {
+     "engine": "sdk",
+     "op": "JS heap",
+     "reason": "performance.measureUserAgentSpecificMemory not available in headless Chromium or WebKit; process-tree RSS recorded instead"
+    }
+   ],
+   "verifiedOutputs": [
+    {
+     "file": "sdk-native-small-native.pdf",
+     "pages": 1,
+     "bytes": 1316,
+     "words": 0,
+     "page0Words": 0,
+     "page1Words": null,
+     "images": 0,
+     "hasTextLayer": false,
+     "wordsInRegions": 0,
+     "wordsInRegionsOfInput": 2,
+     "inputPage0Words": 2,
+     "metadataKeysSet": [],
+     "embeddedFiles": 0
+    },
+    {
+     "file": "sdk-native-small-raster.pdf",
+     "pages": 1,
+     "bytes": 6615,
+     "words": 0,
+     "page0Words": 0,
+     "page1Words": null,
+     "images": 1,
+     "hasTextLayer": false,
+     "wordsInRegions": 0,
+     "wordsInRegionsOfInput": 2,
+     "inputPage0Words": 2,
+     "metadataKeysSet": [],
+     "embeddedFiles": 0
+    },
+    {
+     "file": "hddn-native-small-native.pdf",
+     "pages": 1,
+     "bytes": 800,
+     "words": 0,
+     "page0Words": 0,
+     "page1Words": null,
+     "images": 0,
+     "hasTextLayer": false,
+     "wordsInRegions": 0,
+     "wordsInRegionsOfInput": 2,
+     "inputPage0Words": 2,
+     "metadataKeysSet": [],
+     "embeddedFiles": 0
+    },
+    {
+     "file": "hddn-native-small-flattened.pdf",
+     "pages": 1,
+     "bytes": 6972,
+     "words": 0,
+     "page0Words": 0,
+     "page1Words": null,
+     "images": 1,
+     "hasTextLayer": false,
+     "wordsInRegions": 0,
+     "wordsInRegionsOfInput": 2,
+     "inputPage0Words": 2,
+     "metadataKeysSet": [
+      "creationDate",
+      "creator",
+      "modDate",
+      "producer"
+     ],
+     "embeddedFiles": 0
+    },
+    {
+     "file": "sdk-native-30p-native.pdf",
+     "pages": 30,
+     "bytes": 322769,
+     "words": 16761,
+     "page0Words": 434,
+     "page1Words": 563,
+     "images": 0,
+     "hasTextLayer": true,
+     "wordsInRegions": 0,
+     "wordsInRegionsOfInput": 129,
+     "inputPage0Words": 563,
+     "metadataKeysSet": [],
+     "embeddedFiles": 0
+    },
+    {
+     "file": "sdk-native-30p-raster.pdf",
+     "pages": 30,
+     "bytes": 13360325,
+     "words": 0,
+     "page0Words": 0,
+     "page1Words": 0,
+     "images": 30,
+     "hasTextLayer": false,
+     "wordsInRegions": 0,
+     "wordsInRegionsOfInput": 129,
+     "inputPage0Words": 563,
+     "metadataKeysSet": [],
+     "embeddedFiles": 0
+    },
+    {
+     "file": "hddn-native-30p-native.pdf",
+     "pages": 30,
+     "bytes": 213136,
+     "words": 16761,
+     "page0Words": 434,
+     "page1Words": 563,
+     "images": 0,
+     "hasTextLayer": true,
+     "wordsInRegions": 0,
+     "wordsInRegionsOfInput": 129,
+     "inputPage0Words": 563,
+     "metadataKeysSet": [],
+     "embeddedFiles": 0
+    },
+    {
+     "file": "hddn-native-30p-flattened.pdf",
+     "pages": 30,
+     "bytes": 9075784,
+     "words": 0,
+     "page0Words": 0,
+     "page1Words": 0,
+     "images": 30,
+     "hasTextLayer": false,
+     "wordsInRegions": 0,
+     "wordsInRegionsOfInput": 129,
+     "inputPage0Words": 563,
+     "metadataKeysSet": [
+      "creationDate",
+      "creator",
+      "modDate",
+      "producer"
+     ],
+     "embeddedFiles": 0
+    }
+   ]
+  }
+ },
+ "quality": [
+  {
+   "op": "native export",
+   "comparable": "yes for the measured output",
+   "hddn": "PyMuPDF true redaction; Info metadata removed; refuses native export for forms, invisible text, optional content",
+   "sdk": "strict native writer (unknown operators dropped, objects re-emitted, sanitize report, fail-closed on undecidable content)",
+   "note": "PyMuPDF re-read of both outputs (verifiedOutputs): the same words are gone from the same regions, the same other words remain, Info metadata gone, 0 embedded files. Structural/hidden-content sanitization is not measured here (SDK: strict_native suite; HDDN: no equivalent proof), so the SDK may do more work per byte."
+  },
+  {
+   "op": "raster export @2",
+   "comparable": "partial",
+   "hddn": "PyMuPDF render_page_png + pdf-lib flatten (PNG pages)",
+   "sdk": "hayro raster, redactions burned into pixels, losses disclosed per spec 7, PDF re-written by Foliark",
+   "note": "different rasterizers and image codecs; output sizes differ for that reason"
+  },
+  {
+   "op": "extract",
+   "comparable": "no",
+   "hddn": "LOAD_PDF = parse + span extraction + OCR-lane decision + page preview per page",
+   "sdk": "extractText = words, styles, clusters-optional",
+   "note": "compare HDDN LOAD_PDF only with the SDK open+extract+render composite"
+  },
+  {
+   "op": "search",
+   "comparable": "no",
+   "hddn": "no plain search op; DETECT also runs PII rules, name datasets and signature detection",
+   "sdk": "search(query) literal text search",
+   "note": "shown for scale only"
+  },
+  {
+   "op": "paragraph edit",
+   "comparable": "yes",
+   "hddn": "PREPARE_PARAGRAPH_EDIT + SET_TEXT_EDITS (re-renders affected page previews)",
+   "sdk": "prepareParagraph + applyChanges (layout + revision commit; no preview render)",
+   "note": "same text, same line, Liberation Sans fallback for both; HDDN set-edits includes preview regeneration"
+  },
+  {
+   "op": "render",
+   "comparable": "yes",
+   "hddn": "PyMuPDF get_pixmap @1.35 -> PNG encode",
+   "sdk": "hayro @1.35 -> RGBA8 transfer (no PNG encode)",
+   "note": "HDDN includes PNG encoding, the SDK returns raw pixels; SDK wins partly by skipping PNG"
+  }
+ ],
+ "notes": [
+  "ms = median of n, p95 over the same samples; localhost, headless, identity encoding (wire bytes = file bytes)",
+  "hddn and sdk inputs are byte-identical files (sha256 in inputs)",
+  "unavailable lists what could not be measured and why"
+ ]
+}
