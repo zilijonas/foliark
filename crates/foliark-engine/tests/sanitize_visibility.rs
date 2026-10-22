@@ -7,8 +7,8 @@ mod common;
 use common::{fidelity_oracle, fixture, objects_oracle, run};
 use foliark_engine::{Document, Engine};
 use foliark_model::{
-    ErrorCode, ExportMode, ExportPlan, ExportPolicy, ExtractOptions, Limits, LossCode, PdfError,
-    SanitizedItem,
+    ChangeSet, ErrorCode, ExportMode, ExportPlan, ExportPolicy, ExtractOptions, Limits, LossCode,
+    PdfError, Rect, Redaction, SanitizedItem,
 };
 
 // ---- tiny PDFs -----------------------------------------------------------------------------------
@@ -91,6 +91,28 @@ fn export(bytes: &[u8]) -> Result<(ExportPlan, Vec<u8>), PdfError> {
     let plan = run(&mut e, t)?;
     let out = e.take_export(&doc, &plan.plan_id).unwrap();
     Ok((plan, out))
+}
+
+/// `export` with `redactions` committed first.
+fn export_redacted(
+    bytes: &[u8],
+    redactions: impl FnOnce(&str) -> Vec<Redaction>,
+) -> (ExportPlan, Vec<u8>) {
+    let mut e = Engine::new(Limits::default());
+    let (doc, _) = e.open(bytes.to_vec(), None, false).unwrap();
+    let t = e.extract_text(&doc, 0, Default::default());
+    let text = run(&mut e, t).unwrap().text;
+    let changes = ChangeSet {
+        base_revision: 0,
+        text_edits: None,
+        redactions: Some(redactions(&text)),
+    };
+    let t = e.apply_changes(&doc, changes);
+    assert!(run(&mut e, t).unwrap().accepted);
+    let t = e.prepare_export(&doc, ExportMode::Native, ExportPolicy::default());
+    let plan = run(&mut e, t).unwrap();
+    let out = e.take_export(&doc, &plan.plan_id).unwrap();
+    (plan, out)
 }
 
 fn words(bytes: &[u8]) -> String {
@@ -492,5 +514,69 @@ fn layers_that_cannot_be_evaluated_refuse_by_name() {
             err.details.and_then(|d| d.feature).as_deref(),
             Some("flattenOptionalContent")
         );
+    }
+}
+
+/// Layer removal and redaction used to rewrite the same operator spans of one Writer ("overlapping
+/// span"): a hidden layer and a hidden run in a shown text object, both under the region, next to
+/// a shown secret and survivors. Pass 2 plans the page as pass 1 left it, for a region and for a
+/// text range (whose cluster ids pass 1 moved).
+#[test]
+fn hidden_layers_and_redaction_over_the_same_text_export_in_two_passes() {
+    let catalog = "/OCProperties << /OCGs [10 0 R 11 0 R] /D << /OFF [11 0 R] >> >>";
+    let mut objs: Vec<String> = vec!["null".into(); 4];
+    objs.extend(GROUPS.map(str::to_owned));
+    let mut content = text(20, 380, "KEEP_SURVIVOR");
+    content += &format!("/OC /g1 BDC {}EMC\n", text(20, 200, "SHOW_G1"));
+    content += "BT /F1 12 Tf 20 250 Td /OC /g2 BDC (HIDE_RUN  ) Tj EMC (SHOWN_SECRET) Tj ET\n";
+    content += &format!("/OC /g2 BDC {}EMC\n", text(20, 250, "HIDDEN_UNDER_REGION"));
+    let input = pdf(catalog, &resources("", ""), &content, &objs);
+    let forbid = [
+        "SHOWN_SECRET",
+        "HIDDEN_UNDER_REGION",
+        "HIDE_RUN",
+        "SECRET_NAME_OFF",
+    ];
+    let keep = ["KEEP_SURVIVOR", "SHOW_G1"];
+    let row = line(20.0, 250.0);
+    for (name, redact) in [
+        (
+            "two-pass-region",
+            Box::new(|_: &str| {
+                vec![Redaction::Region {
+                    id: "r".into(),
+                    page_index: 0,
+                    rect: Rect {
+                        x: row.0,
+                        y: row.1,
+                        width: row.2 - row.0,
+                        height: row.3 - row.1,
+                    },
+                    fill: None,
+                }]
+            }) as Box<dyn FnOnce(&str) -> Vec<Redaction>>,
+        ),
+        (
+            "two-pass-text",
+            Box::new(|t: &str| {
+                let start = t.find("SHOWN_SECRET").unwrap() as u32;
+                vec![Redaction::Text {
+                    id: "t".into(),
+                    page_index: 0,
+                    start,
+                    end: start + 12,
+                    fill: None,
+                }]
+            }),
+        ),
+    ] {
+        let (plan, out) = export_redacted(&input, redact);
+        let t = words(&out);
+        assert!(forbid.iter().all(|f| !t.contains(f)), "{name}: {t}");
+        assert!(keep.iter().all(|k| t.contains(k)), "{name}: {t}");
+        assert!(plan.report.redaction.clusters_removed >= 12, "{name}");
+        assert_eq!(plan.report.flattened.ocg_layers, 2);
+        // The hidden run is the declared change next to the redacted line.
+        judge(name, &input, &out, &forbid, &keep, &[row]);
     }
 }

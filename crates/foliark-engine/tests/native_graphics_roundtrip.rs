@@ -1,7 +1,7 @@
 //! Fresh native writer (NEW-24, spec §8.1): every fixture is rewritten, reopened by the
 //! strict reader and judged by the independent Python oracles (tests/oracles).
 use foliark_engine::Document;
-use foliark_engine::sanitize::interactive;
+use foliark_engine::sanitize::{interactive, visibility};
 use foliark_engine::writer::{NewStream, Val, Writer};
 use foliark_model::{ErrorCode, ExportPolicy, Limits, ObjectId, PdfError};
 use pdf_writer::{Finish, Name, Pdf, Rect, Ref};
@@ -23,13 +23,6 @@ const HOSTILE: &[&str] = &[
     "generated/many-pages-1001.pdf",
 ];
 
-/// Inputs whose hidden layers would turn visible once `/OCProperties` is gone: refused with a
-/// typed error until optional-content flattening lands (spec 8.2).
-const REFUSED_LAYERS: &[&str] = &[
-    "hddn/optional-content-layer.pdf",
-    "generated/ocg-hidden-text.pdf",
-];
-
 /// Inline ActualText in marked content is removed by the writer (spec 8.2), so extractors read
 /// the drawn glyphs instead of the input's replacement text: the words differ by design. Judged
 /// in tests/sanitize_document.rs.
@@ -37,8 +30,9 @@ const ACCESSIBILITY_STRIPPED: &[&str] = &["hddn/actualtext.pdf"];
 
 /// Annotations and widgets with an appearance are flattened (spec 8.2) and pass like any other
 /// fixture. This one has an annotation with no /AP (MuPDF invents a comment icon): nothing is
-/// drawable, so the appearance oracle is expected to see the loss; the object oracle must pass.
-const FLATTEN_PENDING: &[&str] = &["hddn/annotation-comment.pdf"];
+/// drawable and the stage removes it (`ANNOTATIONS_REMOVED`, disclosed): the appearance oracle is
+/// expected to see the loss; the object oracle must pass.
+const DISCLOSED_REMOVAL: &[&str] = &["hddn/annotation-comment.pdf"];
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -90,10 +84,11 @@ fn python(args: &[&str]) -> (bool, String) {
     (ok, std::fs::read_to_string(log).unwrap_or_default())
 }
 
-/// Annotations and widgets are flattened first, as native export does.
+/// Annotations, widgets and layers are flattened first: pass 1 of native export.
 fn write(doc: &Document, limits: Limits) -> Result<Vec<u8>, PdfError> {
     let mut w = Writer::new(doc.reader(), limits);
     interactive::scan(doc.reader(), &ExportPolicy::default()).apply(&mut w)?;
+    visibility::scan(doc.reader())?.apply(&mut w);
     w.write()
 }
 
@@ -101,7 +96,7 @@ fn write(doc: &Document, limits: Limits) -> Result<Vec<u8>, PdfError> {
 fn every_fixture_rewrites_and_passes_the_oracles() {
     let tmp = Path::new(env!("CARGO_TARGET_TMPDIR")).join("native-roundtrip");
     std::fs::create_dir_all(&tmp).unwrap();
-    let (mut failures, mut passed, mut refusals, mut skipped) = (Vec::new(), 0, 0, Vec::new());
+    let (mut failures, mut passed, mut skipped) = (Vec::new(), 0, Vec::new());
     let mut pending = 0;
     let (mut bytes_in, mut bytes_out) = (0, 0);
     for (path, password) in manifest() {
@@ -120,15 +115,6 @@ fn every_fixture_rewrites_and_passes_the_oracles() {
             }
         };
         let refused = write(&doc, Limits::default());
-        if REFUSED_LAYERS.contains(&path.as_str()) {
-            match refused {
-                Err(e) if e.code == ErrorCode::OptionalContentUnsupported => refusals += 1,
-                other => fail(format!(
-                    "expected OPTIONAL_CONTENT_UNSUPPORTED, got {other:?}"
-                )),
-            }
-            continue;
-        }
         let out = match refused {
             Ok(o) => o,
             Err(e) => {
@@ -182,14 +168,23 @@ fn every_fixture_rewrites_and_passes_the_oracles() {
             reference.to_str().unwrap(),
             out_path.to_str().unwrap(),
         ]);
-        if FLATTEN_PENDING.contains(&path.as_str()) {
+        // pypdf never reads layer configuration: it still sees the hidden text of the input, which
+        // export removed on purpose (MuPDF, the pixels and objects.py judge the rest).
+        let layers = input.windows(13).any(|w| w == b"/OCProperties");
+        let f = f
+            || (layers
+                && f_log
+                    .lines()
+                    .filter(|l| l.starts_with("FAIL"))
+                    .all(|l| l.starts_with("FAIL WORDS_PYPDF")));
+        if DISCLOSED_REMOVAL.contains(&path.as_str()) {
             let bytes = String::from_utf8_lossy(&out);
             if f || ["/Annots", "/AcroForm", "/Widget"]
                 .iter()
                 .any(|k| bytes.contains(k))
             {
                 fail(format!(
-                    "flatten-pending fixture: oracle saw no loss or output kept annotations: {f_log}"
+                    "disclosed-removal fixture: oracle saw no loss or output kept annotations: {f_log}"
                 ));
             }
             if o {
@@ -212,7 +207,7 @@ fn every_fixture_rewrites_and_passes_the_oracles() {
         }
     }
     println!(
-        "fixtures passed {passed}, typed layer refusals {refusals}, flatten-pending (objects.py only) {pending}, skipped hostile {} {skipped:?}, bytes in {bytes_in} out {bytes_out}",
+        "fixtures passed {passed}, disclosed removal (objects.py only) {pending}, skipped hostile {} {skipped:?}, bytes in {bytes_in} out {bytes_out}",
         skipped.len()
     );
     assert!(

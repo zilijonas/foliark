@@ -23,7 +23,7 @@
 //! can concern and no bytes leave. Report counts come from what the stages did.
 use crate::Document;
 use crate::document::{Binding, Committed, StoredRedaction};
-use crate::redaction::plan::{RedactionPlan, bounds_of, text_coverage};
+use crate::redaction::plan::{RedactionPlan, bounds_of, glyph_boxes, text_coverage};
 use crate::redaction::{Executed, execute, image};
 use crate::sanitize::document::scan;
 use crate::sanitize::{interactive, visibility};
@@ -269,6 +269,42 @@ fn applied(plan: &RedactionPlan, committed: &Committed) -> Result<Vec<AppliedRed
     Ok(out)
 }
 
+/// `committed` as pass 2 needs it on `staged`, the rewritten `doc`: a text redaction names the
+/// glyphs it must remove by content-stream location, which pass 1 moved. Each is found again by
+/// its position on the page; one pass 1 removed is gone and needs no entry.
+fn remap(committed: &Committed, doc: &Document, staged: &Document) -> Result<Committed, PdfError> {
+    let mut out = committed.clone();
+    for page in committed
+        .redactions
+        .iter()
+        .filter(|r| !r.must_remove.is_empty())
+        .map(|r| r.page_index as usize)
+        .collect::<std::collections::BTreeSet<_>>()
+    {
+        let before: std::collections::HashMap<_, _> = glyph_boxes(doc, page)?.into_iter().collect();
+        let after = glyph_boxes(staged, page)?;
+        for r in out
+            .redactions
+            .iter_mut()
+            .filter(|r| r.page_index as usize == page)
+        {
+            let moved: Vec<_> = r
+                .must_remove
+                .iter()
+                .filter_map(|id| before.get(id))
+                .flat_map(|b| {
+                    after
+                        .iter()
+                        .filter(move |(_, a)| a.iter().zip(b).all(|(x, y)| (x - y).abs() < 0.05))
+                        .map(|(id, _)| id.clone())
+                })
+                .collect();
+            r.must_remove = moved;
+        }
+    }
+    Ok(out)
+}
+
 /// Run the native pipeline for `doc`, the working copy at `binding`.
 pub fn prepare(
     doc: &Document,
@@ -289,14 +325,42 @@ pub fn prepare(
     {
         return Err(b.error());
     }
+    // Pass 1 (spec §5): flatten annotations and widgets, resolve layers and drop what lies off
+    // the page, written out and reopened, so pass 2 plans and edits the content as it will be
+    // output and never rewrites an operator span pass 1 already rewrote. Nothing to do: pass 2
+    // runs on the input itself.
+    let staged = if inter.is_empty() && vis.is_empty() {
+        None
+    } else {
+        let mut w = Writer::new(reader, limits.clone());
+        inter.apply(&mut w)?;
+        vis.apply(&mut w);
+        let bytes = w.write()?;
+        Some(Document::open_with_limits(
+            bytes,
+            None,
+            false,
+            limits.clone(),
+        )?)
+    };
+    let remapped;
+    let (doc, committed) = match &staged {
+        Some(s) => {
+            remapped = remap(committed, doc, s)?;
+            (s, &remapped)
+        }
+        None => (doc, committed),
+    };
     let plan = RedactionPlan::build(doc, committed, binding)?;
     if let Some(b) = preflight::plan_blockers(&plan).first() {
         return Err(b.error());
     }
 
-    let mut w = Writer::new(reader, limits.clone());
-    inter.apply(&mut w)?;
-    vis.apply(&mut w);
+    let mut w = Writer::new(doc.reader(), limits.clone());
+    if staged.is_none() {
+        inter.apply(&mut w)?;
+        vis.apply(&mut w);
+    }
     let done = execute(doc, &plan, &mut w).map_err(|e| attribute(&plan, e))?;
     check_stages(&plan, &done)?;
     for (page, ops) in fills(doc, committed)? {

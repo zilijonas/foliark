@@ -583,6 +583,26 @@ fn pages_where(pages: impl Iterator<Item = u32>) -> Vec<u32> {
     pages.collect::<BTreeSet<_>>().into_iter().collect()
 }
 
+/// Every glyph of page `page` with its display-space bounds: how a cluster id of one file is
+/// found again in a rewritten one (same geometry, new content-stream locations).
+pub(crate) fn glyph_boxes(doc: &Document, page: usize) -> Result<Vec<(ClusterId, B)>, PdfError> {
+    let model = doc.page_model(page)?;
+    let mut out = Vec::new();
+    for item in &model.items {
+        if let ItemKind::Glyph(g) = &item.kind {
+            let quad = g.quad_user.map(model.geometry.user_to_display);
+            let id = ClusterId {
+                page: page as u32,
+                path: item.path.clone(),
+                loc: item.loc,
+                glyph: g.op_glyph_index,
+            };
+            out.push((id, quad_bounds(&quad)));
+        }
+    }
+    Ok(out)
+}
+
 fn plan_page(
     doc: &Document,
     model: &SemanticPage,

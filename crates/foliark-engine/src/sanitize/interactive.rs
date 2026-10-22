@@ -41,13 +41,18 @@ pub struct Scan {
     pub widgets: u32,
     /// Annotations and widgets shown by their flags that an OFF `/OC` hides: not drawn.
     pub oc_hidden: u32,
-    /// Visible non-widget annotations `annotations: remove` drops without drawing.
+    /// Visible non-widget annotations dropped without drawing: policy `remove`, or no appearance.
     pub removed_visible: u32,
     /// Refusals this input raises (empty = the interactive stage can run).
     pub blockers: Vec<Blocker>,
 }
 
 impl Scan {
+    /// Whether [`Scan::apply`] draws nothing.
+    pub fn is_empty(&self) -> bool {
+        self.draws.is_empty()
+    }
+
     /// (annotations, widgets) that [`Scan::apply`] draws.
     pub fn flattened(&self) -> (u32, u32) {
         let widgets = self.draws.iter().filter(|d| d.widget).count() as u32;
@@ -249,17 +254,20 @@ pub fn scan(doc: &Document, policy: &ExportPolicy) -> Scan {
                 Some("Link") => out.links += 1,
                 Some("Popup") => {}
                 _ => {
-                    if let (true, Some((ap, cm))) = (shown, place) {
-                        if policy.annotations == AnnotationPolicy::Flatten {
+                    // Shown but not drawn (policy `remove`, or no appearance to draw): removed.
+                    match (shown, place) {
+                        (true, Some((ap, cm)))
+                            if policy.annotations == AnnotationPolicy::Flatten =>
+                        {
                             out.draws.push(Draw {
                                 page: i,
                                 ap,
                                 cm,
                                 widget: false,
                             });
-                        } else {
-                            out.removed_visible += 1;
                         }
+                        (true, _) => out.removed_visible += 1,
+                        _ => {}
                     }
                 }
             }

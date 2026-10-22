@@ -32,9 +32,10 @@ const ACCESSIBILITY_STRIPPED: &[&str] = &["hddn/actualtext.pdf"];
 
 /// Visible annotations and widgets with an appearance are flattened (spec 8.2) and pass like any
 /// other fixture. These have an annotation with no /AP (a comment icon MuPDF invents): nothing
-/// is drawable, the annotation is removed, and the round trip is judged on page content only
-/// (render without annotations); the oracles must still see the loss, so it is never a pass.
-const FLATTEN_PENDING: &[&str] = &["hddn/annotation-comment.pdf"];
+/// is drawable, the annotation is removed and export discloses it (`ANNOTATIONS_REMOVED`), and the
+/// round trip is judged on page content only (render without annotations); the oracles must
+/// still see that icon go, and the stage must count it.
+const DISCLOSED_REMOVAL: &[&str] = &["hddn/annotation-comment.pdf"];
 
 /// The writer with annotations, widgets and layers flattened, the first stages of native export.
 fn flattened(doc: &Document) -> Writer<'_> {
@@ -183,7 +184,7 @@ fn native_round_trip_chain_holds_on_every_fixture() {
         "oracle venv missing: python3 -m venv tests/oracles/.venv && tests/oracles/.venv/bin/pip install -r tests/oracles/requirements.txt"
     );
     let (mut failures, mut rows) = (Vec::new(), Vec::new());
-    let (mut supported, mut pending, mut refused, mut stripped) = (0, 0, 0, 0);
+    let (mut supported, mut disclosed, mut refused, mut stripped) = (0, 0, 0, 0);
     let files = manifest["files"].as_array().unwrap();
     for f in files {
         let (id, path) = (f["id"].as_str().unwrap(), f["path"].as_str().unwrap());
@@ -247,7 +248,7 @@ fn native_round_trip_chain_holds_on_every_fixture() {
             fail(format!("pages {} != {pages}", reopened.page_count()));
             continue;
         }
-        let is_pending = FLATTEN_PENDING.contains(&path);
+        let is_pending = DISCLOSED_REMOVAL.contains(&path);
         let n_words = if is_pending {
             pending_words(&doc, &reopened).unwrap_or_else(|e| {
                 fail(format!("foliark words: {e}"));
@@ -304,14 +305,17 @@ fn native_round_trip_chain_holds_on_every_fixture() {
         if is_pending {
             if json["pending_loss_seen"] != true || !list("objects").is_empty() {
                 fail(format!(
-                    "flatten-pending: oracles saw no loss or objects.py failed: {json}"
+                    "disclosed removal: oracles saw no loss or objects.py failed: {json}"
                 ));
             }
             if out.windows(7).any(|w| w == b"/Annots" || w == b"/Widget") {
-                fail("flatten-pending output kept annotations".into());
+                fail("disclosed removal: output kept annotations".into());
             }
-            pending += 1;
-            rows.push(format!("| {id} | flatten-pending | content ok, annotations dropped | {} | {} | {in_hash} | {} |", input.len(), out.len(), sha(&out)));
+            if interactive::scan(doc.reader(), &ExportPolicy::default()).removed_visible == 0 {
+                fail("disclosed removal: ANNOTATIONS_REMOVED would not be reported".into());
+            }
+            disclosed += 1;
+            rows.push(format!("| {id} | supported | pass, ANNOTATIONS_REMOVED disclosed | {} | {} | {in_hash} | {} |", input.len(), out.len(), sha(&out)));
             continue;
         }
         let mut bad = false;
@@ -327,7 +331,7 @@ fn native_round_trip_chain_holds_on_every_fixture() {
         }
     }
     println!(
-        "fixtures {} supported {supported} flatten-pending {pending} refused {refused}",
+        "fixtures {} supported {supported} (disclosed removal {disclosed}) refused {refused}",
         files.len()
     );
     println!("{}", rows.join("\n"));
@@ -338,7 +342,7 @@ fn native_round_trip_chain_holds_on_every_fixture() {
         failures.join("\n")
     );
     assert_eq!(
-        supported + pending + refused + stripped,
+        supported + disclosed + refused + stripped,
         files.len(),
         "unclassified fixtures"
     );

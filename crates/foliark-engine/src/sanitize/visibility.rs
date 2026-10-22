@@ -392,6 +392,11 @@ pub struct Scan {
 }
 
 impl Scan {
+    /// Whether [`Scan::apply`] rewrites no content (it still resolves the layers).
+    pub fn is_empty(&self) -> bool {
+        self.spans.is_empty() && self.stubs.is_empty()
+    }
+
     pub fn apply(&self, w: &mut Writer<'_>) {
         w.resolve_layers();
         for (stream, subs) in &self.spans {
