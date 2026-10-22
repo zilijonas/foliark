@@ -6,14 +6,17 @@
 //! - `ActualText`, `Alt` and `E` of marked-content property lists, inline or in `/Properties`,
 //!   at any depth, are counted here and never copied (the writer's content re-emitter and its
 //!   allowlist).
+//! - `keepOcr` (ADR 0008): invisible text stays only where its glyph boxes lie over a drawn raster
+//!   image ([`ImageCover`]), the shape of a scanner's OCR layer. Any other invisible show, and
+//!   every one whose place cannot be established, goes like under `remove`.
 //! - No false success: a glyph whose place on the page cannot be established (a singular CTM,
 //!   font size 0) may be a hidden copy of a redacted word that the plan cannot see, so an export
 //!   with regions on that page is refused.
 use crate::Document;
 use crate::export::preflight::Blocker;
-use crate::interpret::ItemKind;
+use crate::interpret::{Item, ItemKind};
 use crate::redaction::plan::RedactionPlan;
-use foliark_model::{ErrorCode, PdfError, Quad};
+use foliark_model::{ErrorCode, Matrix, PdfError, Point, Quad};
 use hayro::hayro_syntax::content::Instruction;
 use hayro::hayro_syntax::object::{Dict, Object};
 use hayro::hayro_syntax::page::Resources;
@@ -57,7 +60,7 @@ pub fn accessibility_entries(ins: &Instruction<'_, '_>, res: &Resources<'_>) -> 
 }
 
 /// Whether a glyph quad covers a finite area (shoelace) a region can be tested against.
-fn placed(q: &Quad) -> bool {
+pub fn placed(q: &Quad) -> bool {
     let p = &q.0;
     let a = (0..4)
         .map(|i| p[i].x * p[(i + 1) % 4].y - p[(i + 1) % 4].x * p[i].y)
@@ -91,4 +94,75 @@ pub fn mapping_blockers(doc: &Document, plan: &RedactionPlan) -> Result<Vec<Bloc
     b.ids.sort_unstable();
     b.ids.dedup();
     Ok(if b.pages.is_empty() { vec![] } else { vec![b] })
+}
+
+/// Share of a glyph box that must lie over drawn imagery for its invisible text to count as OCR.
+const OCR_COVER: f64 = 0.8;
+/// Sample grid per glyph box side (a union of images and clips is not a polygon to intersect).
+const GRID: usize = 4;
+
+/// The drawn raster images of one page: unit square inverse and visible bounds of each.
+pub struct ImageCover {
+    images: Vec<(Matrix, [f64; 4])>,
+}
+
+impl ImageCover {
+    /// Images the page (and its Forms) draws, minus those hidden by optional content, clipped
+    /// out or outside `crop` (`[x0, y0, x1, y1]`).
+    pub fn of(items: &[Item], crop: [f64; 4]) -> Self {
+        let images = items
+            .iter()
+            .filter(|it| !it.ocg_hidden)
+            .filter_map(|it| {
+                let ItemKind::Image(im) = &it.kind else {
+                    return None;
+                };
+                let b = it.clip.map_or(crop, |c| {
+                    [
+                        c[0].max(crop[0]),
+                        c[1].max(crop[1]),
+                        c[2].min(crop[2]),
+                        c[3].min(crop[3]),
+                    ]
+                });
+                Some((im.ctm.inverse()?, b))
+            })
+            .collect();
+        Self { images }
+    }
+
+    fn over(&self, p: Point) -> bool {
+        self.images.iter().any(|(inv, b)| {
+            let [a, bb, c, d, e, f] = inv.0;
+            let (u, v) = (a * p.x + c * p.y + e, bb * p.x + d * p.y + f);
+            (0.0..=1.0).contains(&u)
+                && (0.0..=1.0).contains(&v)
+                && (b[0]..=b[2]).contains(&p.x)
+                && (b[1]..=b[3]).contains(&p.y)
+        })
+    }
+
+    /// Whether at least [`OCR_COVER`] of the glyph box lies over an image. A box without area
+    /// (singular CTM, size 0) has no place, so it is never covered.
+    pub fn covers(&self, q: &Quad) -> bool {
+        if !placed(q) {
+            return false;
+        }
+        let [tl, tr, br, bl] = q.0;
+        let lerp = |a: Point, b: Point, t: f64| Point {
+            x: a.x + (b.x - a.x) * t,
+            y: a.y + (b.y - a.y) * t,
+        };
+        let mut hit = 0;
+        for i in 0..GRID {
+            let (l, r) = (
+                lerp(tl, bl, (i as f64 + 0.5) / GRID as f64),
+                lerp(tr, br, (i as f64 + 0.5) / GRID as f64),
+            );
+            for j in 0..GRID {
+                hit += usize::from(self.over(lerp(l, r, (j as f64 + 0.5) / GRID as f64)));
+            }
+        }
+        hit as f64 >= OCR_COVER * (GRID * GRID) as f64
+    }
 }

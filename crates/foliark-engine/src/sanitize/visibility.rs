@@ -24,7 +24,7 @@ use crate::interpret::{DiagnosticKind, ItemKind};
 use crate::limits::{self, Budget};
 use crate::reader::{Document, object_id};
 use crate::writer::{NewStream, Spans, Val, Writer};
-use foliark_model::{ErrorCode, ObjectId, PdfError, Point};
+use foliark_model::{ErrorCode, InvisibleTextPolicy, ObjectId, PdfError, Point};
 use hayro::hayro_syntax::content::{Instruction, UntypedIter};
 use hayro::hayro_syntax::object::{
     Array, Dict, MaybeRef, Name, Object, ObjectIdentifier as Oid, Stream,
@@ -239,6 +239,8 @@ struct Site {
     out: bool,
     /// Every glyph drawn here is invisible text (render mode 3 or 7).
     invisible: bool,
+    /// Every glyph drawn here lies over a drawn image, on every occurrence (OCR, ADR 0008).
+    ocr: bool,
     /// Advance in em per code index of a show operator.
     adv: BTreeMap<u32, f64>,
 }
@@ -268,6 +270,7 @@ fn sites(doc: &Document) -> Result<(HashMap<Loc, Site>, bool), PdfError> {
             )
         });
         let crop = m.geometry.crop_box;
+        let cover = text_semantics::ImageCover::of(&m.items, crop);
         for it in &m.items {
             let (b, code) = match &it.kind {
                 ItemKind::Glyph(g) => {
@@ -278,6 +281,7 @@ fn sites(doc: &Document) -> Result<(HashMap<Loc, Site>, bool), PdfError> {
                             g.op_glyph_index,
                             g.advance_em,
                             matches!(g.render_mode, 3 | 7),
+                            cover.covers(&g.quad_user),
                         )),
                     )
                 }
@@ -314,12 +318,14 @@ fn sites(doc: &Document) -> Result<(HashMap<Loc, Site>, bool), PdfError> {
                 .or_insert_with(|| Site {
                     out: true,
                     invisible: true,
+                    ocr: true,
                     adv: BTreeMap::new(),
                 });
             site.out &= gone(b, crop) || it.clip.is_some_and(|c| gone(b, c));
-            if let Some((index, adv, invisible)) = code {
+            if let Some((index, adv, invisible, over)) = code {
                 site.adv.insert(index, adv);
                 site.invisible &= invisible;
+                site.ocr &= over;
             }
         }
     }
@@ -396,7 +402,7 @@ pub struct Scan {
     pub hidden_ops: u32,
     /// Operators removed because they lie outside the page or their clip.
     pub off_page_ops: u32,
-    /// Glyphs of invisible text (render mode 3 or 7) removed under `invisibleText: remove`.
+    /// Glyphs of invisible text (render mode 3 or 7) removed under `invisibleText: remove` or `keepOcr`.
     pub invisible_glyphs: u32,
     /// `ActualText`, `Alt` and `E` entries of marked-content property lists (nested ones too);
     /// the writer never copies them.
@@ -426,7 +432,7 @@ impl Scan {
 
 struct Walk<'a> {
     doc: &'a Document,
-    remove_invisible: bool,
+    invisible: InvisibleTextPolicy,
     layers: Layers<'a>,
     sites: HashMap<Loc, Site>,
     budget: Budget,
@@ -499,7 +505,14 @@ impl<'a> Walk<'a> {
                 .sites
                 .get(&(stream, span.start as u32, span.end as u32));
             let (off, adv) = site.map_or((false, 0.0), |s| (s.out, s.adv.values().sum::<f64>()));
-            let ghost = self.remove_invisible && site.is_some_and(|s| s.invisible);
+            let ghost = site.is_some_and(|s| {
+                s.invisible
+                    && match self.invisible {
+                        InvisibleTextPolicy::Keep => false,
+                        InvisibleTextPolicy::Remove => true,
+                        InvisibleTextPolicy::KeepOcr => !s.ocr,
+                    }
+            });
             let ghosts = site.map_or(0, |s| s.adv.len() as u32);
             let gone = hidden || off;
             match op {
@@ -638,16 +651,17 @@ impl<'a> Walk<'a> {
 /// Decide the whole stage for `doc`. `Err` only for what the reader and the budgets refuse;
 /// what this stage cannot evaluate comes back as [`Scan::blockers`].
 pub fn scan(doc: &Document) -> Result<Scan, PdfError> {
-    scan_with(doc, false)
+    scan_with(doc, InvisibleTextPolicy::Keep)
 }
 
-/// [`scan`], and with `remove_invisible` also the text shows whose every glyph is invisible
-/// (render mode 3 or 7): replaced like hidden text, advances kept.
-pub fn scan_with(doc: &Document, remove_invisible: bool) -> Result<Scan, PdfError> {
+/// [`scan`], and under `Remove` also the text shows whose every glyph is invisible (render mode
+/// 3 or 7), under `KeepOcr` those not over a drawn image: replaced like hidden text, advances
+/// kept.
+pub fn scan_with(doc: &Document, invisible: InvisibleTextPolicy) -> Result<Scan, PdfError> {
     let (sites, blind) = sites(doc)?;
     let mut w = Walk {
         doc,
-        remove_invisible,
+        invisible,
         layers: Layers::read(doc.pdf().xref()),
         sites,
         budget: Budget::new(doc.limits()),

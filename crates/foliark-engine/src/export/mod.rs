@@ -32,8 +32,8 @@ use crate::sanitize::{interactive, prune, resources, text_semantics, visibility}
 use crate::writer::Writer;
 use foliark_model::{
     Capabilities, Capability, CapabilityReason, CapabilityStatus, EditsReport, ErrorCode,
-    ExportMode, ExportPolicy, ExportReport, ExtractOptions, Flattened, InvisibleTextPolicy,
-    KeptReport, Limits, Loss, LossCode, PdfError, Point, Rect, RedactionReport, SanitizedItem,
+    ExportMode, ExportPolicy, ExportReport, ExtractOptions, Flattened, KeptReport, Limits, Loss,
+    LossCode, PdfError, Point, Rect, RedactionReport, SanitizedItem,
 };
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -343,7 +343,7 @@ pub fn prepare(
     let reader = doc.reader();
     let removals = scan(reader)?;
     let inter = interactive::scan(reader, policy);
-    let vis = visibility::scan_with(reader, policy.invisible_text == InvisibleTextPolicy::Remove)?;
+    let vis = visibility::scan_with(reader, policy.invisible_text)?;
     if let Some(b) = preflight::document_blockers(policy, &inter, &vis, removals.signatures).first()
     {
         return Err(b.error());

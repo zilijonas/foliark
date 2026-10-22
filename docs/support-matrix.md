@@ -77,7 +77,7 @@ Each class is removed and reported, or refused. Evidence is `strict-native.md` (
 | Encryption | supported (decrypted, never re-encrypted) | `ENCRYPTION_REMOVED` |
 | Signatures | stripped with disclosure, or refused by policy (engine tests `sanitize_interactive.rs`, `raster_plans.rs`; no independent oracle) | `SIGNATURES_INVALIDATED`; `SIGNED_INPUT` |
 | Content outside the crop box | supported (removed) | `offPage` |
-| Invisible text | kept by default (so detection sees it), `remove` by policy | `report.kept.invisibleTextClusters` |
+| Invisible text | kept by default (so detection sees it), `remove` by policy, `keepOcr` keeps only OCR over drawn images (ADR 0008) | `report.kept.invisibleTextClusters`, `removed.invisibleText` |
 
 Not proven for sanitization: content inside an ICC profile's declared size, Type3 CharProcs drawing with other fonts, inline images in the image oracle, secrets that are not ASCII markers, files that are not like the 80 synthetic cases (`security-acceptance.md`, "Not proven").
 

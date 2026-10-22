@@ -730,6 +730,9 @@ pub enum InvisibleTextPolicy {
     #[default]
     Keep,
     Remove,
+    /// Keep invisible text only where it lies over a drawn raster image (a scanner's OCR
+    /// layer); every other invisible show is removed and counted (ADR 0008).
+    KeepOcr,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, TS)]
