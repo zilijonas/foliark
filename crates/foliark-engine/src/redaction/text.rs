@@ -42,7 +42,7 @@ pub struct TextReport {
     pub fonts_with_glyph_inventory: Vec<(ObjectId, String)>,
 }
 
-fn at(id: ObjectId) -> ObjectIdentifier {
+pub(super) fn at(id: ObjectId) -> ObjectIdentifier {
     ObjectIdentifier::new(id.num as i32, i32::from(id.generation))
 }
 
@@ -123,7 +123,7 @@ pub fn redact_text(
     Ok(report)
 }
 
-fn decode(doc: &Document, id: ObjectId) -> Result<Vec<u8>, PdfError> {
+pub(super) fn decode(doc: &Document, id: ObjectId) -> Result<Vec<u8>, PdfError> {
     let r = doc.reader();
     let Some(s) = r.pdf().xref().get::<Stream<'_>>(at(id)) else {
         return Err(PdfError::at(ErrorCode::MalformedPdf, id));

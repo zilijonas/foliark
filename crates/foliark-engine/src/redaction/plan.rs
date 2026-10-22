@@ -354,7 +354,7 @@ fn affine(m: Matrix) -> Affine {
     Affine::new(m.0)
 }
 
-fn subpaths(path: &BezPath) -> Vec<BezPath> {
+pub(super) fn subpaths(path: &BezPath) -> Vec<BezPath> {
     let mut out: Vec<BezPath> = Vec::new();
     for el in path.elements() {
         match el {
@@ -542,7 +542,10 @@ impl Scan {
         let mut survivors = self.survivors;
         let removed_streams: BTreeSet<ObjectId> = pages
             .iter()
-            .flat_map(|p| p.clusters.iter().map(|c| c.id.loc.stream))
+            .flat_map(|p| {
+                let text = p.clusters.iter().map(|c| c.id.loc.stream);
+                text.chain(p.vectors.iter().map(|v| v.loc.stream))
+            })
             .collect();
         RedactionPlan {
             binding,
@@ -787,22 +790,32 @@ fn plan_vectors(
         f64::from(s.line_width) * item.stroke_scale * disp_scale / 2.0
             * f64::from(s.miter_limit).max(1.0)
     });
-    let mut out = Vec::new();
-    for (n, sub) in subpaths(&(to_display * item.geometry.clone()))
+    let shapes = subpaths(&(to_display * item.geometry.clone()));
+    let subs: Vec<B> = shapes
         .iter()
-        .enumerate()
-    {
-        let r = sub.bounding_box();
-        let b = [r.x0 - grow, r.y0 - grow, r.x1 + grow, r.y1 + grow];
+        .map(|sub| {
+            let r = sub.bounding_box();
+            [r.x0, r.y0, r.x1, r.y1]
+        })
+        .collect();
+    let mut out = Vec::new();
+    for (n, r) in subs.iter().enumerate() {
+        let b = [r[0] - grow, r[1] - grow, r[2] + grow, r[3] + grow];
         let hit: Vec<u32> = (0..boxes.len() as u32)
             .filter(|&i| overlap(b, boxes[i as usize]))
             .collect();
         if hit.is_empty() {
             continue;
         }
+        // A rectangle is cut only when it is the whole story of its area: another subpath over
+        // it (a hole, a winding or even-odd interaction) makes the cut ambiguous, so it goes whole.
+        let alone = !subs
+            .iter()
+            .enumerate()
+            .any(|(m, o)| m != n && overlap(b, *o));
         let class = if covered(b, boxes) {
             VectorClass::Inside
-        } else if item.stroke.is_none() && is_axis_rect(sub) {
+        } else if item.stroke.is_none() && is_axis_rect(&shapes[n]) && alone {
             VectorClass::RectCut
         } else {
             VectorClass::Collateral
