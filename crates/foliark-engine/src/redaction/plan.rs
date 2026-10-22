@@ -544,7 +544,9 @@ impl Scan {
             .iter()
             .flat_map(|p| {
                 let text = p.clusters.iter().map(|c| c.id.loc.stream);
+                let images = p.images.iter().map(|i| i.loc.stream);
                 text.chain(p.vectors.iter().map(|v| v.loc.stream))
+                    .chain(images)
             })
             .collect();
         RedactionPlan {

@@ -931,7 +931,8 @@ impl<'a> Walk<'a> {
     pub fn build(
         &mut self,
         appended: &BTreeMap<usize, Vec<u8>>,
-        page_fonts: &PageFonts,
+        [page_fonts, page_xobjects]: [&PageFonts; 2],
+        dropped_xobjects: &BTreeMap<usize, Vec<Vec<u8>>>,
     ) -> Result<Vec<Ref>, PdfError> {
         self.alloc()?;
         let pages = self.alloc()?;
@@ -955,10 +956,18 @@ impl<'a> Walk<'a> {
                 let mut v = self
                     .inherited(&raw, key.as_bytes())?
                     .filter(|v| *v != Val::Null);
-                if key == "Resources"
-                    && let Some(add) = page_fonts.get(&i)
-                {
-                    v = Some(self.with_fonts(v, add)?);
+                if key == "Resources" {
+                    let none = Vec::new();
+                    let dropped = dropped_xobjects.get(&i).unwrap_or(&none);
+                    for (category, added, drop) in [
+                        (&b"Font"[..], page_fonts, &none),
+                        (b"XObject", page_xobjects, dropped),
+                    ] {
+                        if added.contains_key(&i) || !drop.is_empty() {
+                            let add = added.get(&i).map_or(&[][..], Vec::as_slice);
+                            v = Some(self.with_entries(v, category, add, drop)?);
+                        }
+                    }
                 }
                 if let Some(v) = v {
                     e.push((key.as_bytes().to_vec(), self.emit(&v, spec, 0)?));
@@ -1004,8 +1013,15 @@ impl<'a> Walk<'a> {
         Ok(refs)
     }
 
-    /// `/Resources` with `fonts` added to its `/Font` dictionary (copied, never edited in place).
-    fn with_fonts(&self, res: Option<Val>, fonts: &[(Vec<u8>, Val)]) -> Result<Val, PdfError> {
+    /// `/Resources` with `added` put into its `category` dictionary (`/Font`, `/XObject`),
+    /// copied, never edited in place.
+    fn with_entries(
+        &self,
+        res: Option<Val>,
+        category: &[u8],
+        added: &[(Vec<u8>, Val)],
+        drop: &[Vec<u8>],
+    ) -> Result<Val, PdfError> {
         let bad = || err(ErrorCode::MalformedPdf, "resources are not a dictionary");
         let dict = |v: Option<Val>| match v.map(|v| self.resolve(&v)).transpose()? {
             None | Some(Val::Null) => Ok(Vec::new()),
@@ -1013,15 +1029,20 @@ impl<'a> Walk<'a> {
             Some(_) => Err(bad()),
         };
         let mut res = dict(res)?;
-        let mut map = dict(get(&res, "Font").cloned())?;
-        for (name, font) in fonts {
+        let mut map = dict(
+            res.iter()
+                .find(|(k, _)| k == category)
+                .map(|(_, v)| v.clone()),
+        )?;
+        map.retain(|(k, _)| !drop.contains(k));
+        for (name, val) in added {
             if map.iter().any(|(k, _)| k == name) {
-                return Err(err(ErrorCode::InvalidArgument, "font resource name in use"));
+                return Err(err(ErrorCode::InvalidArgument, "resource name in use"));
             }
-            map.push((name.clone(), font.clone()));
+            map.push((name.clone(), val.clone()));
         }
-        res.retain(|(k, _)| k != b"Font");
-        res.push((b"Font".to_vec(), Val::Dict(map)));
+        res.retain(|(k, _)| k != category);
+        res.push((category.to_vec(), Val::Dict(map)));
         Ok(Val::Dict(res))
     }
 

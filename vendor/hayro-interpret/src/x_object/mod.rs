@@ -4,7 +4,7 @@ mod image;
 pub(crate) mod soft_mask;
 
 pub(crate) use form::FormXObject;
-pub(crate) use image::ImageXObject;
+pub(crate) use image::{ImageKind, ImageXObject};
 
 use crate::cache::Cache;
 use crate::color::ColorSpace;

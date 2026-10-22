@@ -67,12 +67,14 @@ pub struct Writer<'d> {
     appended: BTreeMap<usize, Vec<u8>>,
     extras: Vec<Extra>,
     page_fonts: PageFonts,
+    page_xobjects: PageFonts,
+    dropped_xobjects: BTreeMap<usize, Vec<Vec<u8>>>,
     to_unicode: BTreeMap<ObjectId, Vec<u8>>,
     /// Registered font ids already written (`fonts::embed_registered_font`).
     embedded: BTreeSet<String>,
 }
 
-/// Font resources added per page: (resource name, font object).
+/// Resources added per page: (resource name, object).
 pub(crate) type PageFonts = BTreeMap<usize, Vec<(Vec<u8>, Val)>>;
 
 impl<'d> Writer<'d> {
@@ -85,6 +87,8 @@ impl<'d> Writer<'d> {
             appended: BTreeMap::new(),
             extras: Vec::new(),
             page_fonts: BTreeMap::new(),
+            page_xobjects: BTreeMap::new(),
+            dropped_xobjects: BTreeMap::new(),
             to_unicode: BTreeMap::new(),
             embedded: BTreeSet::new(),
         }
@@ -146,6 +150,38 @@ impl<'d> Writer<'d> {
         Ok(self)
     }
 
+    /// Make `xobject` (from `add_object`) usable as `/name Do` on page `page`. A name the page
+    /// already has is refused at `write`. Only page content: a Form's own resources are not
+    /// reachable here.
+    pub fn add_page_xobject(
+        &mut self,
+        page: usize,
+        name: &str,
+        xobject: Val,
+    ) -> Result<&mut Self, PdfError> {
+        if page >= self.doc.page_count() {
+            return Err(PdfError::page_out_of_range(page));
+        }
+        self.page_xobjects
+            .entry(page)
+            .or_default()
+            .push((name.as_bytes().to_vec(), xobject));
+        Ok(self)
+    }
+
+    /// Take the `/name` entry out of page `page`'s XObject resources, so an XObject no content
+    /// draws any more (an image whose every occurrence was cloned) is not reachable from it.
+    pub fn drop_page_xobject(&mut self, page: usize, name: &str) -> Result<&mut Self, PdfError> {
+        if page >= self.doc.page_count() {
+            return Err(PdfError::page_out_of_range(page));
+        }
+        self.dropped_xobjects
+            .entry(page)
+            .or_default()
+            .push(name.as_bytes().to_vec());
+        Ok(self)
+    }
+
     /// Use `cmap` (plain CMap text) as the ToUnicode of the source font dictionary `font`.
     pub fn set_to_unicode(&mut self, font: ObjectId, cmap: Vec<u8>) -> &mut Self {
         self.to_unicode.insert(font, cmap);
@@ -171,7 +207,11 @@ impl<'d> Writer<'d> {
             &self.spans,
             (&self.extras, &self.to_unicode),
         );
-        let pages = walk.build(&self.appended, &self.page_fonts)?;
+        let pages = walk.build(
+            &self.appended,
+            [&self.page_fonts, &self.page_xobjects],
+            &self.dropped_xobjects,
+        )?;
         let max = u64::from(self.limits.max_output_bytes);
         let over = |actual: usize| PdfError::limit("maxOutputBytes", actual as u64, max);
         let mut pdf = Pdf::new();
