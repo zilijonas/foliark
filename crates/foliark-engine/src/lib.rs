@@ -8,6 +8,7 @@ use hayro::{PixmapSettings, RenderCache, RenderSettings, render};
 pub mod interpret;
 pub mod limits;
 pub mod reader;
+pub mod writer;
 
 /// Spec §1.3: each rendered side is at most 16384 px.
 const MAX_SIDE: f64 = 16384.0;
