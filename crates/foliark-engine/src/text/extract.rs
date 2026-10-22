@@ -17,7 +17,7 @@ pub struct TextLayout {
     pub page: TextPage,
     /// Parallel to `page.clusters`: the visual line (page-wide id) and the index into
     /// `page.words` of each cluster.
-    pub(super) meta: Vec<ClusterMeta>,
+    pub(crate) meta: Vec<ClusterMeta>,
 }
 
 impl TextLayout {
@@ -30,10 +30,12 @@ impl TextLayout {
 }
 
 #[derive(Debug, Clone)]
-pub(super) struct ClusterMeta {
+pub(crate) struct ClusterMeta {
     pub line: u32,
     pub word: u32,
     pub id: ClusterId,
+    /// Display y of the glyph origin (the baseline of upright text).
+    pub baseline: f64,
 }
 
 /// Names one shown glyph of the input file, so it can be found again after a reopen: the page,
@@ -387,6 +389,7 @@ fn assemble(
                 line: w.line,
                 word: n as u32,
                 id: g.id.clone(),
+                baseline: g.origin.y,
             });
             offset += len;
             stats.unmapped_glyphs += u32::from(g.flags & UNMAPPED != 0);

@@ -5,6 +5,7 @@ use std::sync::atomic::AtomicBool;
 
 mod cache;
 mod document;
+pub mod edit;
 mod engine;
 pub mod interpret;
 pub mod limits;
