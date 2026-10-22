@@ -747,7 +747,21 @@ impl<'a> Walk<'a> {
             None => self.load(id)?,
         };
         let class = refine(class, &val, id)?;
+        // A rebuilt ToUnicode replaces the source one, which must not be copied at all: an
+        // orphaned copy would still hold the mapping of every removed code.
+        let table = self.to_unicode;
+        let rebuilt = matches!(class, C::SimpleFont | C::Type0Font | C::Type3Font)
+            .then(|| table.get(&id))
+            .flatten();
         let dict = match &val {
+            Val::Dict(e) if rebuilt.is_some() => {
+                let kept: Vec<_> = e
+                    .iter()
+                    .filter(|(k, _)| k != b"ToUnicode")
+                    .cloned()
+                    .collect();
+                Val::Dict(self.emit_dict(&kept, class, 0)?)
+            }
             Val::Dict(e) => Val::Dict(self.emit_dict(e, class, 0)?),
             other if class == C::ColorSpace => self.color_space(other, 0)?,
             other => self.emit(other, Plain, 0)?,
@@ -763,10 +777,7 @@ impl<'a> Walk<'a> {
         let mut dict = dict;
         if let Val::Dict(e) = &mut dict {
             e.extend(filter);
-            if let (Some(cmap), C::SimpleFont | C::Type0Font | C::Type3Font) =
-                (self.to_unicode.get(&id), class)
-            {
-                e.retain(|(k, _)| k != b"ToUnicode");
+            if let Some(cmap) = rebuilt {
                 e.push((b"ToUnicode".to_vec(), self.plain_stream(cmap)?));
             }
         }
