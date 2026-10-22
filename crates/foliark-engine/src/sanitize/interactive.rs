@@ -11,6 +11,7 @@
 //! the stored appearance of a valued field stale) and `XFA_UNSUPPORTED` (XFA with no widget
 //! appearance to keep). Signature values are counted by [`super::document`]; their widgets are
 //! flattened like any other.
+use super::visibility::Layers;
 use crate::export::preflight::Blocker;
 use crate::reader::{Document, object_id};
 use crate::writer::{Val, Writer};
@@ -38,6 +39,8 @@ pub struct Scan {
     pub annotations: u32,
     pub links: u32,
     pub widgets: u32,
+    /// Annotations and widgets shown by their flags that an OFF `/OC` hides: not drawn.
+    pub oc_hidden: u32,
     /// Visible non-widget annotations `annotations: remove` drops without drawing.
     pub removed_visible: u32,
     /// Refusals this input raises (empty = the interactive stage can run).
@@ -201,6 +204,7 @@ pub fn scan(doc: &Document, policy: &ExportPolicy) -> Scan {
         .and_then(|a| a.get::<bool>("NeedAppearances"))
         .unwrap_or(false);
     let xfa = acro.as_ref().is_some_and(|a| a.contains_key("XFA"));
+    let layers = Layers::read(doc.pdf().xref());
     let mut missing: BTreeSet<String> = BTreeSet::new();
     let mut missing_pages: BTreeSet<u32> = BTreeSet::new();
     for (i, page) in doc.pdf().pages().iter().enumerate() {
@@ -211,7 +215,11 @@ pub fn scan(doc: &Document, policy: &ExportPolicy) -> Scan {
             let kind = a.get::<Name<'_>>("Subtype");
             let kind = kind.as_ref().map(|n| n.as_str());
             let widget = kind == Some("Widget");
-            let shown = a.get::<u32>("F").unwrap_or(0) & (HIDDEN | NO_VIEW) == 0;
+            let flagged = a.get::<u32>("F").unwrap_or(0) & (HIDDEN | NO_VIEW) == 0;
+            // An `/OC` this build cannot evaluate refuses in `visibility::scan`.
+            let off = layers.hides(&a).unwrap_or(false);
+            out.oc_hidden += u32::from(flagged && off);
+            let shown = flagged && !off;
             let appearance = normal(&a);
             let place = appearance.as_ref().and_then(|ap| {
                 let rect = nums(a.get::<Array<'_>>("Rect"), 4)?;

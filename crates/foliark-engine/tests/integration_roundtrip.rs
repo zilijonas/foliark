@@ -4,7 +4,7 @@
 //! objects.py, fidelity.py, PyMuPDF and pypdf words). Per-feature behaviour lives in
 //! native_graphics_roundtrip.rs and native_text_roundtrip.rs; this file only proves the chain holds.
 //! One row per fixture is printed in the docs/evidence/native-roundtrip.md table format.
-use foliark_engine::sanitize::interactive;
+use foliark_engine::sanitize::{interactive, visibility};
 use foliark_engine::writer::Writer;
 use foliark_engine::{Document, RenderOptions};
 use foliark_model::{ErrorCode, ExportPolicy, ExtractOptions, Limits, PdfError};
@@ -14,15 +14,6 @@ use std::process::Command;
 /// Refused before or at write time with a typed error; there is no output to judge. The code is
 /// the contract: a fixture that starts succeeding (or fails differently) fails this gate.
 const REFUSED: &[(&str, ErrorCode)] = &[
-    // Hidden layers would turn visible once /OCProperties is gone (spec 8.2, flattening pending).
-    (
-        "hddn/optional-content-layer.pdf",
-        ErrorCode::OptionalContentUnsupported,
-    ),
-    (
-        "generated/ocg-hidden-text.pdf",
-        ErrorCode::OptionalContentUnsupported,
-    ),
     // Hostile inputs: the reader or the limits stop them.
     ("hddn/malformed-truncated.pdf", ErrorCode::RepairedPdf),
     ("hddn/malformed-xref.pdf", ErrorCode::RepairedPdf),
@@ -45,12 +36,13 @@ const ACCESSIBILITY_STRIPPED: &[&str] = &["hddn/actualtext.pdf"];
 /// (render without annotations); the oracles must still see the loss, so it is never a pass.
 const FLATTEN_PENDING: &[&str] = &["hddn/annotation-comment.pdf"];
 
-/// The writer with annotations and widgets flattened, the first stage of native export.
+/// The writer with annotations, widgets and layers flattened, the first stages of native export.
 fn flattened(doc: &Document) -> Writer<'_> {
     let mut w = Writer::new(doc.reader(), Limits::default());
     interactive::scan(doc.reader(), &ExportPolicy::default())
         .apply(&mut w)
         .unwrap();
+    visibility::scan(doc.reader()).unwrap().apply(&mut w);
     w
 }
 
@@ -288,6 +280,8 @@ fn native_round_trip_chain_holds_on_every_fixture() {
             cmd.arg("--pending");
         } else if input.windows(7).any(|w| w == b"/Annots") {
             cmd.arg("--flatten");
+        } else if input.windows(13).any(|w| w == b"/OCProperties") {
+            cmd.arg("--layers");
         }
         let run = cmd.output().unwrap();
         let stdout = String::from_utf8_lossy(&run.stdout);

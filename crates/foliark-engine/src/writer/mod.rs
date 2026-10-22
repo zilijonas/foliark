@@ -71,6 +71,7 @@ pub struct Writer<'d> {
     to_unicode: BTreeMap<ObjectId, Vec<u8>>,
     /// Registered font ids already written (`fonts::embed_registered_font`).
     embedded: BTreeSet<String>,
+    layers_resolved: bool,
 }
 
 /// Resources added per page: (resource name, object).
@@ -89,7 +90,16 @@ impl<'d> Writer<'d> {
             page_xobjects: BTreeMap::new(),
             to_unicode: BTreeMap::new(),
             embedded: BTreeSet::new(),
+            layers_resolved: false,
         }
+    }
+
+    /// The caller has flattened optional content ([`crate::sanitize::visibility`]): hidden
+    /// layers no longer make `write` refuse, and the layer entries of `/Properties` are not
+    /// copied.
+    pub fn resolve_layers(&mut self) -> &mut Self {
+        self.layers_resolved = true;
+        self
     }
 
     /// Replace every instruction of the decoded content stream `stream` that the byte `range`
@@ -191,6 +201,7 @@ impl<'d> Writer<'d> {
             &self.spans,
             (&self.extras, &self.to_unicode),
         );
+        walk.layers_resolved = self.layers_resolved;
         let pages = walk.build(&self.appended, &self.page_fonts, &self.page_xobjects)?;
         let max = u64::from(self.limits.max_output_bytes);
         let over = |actual: usize| PdfError::limit("maxOutputBytes", actual as u64, max);

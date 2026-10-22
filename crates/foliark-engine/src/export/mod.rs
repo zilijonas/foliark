@@ -3,12 +3,13 @@
 //! refusal with no bytes:
 //!
 //! 1. raster mode: `CONSENT_REQUIRED` without acknowledgment, else refused until NEW-54;
-//! 2. preflight ([`preflight`]): `FORM_APPEARANCE_MISSING` / `XFA_UNSUPPORTED`, optional-content
-//!    flattening (NEW-43), signed input policy, image erasure (NEW-34/35) and vector cutting
+//! 2. preflight ([`preflight`]): `FORM_APPEARANCE_MISSING` / `XFA_UNSUPPORTED`, unevaluable
+//!    optional content, signed input policy, image erasure (NEW-34/35) and vector cutting
 //!    (NEW-36/37) refuse by name;
 //! 3. visible annotations and all widgets drawn as Forms on their pages
-//!    ([`crate::sanitize::interactive`]), then text redaction (`redact_text`) and region fills,
-//!    through the writer, so redaction treats the flattened appearances as page content;
+//!    ([`crate::sanitize::interactive`]), hidden layers and off-page or clipped-out content
+//!    removed ([`crate::sanitize::visibility`]), then text redaction (`redact_text`) and region
+//!    fills, through the writer, so redaction treats the flattened appearances as page content;
 //! 4. sanitization: the allowlist writer plus the counts of [`crate::sanitize::document`];
 //! 5. write; 6. verify (§5.7): strict reparse, page count, no cluster meeting rule 1.
 use crate::Document;
@@ -17,7 +18,7 @@ use crate::engine::not_built;
 use crate::redaction::plan::{RedactionPlan, bounds_of, text_coverage};
 use crate::redaction::text::redact_text;
 use crate::sanitize::document::scan;
-use crate::sanitize::interactive;
+use crate::sanitize::{interactive, visibility};
 use crate::writer::Writer;
 use foliark_model::{
     Capabilities, Capability, CapabilityReason, CapabilityStatus, EditsReport, ErrorCode,
@@ -148,8 +149,8 @@ pub fn prepare(
     let reader = doc.reader();
     let removals = scan(reader)?;
     let inter = interactive::scan(reader, policy);
-    if let Some(b) =
-        preflight::document_blockers(reader, policy, &inter, removals.signatures).first()
+    let vis = visibility::scan(reader)?;
+    if let Some(b) = preflight::document_blockers(policy, &inter, &vis, removals.signatures).first()
     {
         return Err(b.error());
     }
@@ -160,6 +161,7 @@ pub fn prepare(
 
     let mut w = Writer::new(reader, limits.clone());
     inter.apply(&mut w)?;
+    vis.apply(&mut w);
     let text = redact_text(doc, &plan, &mut w)?;
     for (page, ops) in fills(doc, committed)? {
         w.append_page_content(page as usize, ops.as_bytes())?;
@@ -172,6 +174,8 @@ pub fn prepare(
     for (item, n) in [
         (SanitizedItem::Annotations, inter.annotations),
         (SanitizedItem::Widgets, inter.widgets),
+        (SanitizedItem::OcgContent, vis.hidden_ops + inter.oc_hidden),
+        (SanitizedItem::OffPage, vis.off_page_ops),
     ] {
         if n > 0 {
             removed.insert(item, n);
@@ -195,6 +199,7 @@ pub fn prepare(
     add(LossCode::AnnotationsFlattened, flat_annots);
     add(LossCode::AnnotationsRemoved, inter.removed_visible);
     add(LossCode::FormsFlattened, flat_widgets);
+    add(LossCode::LayersFlattened, vis.layers);
     let mut inventory: Vec<String> = text
         .fonts_with_glyph_inventory
         .into_iter()
@@ -217,7 +222,7 @@ pub fn prepare(
         flattened: Flattened {
             annotations: flat_annots,
             widgets: flat_widgets,
-            ocg_layers: 0,
+            ocg_layers: vis.layers,
         },
         redaction,
         edits: EditsReport {
@@ -258,8 +263,13 @@ pub(crate) fn capabilities(
     use CapabilityStatus::{Supported, Unknown, Unsupported};
     let reader = doc.reader();
     let policy = ExportPolicy::default();
+    let layers = if visibility::present(reader) {
+        visibility::scan(reader)?
+    } else {
+        visibility::Scan::default()
+    };
     let mut blockers =
-        preflight::document_blockers(reader, &policy, &interactive::scan(reader, &policy), 0);
+        preflight::document_blockers(&policy, &interactive::scan(reader, &policy), &layers, 0);
     let redact = if committed.redactions.is_empty() {
         capability(Unknown, &[])
     } else {

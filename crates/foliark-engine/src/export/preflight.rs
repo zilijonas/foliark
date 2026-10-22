@@ -1,16 +1,16 @@
 //! Export preflight (spec §4, §5, §11): decide, before any byte is written, which pipeline
-//! stages this build cannot run for a revision. A stage that is not built (optional-content flattening NEW-43, image erasure NEW-34/35, vector
-//! subtraction NEW-36/37) is a typed refusal that names the feature and the pages, never a
-//! silent drop. Annotation and widget flattening runs ([`crate::sanitize::interactive`]); its
-//! refusals (`FORM_APPEARANCE_MISSING`, `XFA_UNSUPPORTED`) join the document blockers. Also the stable policy hash a plan is bound to.
-use crate::reader::Document;
+//! stages this build cannot run for a revision. A stage that is not built (image erasure
+//! NEW-34/35, vector subtraction NEW-36/37) is a typed refusal that names the feature and the
+//! pages, never a silent drop. Annotation and widget flattening ([`crate::sanitize::interactive`])
+//! and optional-content flattening ([`crate::sanitize::visibility`]) run; their refusals
+//! (`FORM_APPEARANCE_MISSING`, `XFA_UNSUPPORTED`, `OPTIONAL_CONTENT_UNSUPPORTED`) join the
+//! document blockers. Also the stable policy hash a plan is bound to.
 use crate::redaction::plan::{PagePlan, RedactionPlan};
-use crate::sanitize::interactive::Scan;
+use crate::sanitize::{interactive, visibility};
 use foliark_model::{
     ErrorCode, ErrorDetails, ExportMode, ExportPolicy, InvisibleTextPolicy, PdfError,
     SignedInputPolicy,
 };
-use hayro::hayro_syntax::object::Dict;
 
 /// One reason a stage cannot run. `InvalidArgument` + `feature` is the engine's convention for
 /// an op the spec defines but this build does not implement.
@@ -46,17 +46,12 @@ impl Blocker {
     }
 }
 
-fn catalog<'a>(doc: &'a Document) -> Option<Dict<'a>> {
-    let x = doc.pdf().xref();
-    x.get::<Dict<'_>>(x.root_id())
-}
-
 /// Stages of the document that the working copy needs and this build cannot run, in pipeline
 /// order (spec §5): signed input policy, form and annotation flattening, optional content.
 pub fn document_blockers(
-    doc: &Document,
     policy: &ExportPolicy,
-    interactive: &Scan,
+    interactive: &interactive::Scan,
+    layers: &visibility::Scan,
     signatures: u32,
 ) -> Vec<Blocker> {
     let mut out = Vec::new();
@@ -69,15 +64,7 @@ pub fn document_blockers(
         });
     }
     out.extend(interactive.blockers.iter().cloned());
-    let cat = catalog(doc);
-    if cat.is_some_and(|c| c.contains_key("OCProperties")) {
-        out.push(Blocker {
-            code: ErrorCode::OptionalContentUnsupported,
-            feature: "flattenOptionalContent",
-            pages: Vec::new(),
-            fields: Vec::new(),
-        });
-    }
+    out.extend(layers.blockers.iter().cloned());
     if policy.invisible_text == InvisibleTextPolicy::Remove {
         out.push(Blocker::not_built("invisibleTextRemove", Vec::new()));
     }

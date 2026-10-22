@@ -85,7 +85,10 @@ describe("text redaction and sanitized native export", () => {
 
   it("an unsupported stage refuses with a typed code and the document stays usable", async () => {
     const f = await client();
-    const doc = await f.open(fixture("generated/ocg-hidden-text.pdf"));
+    // Layers are flattened; a layer name the page's /Properties does not define cannot be (same length, xref stays valid).
+    const bytes = fixture("generated/ocg-hidden-text.pdf");
+    bytes[Buffer.from(bytes).indexOf("/oc2 7 0 R") + 3] = 0x58;
+    const doc = await f.open(bytes);
     const caps = await doc.capabilities();
     expect([caps.exportNative.status, caps.exportRaster.status]).toEqual(["unsupported", "unknown"]);
     try {
