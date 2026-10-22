@@ -6,10 +6,18 @@
 //! its ink really meets one, replaced by `ink minus regions` from `i_overlay` on a 1/1024 pt grid.
 //! Hard caps are checked before any `i_overlay` call: its infallible entry points panic on bad
 //! input and the release profile aborts on panic.
+//!
+//! A stroke (NEW-87) is first expanded to its outline by kurbo, in the path's own space with its own
+//! width, caps, joins, miter limit and dashes (exactly what the renderer draws, so a non-uniform
+//! CTM stays exact), mapped to display space and cut like a non-zero fill.
 use super::plan::covered;
+use crate::interpret::{StrokeProps, widest_axis};
 use crate::limits::Budget;
 use foliark_model::PdfError;
-use hayro::vello_cpu::peniko::kurbo::{Affine, BezPath, PathEl, Point, Shape, flatten};
+use hayro::vello_cpu::peniko::kurbo::{
+    Affine, BezPath, Cap, ParamCurveArclen, PathEl, Point, Shape, Stroke, StrokeOpts, flatten,
+    stroke,
+};
 use i_overlay::core::fill_rule::FillRule;
 use i_overlay::core::overlay_rule::OverlayRule;
 use i_overlay::float::scale::FixedScaleFloatOverlay;
@@ -26,6 +34,8 @@ pub(super) const SCALE: f64 = 1024.0;
 pub(super) const MAX_COORD_PT: f64 = 131_072.0;
 /// Flattened vertices of one group.
 pub(super) const MAX_VERTICES: usize = 250_000;
+/// Dash segments of one stroked subpath, estimated before kurbo runs.
+pub(super) const MAX_DASHES: usize = 100_000;
 
 pub(super) type Contour = Vec<[f64; 2]>;
 type Box4 = [f64; 4];
@@ -231,6 +241,115 @@ pub(super) fn cut(
     } else {
         Cut::Pieces(pieces)
     })
+}
+
+/// A stroked subpath as kurbo draws it: `user` (user space) under the CTM `ctm`, mapped to display
+/// space by `u2d`. `Ok(None)` when the ink cannot reach any of `boxes` (a conservative reach,
+/// no expansion done); otherwise its display-space outline, to be filled non-zero.
+fn stroke_ink(
+    user: &BezPath,
+    ctm: Affine,
+    u2d: Affine,
+    props: &StrokeProps,
+    boxes: &[Box4],
+    budget: &mut Budget,
+) -> Result<Option<BezPath>, PdfError> {
+    let to_display = u2d * ctm;
+    let scale = widest_axis(to_display);
+    let r = (u2d * user.clone()).bounding_box();
+    let b = [r.x0, r.y0, r.x1, r.y1];
+    if !b.iter().all(|v| v.is_finite() && v.abs() <= MAX_COORD_PT) || !scale.is_finite() {
+        return Err(too_big("vectorCoordinate", 0, MAX_COORD_PT as usize));
+    }
+    // Half the width times the miter limit or the square-cap corner, along the widest axis.
+    let cap = if matches!(props.line_cap, Cap::Square) {
+        std::f64::consts::SQRT_2
+    } else {
+        1.0
+    };
+    let width = f64::from(props.line_width).max(0.01 / scale.max(1e-9));
+    let g = width * scale * 0.5 * f64::from(props.miter_limit).max(1.0).max(cap);
+    let hit = |r: &&Box4| r[0] < b[2] + g && b[0] - g < r[2] && r[1] < b[3] + g && b[1] - g < r[3];
+    if !boxes.iter().any(|r| hit(&r)) {
+        return Ok(None);
+    }
+    let det = ctm.determinant().abs();
+    if scale <= 1e-9 || det <= 1e-12 * scale * scale {
+        // A singular CTM collapses the ink to a point or a segment: no area, nothing to keep
+        // near a region (the hairline the renderer widens is not worth a cut).
+        return Ok(Some(BezPath::new()));
+    }
+    let dashes = if props.dash_array.iter().all(|d| d.is_finite() && *d >= 0.0)
+        && props.dash_array.iter().sum::<f32>() > 1e-6
+        && props.dash_offset.is_finite()
+    {
+        props.dash_array.iter().map(|d| f64::from(*d)).collect()
+    } else {
+        // An unusable pattern: the solid stroke covers every dash, so nothing is kept wrongly.
+        Vec::new()
+    };
+    let local = ctm.inverse() * user.clone();
+    if !dashes.is_empty() {
+        let period: f64 =
+            dashes.iter().sum::<f64>() * if dashes.len() % 2 == 1 { 2.0 } else { 1.0 };
+        let len: f64 = local.segments().map(|s| s.arclen(0.1)).sum();
+        let est = len / period * dashes.len() as f64;
+        if !est.is_finite() || est > MAX_DASHES as f64 {
+            return Err(too_big("vectorDashes", est as usize, MAX_DASHES));
+        }
+    }
+    budget.charge(local.elements().len() as u64)?;
+    let style = Stroke {
+        width,
+        join: props.line_join,
+        miter_limit: f64::from(props.miter_limit),
+        start_cap: props.line_cap,
+        end_cap: props.line_cap,
+        dash_pattern: dashes.into_iter().collect(),
+        dash_offset: f64::from(props.dash_offset),
+    };
+    let ink = stroke(
+        local.elements().iter().copied(),
+        &style,
+        &StrokeOpts::default(),
+        FLATNESS_PT / scale,
+    );
+    budget.charge(ink.elements().len() as u64)?;
+    Ok(Some(to_display * ink))
+}
+
+/// The stroke of one subpath minus the regions (non-zero ink). `Pieces` are stroke OUTLINES,
+/// to be filled in the stroking colour.
+pub(super) fn cut_stroke(
+    user: &BezPath,
+    ctm: Affine,
+    u2d: Affine,
+    props: &StrokeProps,
+    regions: &Regions,
+    budget: &mut Budget,
+) -> Result<Cut, PdfError> {
+    match stroke_ink(user, ctm, u2d, props, &regions.0, budget)? {
+        None => Ok(Cut::Untouched),
+        // Zero-area ink that came within reach of a region: removed, as a fill of no area is.
+        Some(ink) if ink.elements().is_empty() => Ok(Cut::Removed),
+        Some(ink) => cut(&ink, false, false, regions, budget),
+    }
+}
+
+/// [`reaches`] for the stroke of one subpath: the written page's own stroke, no guard.
+pub(super) fn stroke_reaches(
+    user: &BezPath,
+    ctm: Affine,
+    u2d: Affine,
+    props: &StrokeProps,
+    boxes: &[Box4],
+    budget: &mut Budget,
+) -> Result<bool, PdfError> {
+    match stroke_ink(user, ctm, u2d, props, boxes, budget)? {
+        None => Ok(false),
+        Some(ink) if ink.elements().is_empty() => Ok(false),
+        Some(ink) => reaches(&ink, false, false, boxes, budget),
+    }
 }
 
 /// Whether `group` (display space) still has ink (for a clip: outline) in any of `boxes`, as

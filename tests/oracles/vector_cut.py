@@ -8,6 +8,8 @@ and checks, with no clip trusted to hide anything:
   VERTEX   a painted fill polygon or a clip outline has a vertex or an edge inside a region grown by -tol
   CONTAINED a region lies wholly inside a painted fill (no edge reaches it, the fill rule says inked)
   UNCLIPPED rendering the page with every W / W* removed still shows ink inside a region
+  STROKE   (NEW-87) a solid stroke's centreline passes within its own half width (smallest axis of the CTM) of a region:
+           a lower bound of its ink, so never a false alarm; miters, caps and dashes are left to UNCLIPPED
 Curves are sampled at 32 steps. Exit 0 iff no finding. Importable: check(path, spec) -> [findings "CODE: detail"].
 """
 import io
@@ -20,6 +22,7 @@ import pikepdf
 from objects import unrot
 
 FILL = {"f", "F", "f*", "B", "B*", "b", "b*"}
+STROKE = {"S", "s", "B", "B*", "b", "b*"}
 NUMERIC = {"m", "l", "c", "v", "y", "re", "cm"}
 
 
@@ -43,18 +46,29 @@ def bez(p0, p1, p2, p3):
     return out
 
 
+def smallest_axis(m):
+    p, q, r = m[0] ** 2 + m[1] ** 2, m[2] ** 2 + m[3] ** 2, m[0] * m[2] + m[1] * m[3]
+    return max((p + q) / 2 - (((p - q) / 2) ** 2 + r * r) ** .5, 0) ** .5
+
+
 def walk(doc, stream_obj, resources, ctm, found, depth=0):
-    """Collect (kind, rule, polygons in user space) for every painted fill and every clip outline."""
+    """Collect (kind, rule, polygons in user space) for every painted fill and every clip outline; a stroke is
+    ("stroke", (half width, dashed), polylines)."""
     if depth > 8:
         return
     q, subs, cur, start, clip = [], [], None, None, None
+    lw, dashed = 1.0, False
     for ins in pikepdf.parse_content_stream(stream_obj):
         op = str(ins.operator)
         a = [float(x) for x in ins.operands] if op in NUMERIC else list(ins.operands)
         if op == "q":
-            q.append(ctm)
+            q.append((ctm, lw, dashed))
         elif op == "Q":
-            ctm = q.pop() if q else ctm
+            ctm, lw, dashed = q.pop() if q else (ctm, lw, dashed)
+        elif op == "w":
+            lw = float(a[0])
+        elif op == "d":
+            dashed = sum(float(x) for x in a[0]) > 0
         elif op == "cm":
             ctm = mul(tuple(a), ctm)
         elif op == "m":
@@ -70,13 +84,18 @@ def walk(doc, stream_obj, resources, ctm, found, depth=0):
             cur = subs[-1][-1]
         elif op == "re":
             x, y, w, h = a
-            subs.append([app(ctm, x, y), app(ctm, x + w, y), app(ctm, x + w, y + h), app(ctm, x, y + h)])
+            subs.append([app(ctm, x, y), app(ctm, x + w, y), app(ctm, x + w, y + h), app(ctm, x, y + h), app(ctm, x, y)])
             cur = subs[-1][0]
         elif op == "h" and subs:
             cur = subs[-1][0]
+            subs[-1].append(cur)
         elif op in ("W", "W*"):
             clip = "even" if op == "W*" else "nonzero"
-        elif op in FILL or op in ("S", "s", "n"):
+        elif op in FILL or op in STROKE or op == "n":
+            if op in ("s", "b", "b*") and subs:
+                subs[-1].append(subs[-1][0])
+            if op in STROKE:
+                found.append(("stroke", (lw * smallest_axis(ctm) / 2, dashed), [list(s) for s in subs]))
             if clip:
                 found.append(("clip", clip, [list(s) for s in subs]))
             if op in FILL:
@@ -106,6 +125,22 @@ def seg_hits(a, b, r):
     return True
 
 
+def seg_rect_dist(a, b, r):
+    """Distance from segment a-b to the box r (0 when they meet)."""
+    if seg_hits(a, b, r):
+        return 0.0
+
+    def to_box(p):
+        return ((max(r[0] - p[0], 0, p[0] - r[2])) ** 2 + (max(r[1] - p[1], 0, p[1] - r[3])) ** 2) ** .5
+
+    def to_seg(p):
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        t = 0.0 if dx == dy == 0 else max(0.0, min(1.0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / (dx * dx + dy * dy)))
+        return ((p[0] - a[0] - t * dx) ** 2 + (p[1] - a[1] - t * dy) ** 2) ** .5
+
+    return min([to_box(a), to_box(b)] + [to_seg(c) for c in ((r[0], r[1]), (r[2], r[1]), (r[2], r[3]), (r[0], r[3]))])
+
+
 def winding(polys, p):
     w = 0
     for c in polys:
@@ -132,7 +167,7 @@ def strip_clips(path):
         stream.write(pikepdf.unparse_content_stream(ins))
 
     def forms(res):
-        for xo in (res or {}).get("/XObject", {}).values():
+        for _, xo in (res or {}).get("/XObject", {}).items():
             if xo.get("/Subtype") == "/Form":
                 fix(xo)
                 forms(xo.get("/Resources"))
@@ -165,6 +200,12 @@ def check(path, spec):
         tm = pg.transformation_matrix
         for kind, rule, subs in found:
             polys = [[tuple(fitz.Point(x, y) * tm) for x, y in s] for s in subs]
+            if kind == "stroke":
+                hw, dashed = rule
+                for ri, r in enumerate(core):
+                    if not dashed and any(seg_rect_dist(c[i], c[i + 1], r) < hw - tol for c in polys for i in range(len(c) - 1)):
+                        F.append("STROKE: page %d stroke centreline is within its half width of region %d" % (pno, ri))
+                continue
             for ri, r in enumerate(core):
                 hit = any(r[0] < p[0] < r[2] and r[1] < p[1] < r[3] for c in polys for p in c) or any(
                     seg_hits(a, c[(i + 1) % len(c)], r) for c in polys for i, a in enumerate(c) if len(c) > 1)

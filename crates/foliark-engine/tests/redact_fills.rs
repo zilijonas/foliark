@@ -24,10 +24,6 @@ fn reg(content: &str, rotate: i32, boxes: &[[f64; 4]]) -> (Vec<u8>, Vec<foliark_
 fn cut(name: &str, content: &str, rotate: i32, boxes: &[[f64; 4]]) -> Run {
     let (input, regions) = reg(content, rotate, boxes);
     let r = run(name, input, &regions);
-    assert!(
-        r.report.collateral.is_empty(),
-        "{name}: no collateral exists"
-    );
     r.assert_cut_is_precise();
     r.assert_rest_unchanged_tight();
     r
@@ -269,7 +265,6 @@ fn a_singular_transform_is_removed_not_cut() {
     let (input, regions) = reg(content, 0, &[[120.0, 290.0, 160.0, 310.0]]);
     let r = run("singular", input, &regions);
     assert_eq!((r.report.paths_cut, r.report.subpaths_removed), (0, 1));
-    assert!(r.report.collateral.is_empty());
     assert_eq!(r.output_paths(), (0, 1));
 }
 

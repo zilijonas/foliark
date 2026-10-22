@@ -10,14 +10,20 @@
 //!   original outline never survives as a clip. A clip wholly inside the regions becomes an
 //!   empty clip: nothing visible outside the regions was under it. A painted path's clip is
 //!   written after its paint, as the operators order it.
-//! - A stroked subpath still goes whole (`Inside`, or collateral when it crosses): the stroke
-//!   cut is a later task. Closing paint operators (`s`, `b`, `b*`) are rewritten as their open
-//!   forms with an explicit `h` on the last kept subpath, so dropping one subpath never moves a
-//!   closure. Clip-only paths, `sh` and everything not planned are not touched.
+//! - A stroke is cut per subpath (ADR 0009, NEW-87): its kurbo outline minus the regions replaces
+//!   the subpath as a filled outline (`q <stroking colour as fill> m l ... h f Q`); subpaths whose
+//!   ink clears every region keep their operators and are painted by `S`. In `B`/`B*` the fill is
+//!   cut as a fill and painted `f`/`f*` first. A cut stroke whose paint a fill cannot reproduce
+//!   (colour inherited from outside the stream, a pattern, `CA` != `ca`, alpha under 1 in a `B`)
+//!   is `REDACT_VECTOR_UNSUPPORTED {feature, pages}`, raised before the writer is touched.
+//!   Closing paint operators (`s`, `b`, `b*`) are rewritten as their open forms with an explicit
+//!   `h` on the last kept subpath, so dropping one subpath never moves a closure. Clip-only paths,
+//!   `sh` and everything not planned are not touched.
 //!
 //! Limits, all typed or reported, none silent:
 //! - A group over the vertex or coordinate caps is `LIMIT_EXCEEDED` (`vectorVertices`,
-//!   `vectorCoordinate`) before any boolean runs; every boolean is charged to the work budget.
+//!   `vectorCoordinate`, `vectorDashes`) before any boolean runs; every boolean is charged to the
+//!   work budget.
 //! - A subpath list the stream parser and the model disagree about (a `l` after `h` without
 //!   `m`, say) is `INTERNAL`; operators other than path construction inside a path are
 //!   `MALFORMED_PDF`. Both are raised before the writer is touched.
@@ -27,18 +33,16 @@
 //!   clone of its occurrence (`forms`); the other occurrences keep the original.
 //! - A clip the interpreter drops as covering its whole bounding box (`Dummy`) has no model
 //!   item and stays: it clips nothing, so it holds no geometry.
-use super::forms::Targets;
+use super::forms::{Targets, content_ids};
 use super::geometry::{self, Cut, Regions};
-use super::plan::{PlannedVector, RedactionPlan, VectorClass, subpaths};
+use super::plan::{PlannedVector, RedactionPlan, VectorClass, VectorKind, subpaths};
 use super::text::{at, decode};
 use crate::Document;
 use crate::interpret::{DiagnosticKind, ItemKind, PathItem, SemanticPage};
 use crate::limits::{self, Budget};
 use crate::reader::object_id;
 use crate::writer::Writer;
-use foliark_model::{
-    Collateral, ErrorCode, ErrorDetails, InstancePath, ObjectId, PdfError, Rect, SourceLoc,
-};
+use foliark_model::{ErrorCode, ErrorDetails, InstancePath, ObjectId, PdfError, Rect, SourceLoc};
 use hayro::hayro_syntax::content::UntypedIter;
 use hayro::hayro_syntax::object::{Dict, Name, Object, Stream};
 use hayro::vello_cpu::peniko::kurbo::{Affine, BezPath, PathEl, Point, Shape};
@@ -48,16 +52,15 @@ use std::ops::Range;
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct VectorReport {
-    /// Painted paths whose ink is gone, plus stroked subpaths dropped whole.
+    /// Planned fills, strokes and clip outlines whose ink is gone.
     pub subpaths_removed: u32,
-    /// Painted paths and clip outlines replaced by their difference with the regions.
+    /// Planned fills, strokes and clip outlines replaced by their difference with the regions.
     pub paths_cut: u32,
-    /// Of `paths_cut`, those that had curves flattened (`VECTOR_CUT_APPROXIMATED`).
+    /// Of `paths_cut`, those that had curves flattened or a stroke turned into a fill
+    /// (`VECTOR_CUT_APPROXIMATED`).
     pub approximated: u32,
     /// Planned entries whose geometry turned out clear of every region (left byte for byte).
     pub untouched: u32,
-    /// Stroked subpaths removed although they only crossed a region (§5.4c), with their bounds.
-    pub collateral: Vec<Collateral>,
     pub operators_rewritten: u32,
 }
 
@@ -74,6 +77,36 @@ struct Sub {
     implicit_h: bool,
 }
 
+/// The stroking colour in force within one stream, as the operators that set the fill colour the
+/// same way (`G` to `g`, `CS` to `cs`, ...). A stream that never sets one inherits it.
+#[derive(Clone, Default)]
+struct Ink {
+    cs: Option<Vec<u8>>,
+    color: Option<Vec<u8>>,
+    /// Set by `G`, `RG` or `K`, which carry their own colour space.
+    device: bool,
+    /// `SCN` named a pattern.
+    pattern: bool,
+}
+
+impl Ink {
+    fn fill_ops(&self) -> Option<Vec<u8>> {
+        match (&self.cs, &self.color) {
+            (_, Some(c)) if self.device => Some(c.clone()),
+            (Some(cs), c) => Some([cs.as_slice(), c.as_deref().unwrap_or_default()].concat()),
+            _ => None,
+        }
+    }
+}
+
+/// The instruction at `span` with its operator in lower case.
+fn mirror(data: &[u8], span: &Range<usize>, op: &[u8]) -> Vec<u8> {
+    let mut v = data[span.start..span.end - op.len()].to_vec();
+    v.extend(op.to_ascii_lowercase());
+    v.push(b'\n');
+    v
+}
+
 /// One painting operator with the path it paints.
 #[derive(Default)]
 struct Painted {
@@ -88,6 +121,7 @@ struct Painted {
     subs: Vec<Sub>,
     /// Tiling pattern names in force for fill and stroke.
     patterns: [Option<String>; 2],
+    ink: Ink,
     stray: bool,
 }
 
@@ -100,17 +134,25 @@ fn numbers(o: &[&Object<'_>]) -> Vec<f64> {
         .collect()
 }
 
-/// Every painting operator of `data` whose end offset is in `wanted`.
+/// Every painting operator of `data` whose end offset is in `wanted`. `opener`: `data` is the first
+/// content stream of a page.
 fn scan(
     data: &[u8],
     wanted: &BTreeSet<u32>,
+    opener: bool,
     budget: &mut Budget,
 ) -> Result<HashMap<u32, Painted>, PdfError> {
     let mut out = HashMap::new();
     let (mut subs, mut first, mut clip_end, mut stray) = (Vec::<Sub>::new(), None, None, false);
     let mut clip_even_odd = false;
     let mut patterns: [Option<String>; 2] = [None, None];
-    let mut saved: Vec<[Option<String>; 2]> = Vec::new();
+    // The first content stream of a page starts from the initial state: stroking colour black.
+    let mut ink = Ink {
+        color: opener.then(|| b"0 g\n".to_vec()),
+        device: opener,
+        ..Ink::default()
+    };
+    let mut saved: Vec<([Option<String>; 2], Ink)> = Vec::new();
     let mut it = UntypedIter::new(data);
     while let Some((ins, span)) = it.next_with_span() {
         budget.charge(1)?;
@@ -174,23 +216,43 @@ fn scan(
                             },
                             subs: std::mem::take(&mut subs),
                             patterns: patterns.clone(),
+                            ink: ink.clone(),
                             stray,
                         },
                     );
                 }
                 (subs, first, clip_end, stray) = (Vec::new(), None, None, false);
             }
-            b"q" => saved.push(patterns.clone()),
+            b"q" => saved.push((patterns.clone(), ink.clone())),
             b"Q" => {
-                if let Some(p) = saved.pop() {
-                    patterns = p;
+                if let Some((p, i)) = saved.pop() {
+                    (patterns, ink) = (p, i);
                 }
+            }
+            op @ (b"G" | b"RG" | b"K" | b"CS") => {
+                let text = mirror(data, &span, op);
+                ink = if op == b"CS" {
+                    Ink {
+                        cs: Some(text),
+                        ..Ink::default()
+                    }
+                } else {
+                    Ink {
+                        color: Some(text),
+                        device: true,
+                        ..Ink::default()
+                    }
+                };
             }
             op @ (b"scn" | b"sc" | b"SCN" | b"SC") => {
                 let name = match operands.last() {
                     Some(Object::Name(n)) => Some(n.as_str().to_owned()),
                     _ => None,
                 };
+                if op[0] == b'S' {
+                    ink.color = Some(mirror(data, &span, op));
+                    (ink.device, ink.pattern) = (false, name.is_some());
+                }
                 patterns[usize::from(op[0] == b'S')] = name;
             }
             // Anything else inside a path would be swallowed by the span replacement.
@@ -225,17 +287,27 @@ fn vertices(sub: &BezPath) -> Vec<[f64; 2]> {
         .collect()
 }
 
-/// What a painted path (or clip outline) becomes, per group of subpaths.
+/// Cut per group, with each subpath's group.
+type Cuts = Option<(Vec<usize>, Vec<Cut>)>;
+
+/// What a painted path (or clip outline) becomes: the fill part per group of subpaths, the
+/// stroke part per subpath, the clip per group.
+#[derive(Default)]
 struct Decided {
-    /// Cut per group of subpaths, for the paint and for the clip, with each subpath's group.
-    ink: Option<(Vec<usize>, Vec<Cut>)>,
-    clip: Option<(Vec<usize>, Vec<Cut>)>,
+    ink: Cuts,
+    stroke: Cuts,
+    clip: Cuts,
 }
 
 impl Decided {
-    fn changed(cuts: &Option<(Vec<usize>, Vec<Cut>)>) -> bool {
+    fn changed(cuts: &Cuts) -> bool {
         cuts.iter()
             .any(|(_, c)| c.iter().any(|c| !matches!(c, Cut::Untouched)))
+    }
+
+    fn pieces(cuts: &Cuts) -> bool {
+        cuts.iter()
+            .any(|(_, c)| c.iter().any(|c| matches!(c, Cut::Pieces(_))))
     }
 }
 
@@ -328,21 +400,76 @@ fn emit(
     Ok(out)
 }
 
-/// The operators that replace the span of `p`.
+/// The stroke of `p` after `cuts` (one per subpath): subpaths clear of every region keep their
+/// operators and are painted by `S`; the rest are filled outlines in the stroking colour,
+/// inside `q ... Q` so later content keeps its fill colour.
+fn stroke_part(
+    data: &[u8],
+    p: &Painted,
+    cuts: &[Cut],
+    back: Option<Affine>,
+    paint: Option<&[u8]>,
+) -> Result<Vec<u8>, PdfError> {
+    let (mut kept, mut pieces) = (Vec::new(), Vec::new());
+    for (sub, cut) in p.subs.iter().zip(cuts) {
+        match cut {
+            Cut::Untouched => {
+                for r in &sub.ops {
+                    kept.extend_from_slice(&data[r.clone()]);
+                    kept.push(b'\n');
+                }
+                if sub.implicit_h {
+                    kept.extend_from_slice(b"h\n");
+                }
+            }
+            Cut::Pieces(c) => pieces.extend(c.iter().cloned()),
+            Cut::Removed => {}
+        }
+    }
+    let mut out = Vec::new();
+    if !kept.is_empty() {
+        out.extend_from_slice(&kept);
+        out.extend_from_slice(b"S\n");
+    }
+    if !pieces.is_empty() {
+        let internal = || PdfError::new(ErrorCode::Internal);
+        out.extend_from_slice(b"q\n");
+        out.extend_from_slice(paint.ok_or_else(internal)?);
+        out.extend_from_slice(contours(&pieces, back.ok_or_else(internal)?)?.as_bytes());
+        out.extend_from_slice(b"f\nQ\n");
+    }
+    Ok(out)
+}
+
+/// The operators that replace the span of `p`. `back` maps display space into the stream's space
+/// for the fill and clip pieces, `stroke_back` for the stroke's, painted with `paint`.
 fn rewrite(
     data: &[u8],
     p: &Painted,
     d: &Decided,
     back: Option<Affine>,
+    stroke_back: Option<Affine>,
+    paint: Option<&[u8]>,
 ) -> Result<Vec<u8>, PdfError> {
     let mut out = Vec::new();
+    // A `B` whose fill or stroke changed is written as its two halves, fill first.
+    let split = d.stroke.is_some() && (Decided::changed(&d.ink) || Decided::changed(&d.stroke));
     if let Some((of, ink)) = &d.ink {
         let body = emit(data, p, of, ink, back, true)?;
         if !body.is_empty() {
             out.extend_from_slice(&body);
-            out.extend_from_slice(p.op);
+            out.extend_from_slice(match (split, p.op) {
+                (true, b"B*") => b"f*",
+                (true, _) => b"f",
+                (false, op) => op,
+            });
             out.push(b'\n');
         }
+    }
+    if let Some((_, cuts)) = &d.stroke
+        && (split || p.op == b"S")
+    {
+        out.extend_from_slice(&stroke_part(data, p, cuts, stroke_back, paint)?);
     }
     if let (Some(_), Some((of, clip))) = (p.clip_end, &d.clip) {
         // The clip outline is geometry: cut like the ink. Nothing left clips everything (a
@@ -418,7 +545,7 @@ fn cell_is_unsupported(
 
 /// Spec §5.7 on a written page: does a planned filled path or clip outline (`after`, built on the
 /// output against the regions shrunk by a slack) still have ink or outline in a region?
-/// `exempt` is the redaction's own opaque fill. Stroked entries are not judged here.
+/// `exempt` is the redaction's own opaque fill.
 pub fn page_leaks(
     doc: &Document,
     page: &super::plan::PagePlan,
@@ -431,9 +558,25 @@ pub fn page_leaks(
     let mut budget = Budget::new(doc.reader().limits());
     for v in page.vectors.iter().filter(|v| v.class == VectorClass::Cut) {
         let item = index
-            .get(&(v.loc, v.path.clone()))
+            .get(&(v.loc, v.path.clone(), v.kind))
             .ok_or_else(|| PdfError::at(ErrorCode::Internal, v.loc.stream))?;
         if exempt(&v.bounds) {
+            continue;
+        }
+        if let (VectorKind::Stroke, Some(props)) = (v.kind, &item.stroke) {
+            for sub in subpaths(&item.geometry) {
+                let hit = geometry::stroke_reaches(
+                    &sub,
+                    item.ctm,
+                    to_display,
+                    props,
+                    &boxes,
+                    &mut budget,
+                )?;
+                if hit {
+                    return Ok(true);
+                }
+            }
             continue;
         }
         let (_, paths) = grouped(
@@ -452,14 +595,22 @@ pub fn page_leaks(
 
 // ---- entry point ------------------------------------------------------------------------------
 
-type Index<'m> = HashMap<(SourceLoc, InstancePath), &'m PathItem>;
+/// The model's path items by operator, instance and what they paint (`B` is a fill and a stroke).
+type Index<'m> = HashMap<(SourceLoc, InstancePath, VectorKind), &'m PathItem>;
 
 fn path_items(model: &SemanticPage) -> Index<'_> {
     model
         .items
         .iter()
         .filter_map(|i| match &i.kind {
-            ItemKind::Path(p) => Some(((i.loc, i.path.clone()), p)),
+            ItemKind::Path(p) => {
+                let kind = match (p.clip_only, p.stroke.is_some()) {
+                    (true, _) => VectorKind::Clip,
+                    (_, true) => VectorKind::Stroke,
+                    _ => VectorKind::Fill,
+                };
+                Some(((i.loc, i.path.clone(), kind), p))
+            }
             _ => None,
         })
         .collect()
@@ -530,12 +681,16 @@ pub fn redact_vectors(
         models.insert(page.page_index, model);
     }
 
+    let mut openers: HashSet<ObjectId> = HashSet::new();
+    for page in &plan.pages {
+        openers.extend(content_ids(doc, page.page_index as usize)?.first().copied());
+    }
     let mut streams: HashMap<ObjectId, Vec<u8>> = HashMap::new();
     let mut painted: HashMap<(ObjectId, u32), Painted> = HashMap::new();
     for (stream, ends) in &wanted {
         let data = decode(doc, *stream)?;
         budget.charge_bytes(data.len())?;
-        for (end, p) in scan(&data, ends, &mut budget)? {
+        for (end, p) in scan(&data, ends, openers.contains(stream), &mut budget)? {
             if p.stray {
                 return Err(PdfError::at(ErrorCode::MalformedPdf, *stream));
             }
@@ -582,6 +737,8 @@ pub fn redact_vectors(
 
     let mut report = VectorReport::default();
     let mut rewrites = Vec::new();
+    // Stroke paint a fill cannot reproduce: feature -> pages.
+    let mut refused: BTreeMap<&str, BTreeSet<u32>> = BTreeMap::new();
     for page in &plan.pages {
         let Some(model) = models.get(&page.page_index) else {
             continue;
@@ -599,9 +756,8 @@ pub fn redact_vectors(
         }
         for ((stream, _, end), group) in by_op {
             let internal = || PdfError::at(ErrorCode::Internal, stream);
-            let item = index
-                .get(&(group[0].loc, group[0].path.clone()))
-                .ok_or_else(internal)?;
+            let key = |v: &PlannedVector| (v.loc, v.path.clone(), v.kind);
+            let item = index.get(&key(group[0])).ok_or_else(internal)?;
             let Some(p) = painted.get(&(stream, end)) else {
                 if item.clip_only {
                     report.untouched += group.len() as u32;
@@ -614,31 +770,13 @@ pub fn redact_vectors(
                 return Err(internal());
             }
             let first_path = group[0].path.clone();
-            let stroked = item.stroke.is_some();
-            let mut d = Decided {
-                ink: None,
-                clip: None,
-            };
-            let mut removed_here = 0;
-            if stroked {
-                // Stroked subpaths still go whole.
-                let mut ink = vec![Cut::Untouched; display.len()];
-                for v in &group {
-                    *ink.get_mut(v.subpath as usize).ok_or_else(internal)? = Cut::Removed;
-                    removed_here += 1;
-                    if v.class != VectorClass::Inside {
-                        report.collateral.push(Collateral {
-                            page_index: page.page_index,
-                            bounds: v.bounds,
-                        });
-                    }
-                }
-                d.ink = Some(((0..display.len()).collect(), ink));
-            }
-            let even = p.op == b"f*";
-            if !stroked || p.clip_end.is_some() {
+            let paints_fill = matches!(p.op, b"f" | b"f*" | b"B" | b"B*");
+            let paints_stroke = matches!(p.op, b"S" | b"B" | b"B*");
+            let mut d = Decided::default();
+            if paints_fill || p.clip_end.is_some() {
                 let (of, paths) = grouped(&display, &mut budget)?;
-                if !stroked && p.op != b"n" {
+                if paints_fill {
+                    let even = matches!(p.op, b"f*" | b"B*");
                     let cuts = cut_groups(&paths, even, false, &regions, &mut budget)?;
                     d.ink = Some((of.clone(), cuts));
                 }
@@ -647,11 +785,41 @@ pub fn redact_vectors(
                     d.clip = Some((of, cuts));
                 }
             }
-            if !stroked && !Decided::changed(&d.ink) && !Decided::changed(&d.clip) {
-                report.untouched += group.len() as u32;
-                continue;
+            let mut stroke_item = None;
+            if paints_stroke {
+                let key = (group[0].loc, first_path.clone(), VectorKind::Stroke);
+                let s = *index.get(&key).ok_or_else(internal)?;
+                let props = s.stroke.as_ref().ok_or_else(internal)?;
+                let cuts = subpaths(&s.geometry)
+                    .iter()
+                    .map(|sub| {
+                        geometry::cut_stroke(sub, s.ctm, to_display, props, &regions, &mut budget)
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                d.stroke = Some(((0..cuts.len()).collect(), cuts));
+                stroke_item = Some(s);
             }
-            let curved = |cuts: &Option<(Vec<usize>, Vec<Cut>)>| {
+            if let Some(s) = stroke_item {
+                let both_changed =
+                    paints_fill && (Decided::changed(&d.ink) || Decided::changed(&d.stroke));
+                let pieces = Decided::pieces(&d.stroke);
+                let feature = if both_changed && (s.stroke_alpha < 1.0 || s.fill_alpha < 1.0) {
+                    Some("strokeBothAlpha")
+                } else if pieces && s.stroke_alpha != s.fill_alpha {
+                    Some("strokeAlphaDiffers")
+                } else if pieces && p.ink.pattern {
+                    Some("strokePattern")
+                } else if pieces && p.ink.fill_ops().is_none() {
+                    Some("strokeColorInherited")
+                } else {
+                    None
+                };
+                if let Some(f) = feature {
+                    refused.entry(f).or_default().insert(page.page_index);
+                    continue;
+                }
+            }
+            let curved = |cuts: &Cuts| {
                 cuts.iter().any(|(of, c)| {
                     c.iter().enumerate().any(|(g, c)| {
                         matches!(c, Cut::Pieces(_))
@@ -659,23 +827,29 @@ pub fn redact_vectors(
                     })
                 })
             };
-            if stroked {
-                report.subpaths_removed += removed_here;
-            } else if d
-                .ink
-                .as_ref()
-                .is_some_and(|(_, c)| c.iter().all(|c| matches!(c, Cut::Removed)))
-            {
-                report.subpaths_removed += 1;
-            } else {
-                report.paths_cut += 1;
-                report.approximated += u32::from(curved(&d.ink) || curved(&d.clip));
+            for v in &group {
+                let (cuts, approximated) = match v.kind {
+                    VectorKind::Clip => (&d.clip, curved(&d.clip)),
+                    // A cut stroke is a fill now: its structure is gone whatever its shape.
+                    VectorKind::Stroke if paints_stroke => (&d.stroke, true),
+                    _ => (&d.ink, curved(&d.ink)),
+                };
+                if !Decided::changed(cuts) {
+                    report.untouched += 1;
+                } else if Decided::pieces(cuts) {
+                    report.paths_cut += 1;
+                    report.approximated += u32::from(approximated);
+                } else {
+                    report.subpaths_removed += 1;
+                }
             }
-            let pieces = [&d.ink, &d.clip].iter().any(|c| {
-                c.iter()
-                    .any(|(_, c)| c.iter().any(|c| matches!(c, Cut::Pieces(_))))
-            });
-            let back = if pieces {
+            if ![&d.ink, &d.stroke, &d.clip]
+                .iter()
+                .any(|c| Decided::changed(c))
+            {
+                continue;
+            }
+            let back = if Decided::pieces(&d.ink) || Decided::pieces(&d.clip) {
                 let pairs: Vec<([f64; 2], [f64; 2])> = p
                     .subs
                     .iter()
@@ -693,13 +867,35 @@ pub fn redact_vectors(
             } else {
                 None
             };
+            // The stroke's own CTM is exact, so a lone segment (no fit) is fine.
+            let stroke_back = stroke_item
+                .filter(|_| Decided::pieces(&d.stroke))
+                .map(|s| (to_display * s.ctm).inverse());
+            let paint = p.ink.fill_ops();
             let target = targets.stream(page.page_index, &first_path.0, stream);
             rewrites.push((
                 target,
                 p.first..p.end,
-                rewrite(&streams[&stream], p, &d, back)?,
+                rewrite(
+                    &streams[&stream],
+                    p,
+                    &d,
+                    back,
+                    stroke_back,
+                    paint.as_deref(),
+                )?,
             ));
         }
+    }
+    if let Some((feature, pages)) = refused.into_iter().next() {
+        return Err(PdfError::with(
+            ErrorCode::RedactVectorUnsupported,
+            ErrorDetails {
+                feature: Some(feature.into()),
+                pages: Some(pages.into_iter().collect()),
+                ..ErrorDetails::default()
+            },
+        ));
     }
     report.operators_rewritten = rewrites.len() as u32;
     targets.apply(doc, plan, w)?;

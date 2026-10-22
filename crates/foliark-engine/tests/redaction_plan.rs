@@ -2,7 +2,7 @@
 //! working copy, classified and disclosed before export. Display space throughout.
 mod common;
 use common::{Font, pdf_bytes};
-use foliark_engine::redaction::plan::{ClusterReason, RedactionPlan, VectorClass};
+use foliark_engine::redaction::plan::{ClusterReason, RedactionPlan, VectorClass, VectorKind};
 use foliark_engine::{Binding, BoxTask, Committed, Document, Engine, Step, StoredRedaction};
 use foliark_model::{
     ChangeSet, ErrorCode, Limits, LossCode, PdfError, Rect, Redaction, SearchOptions, SharedKind,
@@ -265,31 +265,33 @@ q 20 0 0 20 150 10 cm /Im Do Q\n\
 q /Fm Do Q\n";
     let plan = plan_of(graphics(&[page], true), vec![stored("r", 0, REGION)]);
     let p = &plan.pages[0];
-    let classes: Vec<_> = p.vectors.iter().map(|v| (v.subpath, v.class)).collect();
-    use VectorClass::{Collateral, Cut, Inside};
+    let classes: Vec<_> = p.vectors.iter().map(|v| (v.kind, v.class)).collect();
+    use VectorClass::{Cut, Inside};
+    use VectorKind::{Fill, Stroke};
     // Rect inside; rect crossing (cut); triangle (a filled path is one unit: cut); stroked rect
-    // (collateral); the 4 pt line whose stroke reaches in from y 49 (collateral; the 1 pt line
-    // does not; the miter limit is 1, a larger one widens every stroke's reach by that factor,
-    // spec 5.4); the two subpaths of one `re re f` are one unit (cut); then the Form's own rect.
+    // (a stroke is one unit too: cut); the 4 pt line whose stroke reaches in from y 49 (the 1 pt
+    // line does not; the miter limit is 1, a larger one widens every stroke's reach by that
+    // factor, spec 5.4); the two subpaths of one `re re f` are one unit (cut); then the Form's
+    // own rect.
     assert_eq!(
         classes,
         [
-            (0, Inside),
-            (0, Cut),
-            (0, Cut),
-            (0, Collateral),
-            (0, Collateral),
-            (0, Cut),
-            (0, Inside)
+            (Fill, Inside),
+            (Fill, Cut),
+            (Fill, Cut),
+            (Stroke, Cut),
+            (Stroke, Cut),
+            (Fill, Cut),
+            (Fill, Inside)
         ]
     );
-    // The plan only knows which paths may reach the region: cuts are counted from bounds.
+    // The plan only knows which paths may reach the region: cuts are counted from bounds, and
+    // no path is collateral any more (ADR 0009).
     let r = &plan.report;
-    assert_eq!((r.vector_subpaths_removed, r.vector_paths_cut), (4, 3));
-    assert_eq!(r.collateral.len(), 2);
-    assert!(r.collateral.iter().all(|c| c.page_index == 0));
-    // A stroke reaches in by half its width: the collateral box of the 4 pt line is 4 pt tall.
-    let line = r.collateral[1].bounds;
+    assert_eq!((r.vector_subpaths_removed, r.vector_paths_cut), (2, 5));
+    assert!(r.collateral.is_empty());
+    // A stroke reaches in by half its width: the 4 pt line plans a box 4 pt tall.
+    let line = p.vectors[4].bounds;
     assert!((line.height - 4.0).abs() < 1e-6 && (line.y - 47.0).abs() < 1e-6);
 
     // Only the image that meets the region is erased; it is drawn twice, so it needs a clone,
@@ -318,7 +320,7 @@ q /Fm Do Q\n";
 
     // Losses known before export.
     let code = |c| plan.losses.iter().find(|l| l.code == c).map(|l| l.count);
-    assert_eq!(code(LossCode::VectorCollateral), Some(2));
+    assert_eq!(code(LossCode::VectorCollateral), None);
     assert_eq!(code(LossCode::ImageReencoded), Some(1));
     assert_eq!(p.regions[0].vectors, 7);
 }

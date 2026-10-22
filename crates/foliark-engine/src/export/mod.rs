@@ -262,8 +262,7 @@ fn check_stages(plan: &RedactionPlan, x: &Executed) -> Result<(), PdfError> {
         // A planned cut may find its ink clear of the regions (`untouched`): every planned
         // entry must still be accounted for.
         && x.vectors.subpaths_removed + x.vectors.paths_cut + x.vectors.untouched
-            == p.vector_subpaths_removed + p.vector_paths_cut
-        && x.vectors.collateral.len() == p.collateral.len();
+            == p.vector_subpaths_removed + p.vector_paths_cut;
     if ok { Ok(()) } else { Err(verify_failed()) }
 }
 
@@ -489,18 +488,6 @@ pub fn prepare(
         done.images.images_erased,
         on(|p| !p.images.is_empty()),
     );
-    let mut collateral_pages: Vec<u32> = done
-        .vectors
-        .collateral
-        .iter()
-        .map(|c| c.page_index)
-        .collect();
-    collateral_pages.dedup();
-    stage_loss(
-        LossCode::VectorCollateral,
-        done.vectors.collateral.len() as u32,
-        collateral_pages,
-    );
     stage_loss(
         LossCode::VectorCutApproximated,
         done.vectors.approximated,
@@ -515,7 +502,8 @@ pub fn prepare(
         forms_cloned: done.forms_cloned,
         vector_subpaths_removed: done.vectors.subpaths_removed,
         vector_paths_cut: done.vectors.paths_cut,
-        collateral: done.vectors.collateral,
+        // Retired by ADR 0009: no vector is removed merely for crossing a region.
+        collateral: Vec::new(),
         shared_survivors: plan.report.shared_survivors.clone(),
     };
     let output_bytes = u32::try_from(bytes.len())

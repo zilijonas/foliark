@@ -5,7 +5,8 @@ All notable changes to `@foliark/sdk`. Format: [Keep a Changelog](https://keepac
 ## [Unreleased]
 
 ### Changed
-- Redaction cuts filled vector paths and clip outlines precisely instead of removing a whole path for crossing a region: region subtraction in display space (`i_overlay`, nonzero and even-odd, holes, curves, any transform, nested clips). Cut curves become 0.01 pt polylines (loss `VECTOR_CUT_APPROXIMATED`); `RedactionReport.vectorRectsCut` is now `vectorPathsCut`; fills no longer produce `VECTOR_COLLATERAL` (stroked paths still do). Over 250,000 vertices or 131,072 pt coordinates is `LIMIT_EXCEEDED` (`vectorVertices`, `vectorCoordinate`) (NEW-86, ADR 0009).
+- Redaction cuts filled vector paths and clip outlines precisely instead of removing a whole path for crossing a region: region subtraction in display space (`i_overlay`, nonzero and even-odd, holes, curves, any transform, nested clips). Cut curves become 0.01 pt polylines (loss `VECTOR_CUT_APPROXIMATED`); `RedactionReport.vectorRectsCut` is now `vectorPathsCut`; fills no longer produce `VECTOR_COLLATERAL`. Over 250,000 vertices or 131,072 pt coordinates is `LIMIT_EXCEEDED` (`vectorVertices`, `vectorCoordinate`) (NEW-86, ADR 0009).
+- Redaction cuts stroked paths precisely too: the stroke is expanded in its own space (width, caps, joins, miter limit, dashes, non-uniform CTM), the regions are subtracted and the rest is written as a filled outline in the stroking colour; strokes clear of every region stay byte-exact, and `VECTOR_COLLATERAL` is never produced (`RedactionReport.collateral` stays, always empty). A cut stroke whose paint a fill cannot reproduce is refused with the new `REDACT_VECTOR_UNSUPPORTED {feature, pages}` (`strokeColorInherited`, `strokePattern`, `strokeAlphaDiffers`, `strokeBothAlpha`); over 100,000 dashes is `LIMIT_EXCEEDED {vectorDashes}` (NEW-87, ADR 0009, hayro patch P19).
 
 ## [0.1.0] - unreleased (private candidate)
 

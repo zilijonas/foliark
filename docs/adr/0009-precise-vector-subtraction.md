@@ -1,6 +1,6 @@
 # ADR 0009: Precise bounded vector subtraction for redaction (NEW-85)
 
-Status: Accepted, 2026-10-22. Fills and clip outlines implemented by NEW-86 (see Implementation notes); strokes follow in NEW-87. Amends spec 5.4 (frozen: a change needs an ADR), 12, 16 and 17.3. Implemented by NEW-86 (fills) then NEW-87 (strokes).
+Status: Accepted, 2026-10-22. Fills and clip outlines implemented by NEW-86, strokes by NEW-87 (see Implementation notes). Amends spec 5.4 (frozen: a change needs an ADR), 12, 16 and 17.3. Implemented by NEW-86 (fills) then NEW-87 (strokes).
 
 ## Context
 Spec 5.4 (NEW-36/37) cuts only a lone axis-aligned fill rectangle exactly. Every other crossing path (curves, circles, rings, rotated shapes, even-odd stars, any stroke) is removed whole and disclosed as `VECTOR_COLLATERAL`. Owner requirement: precise cutting with no whole-shape collateral deletion; protected geometry inside a region unrecoverable from the output; public geometry outside preserved within a stated tolerance; bounded work; explicit refusal where unproven; pure Rust, permissive licence, wasm32, no C/C++.
@@ -131,3 +131,13 @@ Deviations from the design above, each tested in `tests/redact_fills.rs`:
 - The plan only knows which paths may reach a region: `vectorPathsCut` in `plan.report` is a bound, the export report counts what the stages did; `check_stages` requires every planned entry to be accounted for as removed, cut or untouched.
 - `REDACT_VECTOR_UNSUPPORTED` is not used by fills (nothing to refuse beyond the caps); NEW-87 introduces it.
 - Measured: one saw polygon of 249,000 vertices crossing one region, whole `redact_vectors` call, native release build on the Mac mini: 717 ms.
+
+## Implementation notes (NEW-87, strokes)
+Deviations from the design above, each tested in `tests/redact_strokes.rs`:
+- Stroke ink is one non-zero outline per subpath (kurbo dashes restart per subpath, so the renderer's whole-path result is the union). Subpaths whose ink clears every region keep their operators and are painted `S`; cut ones are `q <stroking colour as fill> m l ... h f Q` (non-zero: outlines of different subpaths overlap and must union). `B`/`B*` whose fill or stroke changed is written as `f`/`f*` then the stroke part (`B` reaches the model as two path items; both are planned and cut on their own, `PlannedVector.kind`).
+- `PathItem` gains `ctm`, `stroke_alpha`, `fill_alpha`. The alphas come from the additive hayro patch P19 (`Device::path_alpha`): `DrawProps` cannot carry them without breaking `hayro`'s own `DrawProps` literal. The stroke's stream space is its exact `ctm`, so a lone segment needs no vertex fit (fills and clips still use `geometry::fit`).
+- Refusals (`REDACT_VECTOR_UNSUPPORTED`): `strokeColorInherited`, `strokeAlphaDiffers`, `strokeBothAlpha` as designed, plus `strokePattern`: a pattern as stroking colour is refused instead of mirrored (the alpha a pattern paints with is not exposed, so equality with `ca` cannot be proved). Refusals are raised only for strokes that are actually cut; stroke paint is read from the stream's own `G RG K CS SC SCN` per `q` level.
+- Reach prefilter: half the width times max(miter limit, square-cap corner, 1) along the widest axis of the stream-to-display map, before kurbo runs; tolerance for the outline is `FLATNESS_PT / widest axis`; width 0 is floored at `0.01 / widest axis`. A singular CTM (no area) that reaches a region is removed. A dash pattern that is all zero or negative is treated as solid (a superset of the ink). `vectorDashes` is estimated from the local arc length (0.1 tolerance) before kurbo is called.
+- `collateral` stays in the report DTO (always empty) so the frozen wire shape does not move; `VECTOR_COLLATERAL` is never emitted.
+- Cancellation: the cancel flag is honoured while the page model is interpreted; one boolean call is not interruptible and is bounded by the vertex, dash and coordinate caps and the work budget.
+- Measured (native release, Mac mini): one stroked subpath of 60,000 zig-zag vertices (about 240,000 outline vertices, just under `MAX_VERTICES`), whole `redact_vectors`: 46 ms (`tests/redact_strokes.rs`, ignored probe). Size: wasm +33,484 B raw (5,791,460 to 5,824,944, +0.58%), +16,912 B gzip (2,202,670 to 2,219,582) over NEW-86's build.
