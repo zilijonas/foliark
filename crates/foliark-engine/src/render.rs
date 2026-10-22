@@ -147,6 +147,7 @@ impl Document {
             max_image_pixels: limits.max_image_pixels.into(),
             reduce_images,
             reduced_image_cache: reduce_images.then(|| self.0.images.clone() as _),
+            cmap_resolver: Arc::new(crate::cmaps::resolve),
             ..Default::default()
         };
         let sink = warnings.clone();

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Independent cumulative acceptance (NEW-59): build the candidate, pack it, install the TARBALL into a temp project, drive every case through
-# it (real wasm, @foliark/sdk/inline), judge the exported bytes with the independent oracles. Exit 0 iff no failure and no missed negative control.
+# it (real wasm, @zilijonas/foliark/inline), judge the exported bytes with the independent oracles. Exit 0 iff no failure and no missed negative control.
 # Run it once under the memory queue (it does not call the queue itself):
 #   ~/ai/bin/memory-queue run --owner <id> --label 'foliark acceptance' --need-gb 4 --restartable --wait 1800 -- tests/integration/acceptance/run.sh
 # SKIP_BUILD=1 reuses the current packages/sdk/{dist,wasm}.

@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
 mod cache;
+pub mod cmaps;
 mod document;
 pub mod edit;
 mod engine;

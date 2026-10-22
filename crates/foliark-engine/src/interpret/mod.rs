@@ -138,6 +138,12 @@ pub struct PathItem {
     /// stroke reaches. 1 for a clip-only item.
     pub stroke_scale: f64,
     pub clip_only: bool,
+    /// The CTM the path's operands were drawn under (stream space to user space): the stroke's
+    /// width, dashes and joins live in this space.
+    pub ctm: Affine,
+    /// The stroking (`CA`) and non-stroking (`ca`) alpha in force (1 for a clip-only item).
+    pub stroke_alpha: f32,
+    pub fill_alpha: f32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -207,6 +213,8 @@ struct Builder<'x> {
     soft_masked: Vec<usize>,
     mask_ids: HashSet<ObjectIdentifier>,
     soft_mask_groups: Vec<[f64; 4]>,
+    /// `(CA, ca)` of the path being reported (hayro P19).
+    alpha: (f32, f32),
 }
 
 /// Reads the BBox of a soft-mask group: the first clip its content pushes.
@@ -372,6 +380,9 @@ impl Builder<'_> {
             stroke,
             stroke_scale: widest_axis(props.transform),
             clip_only: false,
+            ctm: props.transform,
+            stroke_alpha: self.alpha.0,
+            fill_alpha: self.alpha.1,
         };
         match &props.paint {
             Paint::Pattern(p) if matches!(**p, Pattern::Shading(_)) => {
@@ -387,7 +398,7 @@ impl Builder<'_> {
 }
 
 /// The largest singular value of the linear part of `m`.
-fn widest_axis(m: Affine) -> f64 {
+pub(crate) fn widest_axis(m: Affine) -> f64 {
     let [a, b, c, d, ..] = m.as_coeffs();
     let (p, q, r) = (a * a + b * b, c * c + d * d, a * c + b * d);
     (((p + q) + ((p - q).powi(2) + 4.0 * r * r).sqrt()) / 2.0).sqrt()
@@ -415,6 +426,9 @@ impl<'a> Device<'a> for Builder<'_> {
                 stroke: None,
                 stroke_scale: 1.0,
                 clip_only: true,
+                ctm: Affine::IDENTITY,
+                stroke_alpha: 1.0,
+                fill_alpha: 1.0,
             }));
         }
     }
@@ -550,6 +564,10 @@ impl<'a> Device<'a> for Builder<'_> {
     fn oc_state(&mut self, visible: bool) {
         self.hidden = !visible;
     }
+
+    fn path_alpha(&mut self, stroke: f32, fill: f32) {
+        self.alpha = (stroke, fill);
+    }
 }
 
 /// The object that carries the `/Resources` a page inherits.
@@ -584,6 +602,7 @@ impl Document {
         let settings = InterpreterSettings {
             ocg_override: true,
             strict_streams: true,
+            cmap_resolver: Arc::new(crate::cmaps::resolve),
             warning_sink: Arc::new(move |w| sink.lock().expect("warning sink").push(w)),
             should_stop: Some(Arc::new(move || {
                 cancel.load(Ordering::Relaxed) || over.load(Ordering::Relaxed)
@@ -631,6 +650,7 @@ impl Document {
             groups: Vec::new(),
             props_masked: false,
             soft_masked: Vec::new(),
+            alpha: (1.0, 1.0),
             mask_ids: HashSet::new(),
             soft_mask_groups: Vec::new(),
         };

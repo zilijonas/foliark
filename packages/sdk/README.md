@@ -1,28 +1,34 @@
-# @foliark/sdk
+# @zilijonas/foliark
 
-Unreleased (0.1.0), AGPL-3.0-only with separate commercial licensing; see `LICENSE`, `LICENSING.md` and `COMMERCIAL-LICENSING.md`. A headless Rust/WASM PDF engine for the browser: extract text, search, render,
+Version 0.1.0. AGPL-3.0-only with separate commercial licensing; see `LICENSE`, `LICENSING.md` and `COMMERCIAL-LICENSING.md`. A headless Rust/WASM PDF engine for the browser: extract text, search, render,
 edit paragraphs, redact and export a sanitized PDF. It runs in a worker on the user's device; the document never leaves it.
 The SDK fetches only its own `.wasm` and worker script.
 
 ## Install
 
-From a tarball built by this repository (nothing is published):
-
 ```sh
-npm install ./foliark-sdk-0.1.0.tgz        # or pnpm add / yarn add with the same path
+npm install @zilijonas/foliark@0.1.0 --save-exact        # or pnpm add / yarn add
 ```
 
+Pin the exact version. Offline use needs the `.wasm`, the worker script and the `cmaps/` files hosted by you; see `docs/deployment.md`.
+
+## Source
+
+Foliark is free software under the AGPL-3.0-only. The complete corresponding source of version 0.1.0 (Rust engine, vendored hayro fork and patches, build scripts) is
+tag `v0.1.0` of https://github.com/zilijonas/foliark. Build steps: `docs/development.md` in that repository (`scripts/build-wasm.sh`, `pnpm build:sdk`,
+`tests/package-consumers/pack.sh`). Details: `LICENSING.md`.
+
 ESM only, no runtime dependencies. The package contains `dist/` (API and worker), `wasm/` (the engine, about 5.4 MB raw, 2.1 MB gzip),
-`LICENSE`, `LICENSE_FOXIT`, `NOTICE`, `THIRD_PARTY_NOTICES.md` and `SUPPORT_MATRIX.md`.
+`cmaps/` (predefined CMap pack), `LICENSE`, `LICENSING.md`, `COMMERCIAL-LICENSING.md`, `LICENSE_FOXIT`, `NOTICE`, `THIRD_PARTY_NOTICES.md` and `SUPPORT_MATRIX.md`.
 
 ## Start it
 
 `createFoliark` starts a module worker that owns the wasm instance. Both URLs are explicit; nothing is fetched until you call it.
 
 ```ts
-import { createFoliark } from "@foliark/sdk";
-import wasmUrl from "@foliark/sdk/wasm?url";                 // Vite; other bundlers: any setup that yields the two final URLs
-import workerUrl from "@foliark/sdk/worker?worker&url";
+import { createFoliark } from "@zilijonas/foliark";
+import wasmUrl from "@zilijonas/foliark/wasm?url";                 // Vite; other bundlers: any setup that yields the two final URLs
+import workerUrl from "@zilijonas/foliark/worker?worker&url";
 
 const foliark = await createFoliark({ wasmUrl, workerUrl, limits: { maxPages: 200 } });
 ```
@@ -31,14 +37,14 @@ If your app already runs its own dedicated worker with its own recovery (HDDN do
 no second worker, no `worker.js` asset; your worker supervises hangs and must be replaced after `onReset`:
 
 ```ts
-import { createInlineFoliark } from "@foliark/sdk/inline";
+import { createInlineFoliark } from "@zilijonas/foliark/inline";
 const foliark = await createInlineFoliark({ wasmUrl });     // or { wasm: bytesOrModule } to fetch nothing
 ```
 
 ## Use it
 
 ```ts
-import { FoliarkError, type Redaction } from "@foliark/sdk";
+import { FoliarkError, type Redaction } from "@zilijonas/foliark";
 
 const doc = await foliark.open(await file.arrayBuffer());   // password?, allowRepaired? in the options; the buffer is transferred
 const { pageCount } = await doc.info();
@@ -92,5 +98,5 @@ typed code, or not established, with the evidence behind it. Real iPhone, iPad a
 - Repaired or truncated files are refused (`REPAIRED_PDF`) unless you pass `allowRepaired`; native export always rewrites the file from scratch and
   drops metadata, attachments, scripts, outlines and similar items, reporting each in `plan.report`.
 - Paragraph editing is horizontal, unrotated, left-to-right text only, and needs a registered font when the document's own font cannot be reused.
-- `cmapsUrl` is reserved: no CMap pack ships, so fonts that need a predefined CJK CMap render with a `CMAP_MISSING` warning.
+- `cmapsUrl` (default: the package's `cmaps/` folder) is where the predefined CMap pack is fetched from at `open`; a missing or corrupt file rejects `ASSET_LOAD_FAILED`. See `docs/deployment.md`. `createInlineFoliark` also takes `fetchCMap(url)` for hosts whose `fetch` cannot read the default `file:` URL (Node).
 - Redaction is verified inside the engine and by independent oracles on 80 test documents; it is not a certificate for arbitrary real-world files.

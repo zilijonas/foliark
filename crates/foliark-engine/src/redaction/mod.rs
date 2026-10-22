@@ -10,6 +10,7 @@ use text::TextReport;
 use vector::VectorReport;
 
 mod forms;
+mod geometry;
 pub mod image;
 pub mod masks;
 pub mod plan;

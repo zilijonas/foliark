@@ -1,4 +1,4 @@
-// In-worker entry (`@foliark/sdk/inline`): the same `Foliark` client and DTOs, but the engine runs in the CALLING
+// In-worker entry (`@zilijonas/foliark/inline`): the same `Foliark` client and DTOs, but the engine runs in the CALLING
 // thread instead of a nested worker. For hosts that already own a dedicated worker with its own generation and
 // recovery (HDDN): they keep their protocol and state machine and import this inside that worker. Same worker
 // core and the same validated envelope as the module worker, over a real MessageChannel, so buffers still transfer.
@@ -7,10 +7,15 @@ import { createFoliark, type Foliark, type FoliarkOptions } from "./client.js";
 import { createWorkerCore } from "./worker-core.js";
 
 export interface InlineOptions extends Omit<FoliarkOptions, "wasmUrl" | "workerUrl" | "worker" | "hangTimeoutMs"> {
-  /** Where to fetch the wasm (the `@foliark/sdk/wasm` URL). Not needed when `wasm` is given. */
+  /** Where to fetch the wasm (the `@zilijonas/foliark/wasm` URL). Not needed when `wasm` is given. */
   wasmUrl?: string | URL;
   /** Already-fetched bytes or a compiled module (tests, prefetched or cached assets): nothing is fetched. */
   wasm?: BufferSource | WebAssembly.Module;
+  /**
+   * Bytes of one CMap pack file (a `<cmapsUrl>/<name>.cmap` URL). Default `fetch`, which is right in a browser worker.
+   * Node's `fetch` cannot read `file:` URLs (the default `cmapsUrl` is one there), so a Node host passes a reader.
+   */
+  fetchCMap?: (url: string) => Promise<Uint8Array>;
 }
 
 /** `setTimeout` caps at 2^31-1 ms; a same-thread engine cannot be watched from outside, its host supervises hangs. */
@@ -22,7 +27,7 @@ const NO_HANG_TIMER = 2 ** 31 - 1;
  * out-of-memory cannot be healed inside the thread that owns the instance.
  */
 export function createInlineFoliark(o: InlineOptions): Promise<Foliark> {
-  const { wasm, wasmUrl, ...rest } = o;
+  const { wasm, wasmUrl, fetchCMap, ...rest } = o;
   return createFoliark({
     ...rest,
     wasmUrl: wasmUrl ?? "inline:",
@@ -32,6 +37,8 @@ export function createInlineFoliark(o: InlineOptions): Promise<Foliark> {
       const core = createWorkerCore({
         post: (m, transfer = []) => port2.postMessage(m, { transfer }),
         loadWasm: (url) => init({ module_or_path: wasm ?? url }).then(() => undefined),
+        cmapsUrl: new URL("../cmaps/", import.meta.url).href,
+        fetchCMap,
       });
       port2.onmessage = (e) => core.onMessage(e.data);
       return Object.assign(port1, { terminate: () => (port1.close(), port2.close()) }) as unknown as Worker;

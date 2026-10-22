@@ -41,14 +41,14 @@ components.push(
 );
 components.sort((a, b) => a['bom-ref'].localeCompare(b['bom-ref']));
 
-const rootRef = `pkg:npm/%40foliark/sdk@${pkg.version}`;
+const rootRef = `pkg:npm/%40zilijonas/foliark@${pkg.version}`;
 const bom = {
   bomFormat: 'CycloneDX', specVersion: '1.5', version: 1,
   metadata: {
     tools: { components: [{ type: 'application', name: 'foliark tools/release/sbom.mjs' }] },
     component: {
-      type: 'library', 'bom-ref': rootRef, name: '@foliark/sdk', version: pkg.version, purl: rootRef,
-      licenses: [{ license: { name: 'UNLICENSED (placeholder, owner decision NEW-73)' } }],
+      type: 'library', 'bom-ref': rootRef, name: '@zilijonas/foliark', version: pkg.version, purl: rootRef,
+      licenses: [{ license: { id: pkg.license } }],
       ...(tgz ? { hashes: [{ alg: 'SHA-256', content: createHash('sha256').update(readFileSync(tgz)).digest('hex') }] } : {}),
     },
   },

@@ -1,11 +1,14 @@
 {
-  "name": "@foliark/sdk",
+  "name": "@zilijonas/foliark",
   "version": "0.1.0",
-  "private": true,
   "description": "Headless Rust/WASM PDF SDK: extract, render, redact, edit and export in a worker, nothing leaves the device.",
   "type": "module",
   "license": "AGPL-3.0-only",
   "author": "Linas Jonas Zilinskas",
+  "homepage": "https://github.com/zilijonas/foliark#readme",
+  "bugs": { "url": "https://github.com/zilijonas/foliark/issues" },
+  "keywords": ["pdf", "pdf-redaction", "pdf-editor", "sanitize", "wasm", "webassembly", "rust", "offline", "privacy"],
+  "publishConfig": { "access": "public" },
   "repository": {
     "type": "git",
     "url": "https://github.com/zilijonas/foliark.git",
@@ -18,11 +21,13 @@
     "./worker": { "types": "./dist/worker.d.ts", "default": "./dist/worker.js" },
     "./inline": { "types": "./dist/inline.d.ts", "default": "./dist/inline.js" },
     "./wasm": "./wasm/foliark_wasm_bg.wasm",
+    "./cmaps/*": "./cmaps/*",
     "./package.json": "./package.json"
   },
   "files": [
     "dist",
     "wasm",
+    "cmaps",
     "README.md",
     "LICENSE",
     "LICENSING.md",

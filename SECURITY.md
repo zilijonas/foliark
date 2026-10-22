@@ -3,7 +3,7 @@
 ## Supported versions
 | Version | Status | Security fixes |
 |---|---|---|
-| 0.1.x | private candidate, unreleased, not published anywhere | yes, on the development branch |
+| 0.1.x | public release candidate `@zilijonas/foliark` 0.1.0 (published by NEW-91) | yes |
 | anything else | none exists | no |
 
 After the first public release this table lists the supported release lines and their end dates. Pre-1.0, only the latest 0.x line is supported.

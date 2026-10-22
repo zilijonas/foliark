@@ -52,6 +52,10 @@ pub(crate) fn fill_path_impl<'a>(
         return;
     }
     device.oc_state(context.ocg_state.is_on());
+    device.path_alpha(
+        context.get().graphics_state.stroke_alpha,
+        context.get().graphics_state.non_stroke_alpha,
+    );
 
     let props = context.draw_props(false);
 
@@ -104,6 +108,10 @@ pub(crate) fn stroke_path_impl<'a>(
         return;
     }
     device.oc_state(context.ocg_state.is_on());
+    device.path_alpha(
+        context.get().graphics_state.stroke_alpha,
+        context.get().graphics_state.non_stroke_alpha,
+    );
 
     let stroke_props = context.stroke_props();
     let props = context.draw_props(true);

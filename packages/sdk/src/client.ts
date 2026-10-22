@@ -19,7 +19,12 @@ export interface FoliarkOptions {
   /** Exactly one of `workerUrl` and `worker`. */
   workerUrl?: string | URL;
   worker?: () => Worker;
-  /** Reserved (spec 10.3). 0.1.0 ships no CMap pack and never fetches this URL; pages that need a predefined CMap report `requiredAssets` and render with a `CMAP_MISSING` warning. */
+  /**
+   * Folder that serves the CMap pack (`<name>.cmap` files, spec 10.3), absolute or relative to the page. Default: the
+   * `cmaps/` folder shipped in this package, resolved from the SDK's own URL (a bundler must copy it, see docs/deployment.md).
+   * Only the files a document lists in `requiredAssets` are fetched, at `open`; a missing or corrupt one rejects `open`
+   * with `ASSET_LOAD_FAILED` and `details.feature = "cmap:<name>"`.
+   */
   cmapsUrl?: string | URL;
   limits?: Partial<Limits>;
   fontMatch?: FontMatchRule[];
@@ -149,7 +154,7 @@ export async function createFoliark(o: FoliarkOptions): Promise<Foliark> {
     };
     const initCall = call("init", {
       wasmUrl: String(o.wasmUrl),
-      cmapsUrl: o.cmapsUrl === undefined ? undefined : String(o.cmapsUrl),
+      cmapsUrl: o.cmapsUrl === undefined ? undefined : new URL(String(o.cmapsUrl), globalThis.location?.href).href,
       limits: o.limits,
       fontMatch: o.fontMatch,
     });

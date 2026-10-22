@@ -32,8 +32,8 @@ use crate::sanitize::{interactive, prune, resources, text_semantics, visibility}
 use crate::writer::Writer;
 use foliark_model::{
     Capabilities, Capability, CapabilityReason, CapabilityStatus, EditsReport, ErrorCode,
-    ExportMode, ExportPolicy, ExportReport, ExtractOptions, Flattened, InvisibleTextPolicy,
-    KeptReport, Limits, Loss, LossCode, PdfError, Point, Rect, RedactionReport, SanitizedItem,
+    ExportMode, ExportPolicy, ExportReport, ExtractOptions, Flattened, KeptReport, Limits, Loss,
+    LossCode, PdfError, Point, Rect, RedactionReport, SanitizedItem,
 };
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -195,7 +195,15 @@ fn verify(
             ours.iter()
                 .any(|r| r.iter().zip(b).all(|(x, y)| (x - y).abs() < 5.0 * SLACK))
         };
-        if page.vectors.iter().any(|v| !is_fill(&v.bounds)) {
+        // A filled path or clip outline that merely overlaps a region by bounds is judged on its
+        // geometry; anything else planned (a stroke, ink wholly inside) must not exist.
+        let class = |v: &&crate::redaction::plan::PlannedVector| {
+            v.class != crate::redaction::plan::VectorClass::Cut && !is_fill(&v.bounds)
+        };
+        if page.vectors.iter().any(|v| class(&v)) {
+            return Err(verify_failed());
+        }
+        if crate::redaction::vector::page_leaks(&out, page, &is_fill)? {
             return Err(verify_failed());
         }
     }
@@ -251,9 +259,10 @@ fn check_stages(plan: &RedactionPlan, x: &Executed) -> Result<(), PdfError> {
         && x.images.images_erased == p.images_erased
         && x.images.images_cloned == p.images_cloned
         && x.forms_cloned == p.forms_cloned
-        && x.vectors.subpaths_removed == p.vector_subpaths_removed
-        && x.vectors.rects_cut == p.vector_rects_cut
-        && x.vectors.collateral.len() == p.collateral.len();
+        // A planned cut may find its ink clear of the regions (`untouched`): every planned
+        // entry must still be accounted for.
+        && x.vectors.subpaths_removed + x.vectors.paths_cut + x.vectors.untouched
+            == p.vector_subpaths_removed + p.vector_paths_cut;
     if ok { Ok(()) } else { Err(verify_failed()) }
 }
 
@@ -343,7 +352,7 @@ pub fn prepare(
     let reader = doc.reader();
     let removals = scan(reader)?;
     let inter = interactive::scan(reader, policy);
-    let vis = visibility::scan_with(reader, policy.invisible_text == InvisibleTextPolicy::Remove)?;
+    let vis = visibility::scan_with(reader, policy.invisible_text)?;
     if let Some(b) = preflight::document_blockers(policy, &inter, &vis, removals.signatures).first()
     {
         return Err(b.error());
@@ -479,17 +488,10 @@ pub fn prepare(
         done.images.images_erased,
         on(|p| !p.images.is_empty()),
     );
-    let mut collateral_pages: Vec<u32> = done
-        .vectors
-        .collateral
-        .iter()
-        .map(|c| c.page_index)
-        .collect();
-    collateral_pages.dedup();
     stage_loss(
-        LossCode::VectorCollateral,
-        done.vectors.collateral.len() as u32,
-        collateral_pages,
+        LossCode::VectorCutApproximated,
+        done.vectors.approximated,
+        on(|p| !p.vectors.is_empty()),
     );
 
     let redaction = RedactionReport {
@@ -499,8 +501,9 @@ pub fn prepare(
         images_cloned: done.images.images_cloned,
         forms_cloned: done.forms_cloned,
         vector_subpaths_removed: done.vectors.subpaths_removed,
-        vector_rects_cut: done.vectors.rects_cut,
-        collateral: done.vectors.collateral,
+        vector_paths_cut: done.vectors.paths_cut,
+        // Retired by ADR 0009: no vector is removed merely for crossing a region.
+        collateral: Vec::new(),
         shared_survivors: plan.report.shared_survivors.clone(),
     };
     let output_bytes = u32::try_from(bytes.len())

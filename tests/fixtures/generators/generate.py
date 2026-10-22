@@ -9,6 +9,8 @@ absent (or with --force) and manifest.json (sha256) is the source of truth for t
   python3 generate.py --force    also regenerate the nondeterministic encrypted ones
 """
 import pathlib
+import re
+import struct
 import sys
 import zlib
 
@@ -196,6 +198,87 @@ def R(x, y, s, size=14, kind="sensitive"):
     return {"kind": kind, "page": 0, "rectTopLeft": region(x, y, s, size), "text": s}
 
 
+# --- cjk-predefined-cmaps (NEW-88) ---------------------------------------------------------------------------------
+# Type0 fonts whose Encoding is a predefined CMap from packages/sdk/cmaps (Adobe, BSD-3). The embedded TrueType program is
+# synthetic (one box glyph per character, hand-built, public domain); CIDToGIDMap maps the Adobe CID, read here from the
+# pack file with an independent parser, to that glyph. No ToUnicode: the Unicode text comes from the encoding alone.
+PACK = pathlib.Path(__file__).resolve().parents[3] / "packages/sdk/cmaps"
+GB_TEXT, JP_TEXT, SONG_TEXT = "\u4e2d\u6587\u6d4b\u8bd5", "\u65e5\u672c\u8a9e", "\u4f60\u597d"
+
+
+def _cid_table(name):
+    t = {}
+    body = (PACK / (name + ".cmap")).read_text()
+    for kind, blk in re.findall(r"begin(cidrange|cidchar)\n(.*?)end\1", body, re.S):
+        for line in blk.strip().splitlines():
+            f = line.split()
+            lo = int(f[0].strip("<>"), 16)
+            hi, cid = (int(f[1].strip("<>"), 16), int(f[2])) if kind == "cidrange" else (lo, int(f[1]))
+            t.update({c: cid + c - lo for c in range(lo, hi + 1)})
+    return t
+
+
+def _box_ttf(n):
+    """TrueType with .notdef plus n-1 box glyphs (advance 1000, 50..950 x 0..800), tables head hhea maxp hmtx loca glyf."""
+    box = struct.pack(">hhhhh", 1, 50, 0, 950, 800) + struct.pack(">H", 3) + struct.pack(">H", 0) + bytes([1] * 4)
+    box += struct.pack(">4h", 50, 0, 900, 0) + struct.pack(">4h", 0, 800, 0, -800)
+    glyf = box * n
+    loca = b"".join(struct.pack(">H", i * len(box) // 2) for i in range(n + 1))
+    head = struct.pack(">IIIIHHqqhhhhHHhhh", 0x10000, 0x10000, 0, 0x5F0F3CF5, 0, 1000, 0, 0, 50, 0, 950, 800, 0, 8, 2, 0, 0)
+    hhea = struct.pack(">IhhhHhhhhhhhhhhhH", 0x10000, 800, -200, 0, 1000, 50, 50, 950, 1, 0, 0, 0, 0, 0, 0, 0, n)
+    maxp = struct.pack(">IH", 0x10000, n) + struct.pack(">13H", 4, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0)
+    hmtx = struct.pack(">hh", 1000, 50) * n
+    tables = sorted({"head": head, "hhea": hhea, "maxp": maxp, "hmtx": hmtx, "loca": loca, "glyf": glyf}.items())
+    out, offset = b"", 12 + 16 * len(tables)
+    directory = struct.pack(">IHHHH", 0x10000, len(tables), 64, 2, 0)
+    for tag, data in tables:
+        pad = data + b"\0" * (-len(data) % 4)
+        csum = sum(struct.unpack(">%dI" % (len(pad) // 4), pad)) & 0xFFFFFFFF
+        directory += tag.encode() + struct.pack(">III", csum, offset + len(out), len(data))
+        out += pad
+    return directory + out
+
+
+def cjk_predefined_cmaps():
+    chars = GB_TEXT + JP_TEXT  # glyph k+1 draws chars[k]
+    ttf = _box_ttf(len(chars) + 1)
+
+    def cid_to_gid(name, text):
+        tab = _cid_table(name)
+        gids = {tab[ord(c)]: chars.index(c) + 1 for c in text}
+        return stream("", b"".join(struct.pack(">H", gids.get(i, 0)) for i in range(max(gids) + 1)), flate=True)
+
+    def hexs(text):
+        return "<" + "".join("%04X" % ord(c) for c in text) + ">"
+
+    def cid_font(base, ordering, supplement, desc, extra=""):
+        return ("<< /Type /Font /Subtype /CIDFontType2 /BaseFont /%s /CIDSystemInfo << /Registry (Adobe) /Ordering (%s) /Supplement %d >> "
+                "/FontDescriptor %d 0 R /DW 1000 %s >>" % (base, ordering, supplement, desc, extra))
+
+    def descriptor(base, flags, file=""):
+        return ("<< /Type /FontDescriptor /FontName /%s /Flags %d /FontBBox [50 0 950 800] /ItalicAngle 0 /Ascent 800 /Descent -200 "
+                "/CapHeight 800 /StemV 80 %s >>" % (base, flags, file))
+
+    ex = {
+        6: "<< /Type /Font /Subtype /Type0 /BaseFont /FoliarkBox-GB /Encoding /UniGB-UCS2-H /DescendantFonts [9 0 R] >>",
+        7: "<< /Type /Font /Subtype /Type0 /BaseFont /FoliarkBox-JP /Encoding /UniJIS-UCS2-H /DescendantFonts [10 0 R] >>",
+        8: "<< /Type /Font /Subtype /Type0 /BaseFont /STSong-Light /Encoding /UniGB-UCS2-H /DescendantFonts [11 0 R] >>",
+        9: cid_font("FoliarkBox-GB", "GB1", 6, 12, "/CIDToGIDMap 14 0 R"),
+        10: cid_font("FoliarkBox-JP", "Japan1", 7, 13, "/CIDToGIDMap 15 0 R"),
+        11: cid_font("STSong-Light", "GB1", 6, 16).replace("CIDFontType2", "CIDFontType0"),
+        12: descriptor("FoliarkBox-GB", 4, "/FontFile2 17 0 R"),
+        13: descriptor("FoliarkBox-JP", 4, "/FontFile2 18 0 R"),
+        14: cid_to_gid("UniGB-UCS2-H", GB_TEXT),
+        15: cid_to_gid("UniJIS-UCS2-H", JP_TEXT),
+        16: descriptor("STSong-Light", 6),
+        17: stream("/Length1 %d" % len(ttf), ttf, flate=True),
+        18: stream("/Length1 %d" % len(ttf), ttf, flate=True),  # a program of its own: redaction rewrites per program
+    }
+    content = (text(20, 360, "KEEP_PUBLIC_CJK") + ("BT /FG 24 Tf 20 300 Td %s Tj ET\nBT /FJ 24 Tf 20 240 Td %s Tj ET\n"
+               "BT /FS 24 Tf 20 180 Td %s Tj ET\n" % (hexs(GB_TEXT), hexs(JP_TEXT), hexs(SONG_TEXT))).encode())
+    return simple(content, ex, fonts="/F1 5 0 R /FG 6 0 R /FJ 7 0 R /FS 8 0 R")
+
+
 K = {"mustKeepText": [], "mustRemove": []}
 # id -> (generator, features, expected, extra meta)
 FIXTURES = {
@@ -256,6 +339,11 @@ FIXTURES = {
     "font-payload-secret": (font_payload_secret, ["font-payload", "embedded-font", "non-bmp"],
                             {"behavior": "TrueType program whose name table carries a marker; SECRET_UNICODE is drawn text", "mustRemove": ["SECRET_UNICODE", "SECRET_FONT_NAME_TABLE"],
                              "mustKeepText": ["KEEP_PUBLIC_UNICODE_GLYPH_WIDTHS"]}, {}),
+    "cjk-predefined-cmaps": (cjk_predefined_cmaps, ["cjk", "predefined-cmap", "embedded-font"],
+                             {"behavior": "Type0 fonts with predefined Unicode CMaps (UniGB-UCS2-H, UniJIS-UCS2-H) over a synthetic embedded box font, plus a non-embedded STSong-Light; no ToUnicode. Text needs the CMap pack; extraction equals the Unicode of the codes",
+                              "mustRemove": [GB_TEXT[1:3]], "mustKeepText": ["KEEP_PUBLIC_CJK", GB_TEXT[0], GB_TEXT[3], JP_TEXT, SONG_TEXT],
+                              "requiredAssets": ["cmap:Adobe-GB1-UCS2", "cmap:UniGB-UCS2-H", "cmap:UniJIS-UCS2-H"],
+                              "regions": [{"kind": "sensitive", "page": 0, "rectTopLeft": [44, 78, 92, 104], "text": GB_TEXT[1:3]}, R(20, 360, "KEEP_PUBLIC_CJK", kind="public")]}, {}),
 }
 for _id, _mode, _alg in (("encrypted-rc4-40", "RC4_40", "RC4-40"), ("encrypted-rc4-128", "RC4_128", "RC4-128"),
                          ("encrypted-aes-128", "AES_128", "AES-128"), ("encrypted-aes-256", "AES_256", "AES-256")):

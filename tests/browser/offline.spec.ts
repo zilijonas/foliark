@@ -47,7 +47,7 @@ test("prepared offline: reload without network, full flow, nothing of the docume
     expect([s.local, s.session]).toEqual([0, 0]);
     expect(s.entries.map((c) => c.url).sort()).toEqual(["/", ...site.files.filter(isAsset)].sort());
     for (const c of s.entries) {
-      expect(c.type, c.url).toMatch(/^(text\/html|text\/javascript|application\/wasm)$/);
+      expect(c.type, c.url).toMatch(/^(text\/html|text\/javascript|application\/wasm|text\/plain)$/);
       expect(c.hasDocText, `${c.url} holds document text`).toBe(false);
     }
     expect(s.entries.some((c) => c.url.endsWith(".wasm") && c.length > 1e6)).toBe(true);

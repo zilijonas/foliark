@@ -232,7 +232,7 @@ fn a_mixed_page_loses_text_image_vector_and_shared_form_text_in_one_export() {
             r.images_cloned,
             r.forms_cloned,
             r.vector_subpaths_removed,
-            r.vector_rects_cut
+            r.vector_paths_cut
         ),
         (4, 19, 1, 0, 1, 1, 0)
     );
@@ -303,8 +303,8 @@ fn one_unsupported_redaction_refuses_the_whole_export_and_names_it() {
 }
 
 #[test]
-fn a_partly_covered_cluster_and_collateral_vector_are_reported_in_the_effective_regions() {
-    // The region cuts 2.5 pt into the 6 pt wide "S" at x 20..26; a stroked line crosses region "line".
+fn a_partly_covered_cluster_grows_the_effective_region_and_a_cut_stroke_does_not() {
+    // The region cuts 2.5 pt into the 6 pt wide "S" at x 20..26; a stroked line crosses region "line" and is cut.
     let content = format!(
         "{}2 w 10 330 m 100 330 l S\n",
         text(20.0, 350.0, "SECRETTXT")
@@ -344,15 +344,13 @@ fn a_partly_covered_cluster_and_collateral_vector_are_reported_in_the_effective_
 
     let r = &done.report.redaction;
     assert_eq!(r.clusters_removed, 1, "only the cut glyph goes");
-    assert_eq!(r.vector_subpaths_removed, 1);
-    let line = &r.collateral[0];
-    assert_eq!(line.page_index, 0);
-    assert!(line.bounds.x <= 10.0 && line.bounds.x + line.bounds.width >= 100.0);
+    assert_eq!((r.vector_subpaths_removed, r.vector_paths_cut), (0, 1));
+    assert!(r.collateral.is_empty());
     assert!(
         done.report
             .losses
             .iter()
-            .any(|l| l.code == LossCode::VectorCollateral && l.count == 1)
+            .all(|l| l.code != LossCode::VectorCollateral)
     );
 
     let effective =
@@ -364,7 +362,8 @@ fn a_partly_covered_cluster_and_collateral_vector_are_reported_in_the_effective_
     );
     assert!(cut.x + cut.width > 22.5 + 3.0, "grown past what was asked");
     let line = effective("line").effective[0];
-    assert!(line.x <= 10.0 && line.x + line.width >= 100.0, "{line:?}");
+    // The stroke is cut to the region, so nothing outside it is disclosed as removed.
+    assert!(line.x >= 39.9 && line.x + line.width <= 60.1, "{line:?}");
 
     // Survivors stay: PyMuPDF still reads everything after the removed "S".
     let (txt, _) = render_probe("cut.pdf", &done.bytes, rect(0.0, 0.0, 1.0, 1.0));

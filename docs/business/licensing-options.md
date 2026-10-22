@@ -17,7 +17,7 @@ Inferred owner goals: (1) keep rights and control; (2) keep the option to commer
 
 Repo facts:
 - Root license today is `UNLICENSED` (`Cargo.toml:10`); no LICENSE file; repo is private and not published.
-- Production deps are permissive: 94 prod crates, mostly MIT/Apache-2.0 (also Unicode-3.0, Zlib, Unlicense, BSD-3, BSL-1.0); zero runtime npm deps (`docs/provenance/dependencies.json`).
+- Production deps are permissive: 100 prod crates, mostly MIT/Apache-2.0 (also Unicode-3.0, Zlib, Unlicense, BSD-3, BSL-1.0); zero runtime npm deps (`docs/provenance/dependencies.json`).
 - hayro-syntax and hayro-interpret 0.8.0 are vendored unpatched (Apache-2.0 OR MIT); patches P1-P6 are planned. hayro upstream is dual Apache-2.0/MIT ([github.com/LaurenzV/hayro](https://github.com/LaurenzV/hayro)). Those files stay under upstream terms whatever Foliark chooses, and their notices must ship.
 - 14 Foxit Base-14 `.pfb` fonts are embedded under the PDFium BSD-style notice; `LICENSE_FOXIT` must ship (`docs/provenance/assets.md`, NEW-74). Foxit font terms beyond that notice are unverified.
 - Nothing in the dependency graph is copyleft, so no dependency forces any choice. Every option below is technically open.

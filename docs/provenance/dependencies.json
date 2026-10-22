@@ -7,7 +7,7 @@
     "counts": {
       "build": 2,
       "dev": 3,
-      "prod": 94
+      "prod": 100
     }
   },
   "npm": {
@@ -839,6 +839,54 @@
       "source": "npm registry (pnpm-lock.yaml); optional transitive of playwright, macOS only",
       "kind": "dev",
       "ecosystem": "npm"
+    },
+    {
+      "name": "i_float",
+      "version": "5.0.0",
+      "license": "MIT",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "i_key_sort",
+      "version": "0.12.0",
+      "license": "MIT",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "i_overlay",
+      "version": "9.1.0",
+      "license": "MIT OR Apache-2.0",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "i_shape",
+      "version": "5.0.0",
+      "license": "MIT",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "i_tree",
+      "version": "0.20.0",
+      "license": "MIT",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
+    },
+    {
+      "name": "libm",
+      "version": "0.2.16",
+      "license": "MIT",
+      "source": "crates.io",
+      "kind": "prod",
+      "ecosystem": "cargo"
     }
   ]
 }

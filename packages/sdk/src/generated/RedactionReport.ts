@@ -2,7 +2,7 @@
 import type { Collateral } from "./Collateral";
 import type { SharedSurvivor } from "./SharedSurvivor";
 
-export type RedactionReport = { regions: number, clustersRemoved: number, imagesErased: number, imagesCloned: number, formsCloned: number, vectorSubpathsRemoved: number, vectorRectsCut: number, 
+export type RedactionReport = { regions: number, clustersRemoved: number, imagesErased: number, imagesCloned: number, formsCloned: number, vectorSubpathsRemoved: number, vectorPathsCut: number, 
 /**
  * Spec §5.4c.
  */

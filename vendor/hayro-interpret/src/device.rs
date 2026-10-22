@@ -70,6 +70,10 @@ pub trait Device<'a> {
     /// Called before an item is drawn: whether optional content currently shows it. Only
     /// `false` when [`crate::InterpreterSettings::ocg_override`] made hidden content visible.
     fn oc_state(&mut self, _visible: bool) {}
+
+    /// Called before each filled or stroked path with the stroking (`CA`) and non-stroking
+    /// (`ca`) alpha in force.
+    fn path_alpha(&mut self, _stroke: f32, _fill: f32) {}
 }
 
 /// A device that discards all drawing operations.

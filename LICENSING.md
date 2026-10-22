@@ -17,6 +17,24 @@ for that exact release at https://github.com/zilijonas/foliark. Publication must
 verify that correspondence; a link to an unrelated or newer source snapshot is
 insufficient.
 
+## Source correspondence
+
+Repository: https://github.com/zilijonas/foliark (public). The npm package
+`@zilijonas/foliark` version `X.Y.Z` is built from git tag `vX.Y.Z` of that
+repository; version `0.1.0` corresponds to tag `v0.1.0`. The tag is created
+after the release pull request is merged and points at the commit recorded in
+`docs/release/candidate.md` (or a descendant that changes only documentation
+files not shipped in the package; the candidate record states the exact commit
+and the tarball hash). The tag contains everything needed to rebuild the shipped
+JavaScript and WebAssembly: the Rust workspace (`crates/`), the vendored hayro
+fork (`vendor/hayro-syntax`, `vendor/hayro-interpret`) with its patch register
+(`patches/hayro/README.md`), `Cargo.lock`, `rust-toolchain.toml`, the CMap pack
+sources and build tool (`tools/cmaps`), the SDK (`packages/sdk`), notices
+generation (`scripts/gen-notices.mjs`) and the exact build steps in
+`docs/development.md` and `docs/release/process.md`. Rebuilding with the pinned
+toolchain reproduces the recorded WebAssembly and tarball hashes on the same
+machine and toolchain; cross-machine byte identity is not claimed.
+
 ## Alternative commercial permission
 
 The copyright holder also offers separate commercial licensing for uses that

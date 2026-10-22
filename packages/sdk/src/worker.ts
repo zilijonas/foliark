@@ -5,5 +5,6 @@ import { createWorkerCore } from "./worker-core.js";
 const core = createWorkerCore({
   post: (message, transfer = []) => postMessage(message, { transfer }),
   loadWasm: (url) => init({ module_or_path: url }).then(() => undefined),
+  cmapsUrl: new URL("../cmaps/", import.meta.url).href,
 });
 self.onmessage = (e: MessageEvent) => core.onMessage(e.data);

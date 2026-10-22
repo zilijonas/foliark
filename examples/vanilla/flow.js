@@ -4,7 +4,7 @@
 
 /**
  * Open a PDF and return what the page shows: page-1 text and page-1 pixels.
- * @param {import("@foliark/sdk").Foliark} foliark
+ * @param {import("@zilijonas/foliark").Foliark} foliark
  * @param {ArrayBuffer} bytes
  */
 export async function show(foliark, bytes) {
@@ -16,7 +16,7 @@ export async function show(foliark, bytes) {
 
 /**
  * Redact every occurrence of `word` (black boxes, text removed) and export a sanitized native PDF.
- * @param {import("@foliark/sdk").DocumentHandle} doc
+ * @param {import("@zilijonas/foliark").DocumentHandle} doc
  * @param {string} word
  * @returns {Promise<Uint8Array>}
  */

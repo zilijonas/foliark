@@ -510,6 +510,7 @@ impl Engine {
         once(move |e| {
             e.still_at(&doc, at)?;
             e.plan = None;
+            crate::cmaps::require(&e.session(&doc)?.info.required_assets)?;
             let binding = e.binding(&doc)?;
             let s = e.get(&doc)?;
             let mut out = export::prepare(

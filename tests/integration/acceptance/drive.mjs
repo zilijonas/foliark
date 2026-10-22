@@ -1,20 +1,21 @@
-// Acceptance driver (NEW-59): runs every case through the INSTALLED npm candidate (the packed @foliark/sdk tarball in a temp
-// project, real wasm, `@foliark/sdk/inline` entry) and writes the exported bytes plus a per-scenario record. It judges nothing:
+// Acceptance driver (NEW-59): runs every case through the INSTALLED npm candidate (the packed @zilijonas/foliark tarball in a temp
+// project, real wasm, `@zilijonas/foliark/inline` entry) and writes the exported bytes plus a per-scenario record. It judges nothing:
 // tests/integration/acceptance/judge.py does, with the independent oracles. Usage (from the temp project): node drive.mjs CASES.json OUTDIR
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { createInlineFoliark } from "@foliark/sdk/inline";
-import { FoliarkError } from "@foliark/sdk";
+import { createInlineFoliark } from "@zilijonas/foliark/inline";
+import { FoliarkError } from "@zilijonas/foliark";
 
 const [casesFile, outDir] = process.argv.slice(2);
 const cases = JSON.parse(readFileSync(casesFile, "utf8"));
-const wasm = readFileSync(new URL(import.meta.resolve("@foliark/sdk/wasm")));
+const wasm = readFileSync(new URL(import.meta.resolve("@zilijonas/foliark/wasm")));
 const font = readFileSync(process.env.FONT_TTF);
 const sha = (b) => createHash("sha256").update(b).digest("hex");
 const fail = (e) => (e instanceof FoliarkError ? { outcome: "refused", code: e.code, details: e.details } : { outcome: "crash", message: String(e && e.stack || e) });
 
-const f = await createInlineFoliark({ wasm });
+// Node's fetch cannot read file: URLs, and the packed default cmapsUrl is one: read the pack files explicitly.
+const f = await createInlineFoliark({ wasm, fetchCMap: async (url) => new Uint8Array(readFileSync(new URL(url))) });
 await f.registerFonts([{ bytes: font.slice(), family: "Liberation Sans", weight: 400, style: "normal" }]);
 const open = (c, input) => f.open(new Uint8Array(input), c.password ? { password: c.password } : {});
 

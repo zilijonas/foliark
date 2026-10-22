@@ -61,7 +61,7 @@ Run from the repo root. `source ~/.cargo/env` if `cargo` is missing. Toolchain p
 | Wasm build + glue | `scripts/build-wasm.sh` (output `packages/sdk/wasm/`, gitignored) |
 | Wasm compile check | `cargo build --locked --target wasm32-unknown-unknown -p foliark-wasm` |
 | SDK build | `pnpm install && pnpm build:sdk` (needs the wasm glue first) |
-| SDK tests | `pnpm --filter @foliark/sdk test` (needs wasm build) |
+| SDK tests | `pnpm --filter @zilijonas/foliark test` (needs wasm build) |
 | Rust/TS parity | `scripts/check-ts-parity.sh` (ts-rs output must match `packages/sdk/src/generated`; commit regenerated files) |
 | Browser smoke | `pnpm smoke chromium`, `pnpm smoke webkit` |
 | Browser specs | `tests/browser/run.sh` (chromium, firefox, webkit: CSP, offline) |
@@ -99,7 +99,7 @@ Process:
 Git, push, publish:
 - Commit on the branch you were given. Conventional commits, `type(scope): summary (TASK-ID)`, one logical change per commit, body says why, ending with a `Co-Authored-By:` trailer naming your actual model (for example `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>`).
 - Stage only your own files (other agents commit concurrently). `git pull --ff-only` before pushing.
-- Push to the existing `origin` only when the lead or owner asks, as normal fast-forward pushes. Never force-push, change repository visibility, add remotes, create tags or releases, or publish packages (npm, crates) unless the task explicitly authorizes that exact action. Login/2FA stays with the owner.
+- Never push per commit or per task (each push costs GitHub Actions minutes). Commit locally; the lead pushes one batch branch, opens one PR, and merges it when the wave is done. Push only when the lead or owner asks, as normal fast-forward pushes. Never force-push, change repository visibility, add remotes, create tags or releases, or publish packages (npm, crates) unless the task explicitly authorizes that exact action. Login/2FA stays with the owner.
 
 Local machine (owner's Mac mini, only where `~/ai/bin/memory-queue` exists; plain runs elsewhere):
 - Every `cargo build/test/clippy`, `wasm-bindgen`, browser and Playwright run goes through the queue:
@@ -118,6 +118,7 @@ Receipts: attach one Markdown receipt per task (at most about 1500 chars): commi
 - The budgets gate (`tools/bench/budgets.json`) fails on regressions; do not raise a budget to make a change pass without a recorded reason.
 - ts-rs DTOs regenerate during `cargo test`; commit them and run the parity check.
 - Re-cutting a release candidate: follow `docs/release/process.md` and record bytes and sha256 in `docs/release/candidate.md`; the version in `packages/sdk/package.json`, the `CHANGELOG.md` heading and the workflow input must agree. Do not publish from an agent unless authorized (section 4).
+- Waiting on a long command: run it in the background and wait for its completion notification. Never poll with `pgrep -f "<pattern>"` loops: the pattern matches the watcher's own command line, so the loop never ends.
 
 ## 6. Optional local tooling
 

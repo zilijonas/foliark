@@ -9,7 +9,7 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 ok() { echo "ok   $*"; }
 
 ver=$(node -p 'require("./packages/sdk/package.json").version')
-tgz=${1:-dist-pkg/foliark-sdk-$ver.tgz}
+tgz=${1:-dist-pkg/zilijonas-foliark-$ver.tgz}
 [ -f "$tgz" ] || fail "no tarball at $tgz (build: scripts/build-wasm.sh && pnpm build:sdk && tests/package-consumers/pack.sh dist-pkg)"
 dir=$(dirname "$tgz")
 sha=$(shasum -a 256 "$tgz" | cut -d' ' -f1)
@@ -23,7 +23,7 @@ fi
 
 # 2. contents and manifest
 list=$(tar tzf "$tgz")
-for f in package.json README.md LICENSE LICENSE_FOXIT NOTICE THIRD_PARTY_NOTICES.md SUPPORT_MATRIX.md dist/index.js wasm/foliark_wasm_bg.wasm; do
+for f in package.json README.md LICENSE LICENSING.md COMMERCIAL-LICENSING.md LICENSE_FOXIT NOTICE THIRD_PARTY_NOTICES.md SUPPORT_MATRIX.md dist/index.js wasm/foliark_wasm_bg.wasm cmaps/LICENSE.txt; do
   grep -qx "package/$f" <<<"$list" || fail "tarball lacks $f"
 done
 ! grep -iE 'fixture|\.map$|test|\.pdf$' <<<"$list" || fail "tarball contains fixtures, maps, tests or PDFs"
@@ -34,8 +34,10 @@ node -e '
   const m = JSON.parse(require("fs").readFileSync(process.argv[1] + "/package/package.json"));
   if (m.version !== process.argv[2]) throw new Error("tarball version " + m.version);
   if (Object.keys(m.dependencies || {}).length) throw new Error("runtime dependencies present");
-  if (!m.license) throw new Error("no license field");
-  console.log("ok   manifest @foliark/sdk " + m.version + ", license " + m.license + ", private " + !!m.private + ", runtime dependencies none");
+  if (m.name !== "@zilijonas/foliark") throw new Error("package name " + m.name);
+  if (m.license !== "AGPL-3.0-only") throw new Error("license " + m.license);
+  if (m.private) throw new Error("tarball manifest is private");
+  console.log("ok   manifest @zilijonas/foliark " + m.version + ", license " + m.license + ", private " + !!m.private + ", runtime dependencies none");
 ' "$tmp" "$ver"
 cmp -s "$tmp/package/THIRD_PARTY_NOTICES.md" packages/sdk/THIRD_PARTY_NOTICES.md || fail "tarball notices differ from packages/sdk"
 cmp -s "$tmp/package/SUPPORT_MATRIX.md" docs/support-matrix.md || fail "tarball support matrix differs from docs/support-matrix.md"
@@ -43,7 +45,7 @@ node scripts/gen-notices.mjs --check >/dev/null || fail "notices are stale (node
 ok "notices up to date and identical to the tarball copy; tarball support matrix == docs/support-matrix.md"
 
 # 3. SBOM and checksums, written next to the tarball (outside the tarball, so its bytes stay the recorded ones)
-node tools/release/sbom.mjs "$dir/foliark-sdk-$ver.cdx.json" "$tgz" >/dev/null
+node tools/release/sbom.mjs "$dir/zilijonas-foliark-$ver.cdx.json" "$tgz" >/dev/null
 node -e '
   const [f, sha, inv] = process.argv.slice(1);
   const b = JSON.parse(require("fs").readFileSync(f));
@@ -53,8 +55,8 @@ node -e '
   if (b.metadata.component.hashes[0].content !== sha) throw new Error("SBOM tarball hash differs");
   if (new Set(b.components.map((c) => c["bom-ref"])).size !== b.components.length) throw new Error("duplicate bom-ref");
   console.log("ok   SBOM CycloneDX " + b.specVersion + ", " + b.components.length + " components (94 crates + 2 data sets), root hash == tarball");
-' "$dir/foliark-sdk-$ver.cdx.json" "$sha" docs/provenance/dependencies.json
-( cd "$dir" && shasum -a 256 "$(basename "$tgz")" "foliark-sdk-$ver.cdx.json" > SHA256SUMS && shasum -a 256 -c SHA256SUMS >/dev/null )
+' "$dir/zilijonas-foliark-$ver.cdx.json" "$sha" docs/provenance/dependencies.json
+( cd "$dir" && shasum -a 256 "$(basename "$tgz")" "zilijonas-foliark-$ver.cdx.json" > SHA256SUMS && shasum -a 256 -c SHA256SUMS >/dev/null )
 ok "SHA256SUMS written and verified"
 
 # 4. npm dry run: unreachable registry, so no network and no credentials are possible
@@ -68,17 +70,19 @@ for f in LICENSE CONTRIBUTING.md SECURITY.md CHANGELOG.md docs/support-matrix.md
   [ -s "$f" ] || fail "missing $f"
 done
 grep -q "^## \[$ver\]" CHANGELOG.md || fail "CHANGELOG.md has no [$ver] entry"
-grep -q 'to be set by the owner (NEW-73)' SECURITY.md || fail "SECURITY.md lost its owner placeholder"
-grep -q 'NEW-73' LICENSE || fail "LICENSE is not the NEW-73 placeholder"
-[ -z "$(git remote)" ] || fail "a git remote exists: $(git remote)"
-ok "LICENSE, CONTRIBUTING, SECURITY (channel placeholder), CHANGELOG [$ver], support matrix, process doc, workflow present; no git remote"
+head -1 LICENSE | grep -q 'GNU AFFERO GENERAL PUBLIC LICENSE' || fail "LICENSE is not the AGPL text"
+cmp -s "$tmp/package/LICENSE" LICENSE || fail "tarball LICENSE differs from the repository LICENSE"
+grep -q "tag \`v$ver\`" packages/sdk/README.md || fail "package README does not name the source tag v$ver"
+grep -q "git tag\|tag \`v" LICENSING.md || fail "LICENSING.md lacks source correspondence"
+[ -s vendor/hayro-syntax/Cargo.toml ] && [ -s patches/hayro/README.md ] || fail "vendored hayro fork or patch register missing"
+ok "AGPL LICENSE (tarball copy identical), source tag v$ver named, hayro fork + patches present, CONTRIBUTING, SECURITY, CHANGELOG [$ver], support matrix, process doc, workflow present"
 
 # 6. publication gate status (informational: the real release workflow refuses these)
 node -e '
   const m = require("./packages/sdk/package.json");
   const gates = [];
   if (m.private) gates.push("package.json private:true");
-  if (m.license === "UNLICENSED") gates.push("license UNLICENSED");
-  console.log(gates.length ? "gate publication blocked by: " + gates.join(", ") + " (owner gates NEW-73/77/78)" : "gate no placeholder blocks publication");
+  if (m.license !== "AGPL-3.0-only") gates.push("license " + m.license);
+  console.log(gates.length ? "gate publication blocked by: " + gates.join(", ") : "gate package metadata allows publication (publication itself: NEW-91, tag v" + m.version + " after the PR merge)");
 '
 echo "dry run passed; nothing was published"

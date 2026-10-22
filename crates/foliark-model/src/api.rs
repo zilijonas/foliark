@@ -64,6 +64,7 @@ pub enum ErrorCode {
     OptionalContentUnsupported,
     SignedInput,
     RedactPatternUnsupported,
+    RedactVectorUnsupported,
     RedactVerifyFailed,
     RenderIncomplete,
     ConsentRequired,
@@ -730,6 +731,9 @@ pub enum InvisibleTextPolicy {
     #[default]
     Keep,
     Remove,
+    /// Keep invisible text only where it lies over a drawn raster image (a scanner's OCR
+    /// layer); every other invisible show is removed and counted (ADR 0008).
+    KeepOcr,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, TS)]
@@ -799,6 +803,7 @@ pub enum LossCode {
     SignaturesInvalidated,
     ImageReencoded,
     VectorCollateral,
+    VectorCutApproximated,
     FontSubstituted,
     FontGlyphInventoryRetained,
     TextSearchLost,
@@ -849,7 +854,7 @@ pub struct RedactionReport {
     pub images_cloned: u32,
     pub forms_cloned: u32,
     pub vector_subpaths_removed: u32,
-    pub vector_rects_cut: u32,
+    pub vector_paths_cut: u32,
     /// Spec §5.4c.
     pub collateral: Vec<Collateral>,
     pub shared_survivors: Vec<SharedSurvivor>,

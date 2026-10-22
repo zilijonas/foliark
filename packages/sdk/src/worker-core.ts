@@ -17,7 +17,21 @@ export interface WorkerHost {
   post(message: unknown, transfer?: ArrayBuffer[]): void;
   /** Instantiates the wasm module (fetch in the real worker, bytes in tests). */
   loadWasm(url: string): Promise<void>;
+  /** Where the CMap pack lives when `init` names no `cmapsUrl`: the `cmaps/` folder next to this package's `dist/`. */
+  cmapsUrl?: string;
+  /** Bytes of one pack file (default `fetch`; tests read the folder). Rejects when it cannot be had. */
+  fetchCMap?(url: string): Promise<Uint8Array>;
 }
+
+/** One pack file over HTTP: same origin by default, no credentials, nothing but the file name leaves the device. */
+async function fetchPackFile(url: string): Promise<Uint8Array> {
+  const res = await fetch(url, { credentials: "omit", cache: "force-cache" });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return new Uint8Array(await res.arrayBuffer());
+}
+
+const CMAP_NAME = /^[A-Za-z0-9][A-Za-z0-9-]{0,63}$/;
+const USECMAP = /\/([A-Za-z0-9-]+)\s+usecmap/g;
 
 type Args = Record<string, any>;
 type Out = { result: unknown; transfer?: ArrayBuffer[] };
@@ -54,7 +68,9 @@ export function createWorkerCore(host: WorkerHost, stepBudget = STEP_BUDGET) {
   let engine: wasm.Engine | undefined;
   let queue: Promise<void> = Promise.resolve();
   const cancelled = new Set<number>();
+  const cmaps = new Set<string>(); // registered in this engine
   let lastHandled = 0;
+  let cmapsUrl: string | undefined;
 
   const cancelledError = () => new FoliarkError("CANCELLED", "operation cancelled", { recoverable: true });
   const need = (): wasm.Engine => {
@@ -77,6 +93,37 @@ export function createWorkerCore(host: WorkerHost, stepBudget = STEP_BUDGET) {
     }
   }
 
+  /**
+   * Spec 10.3: fetch the pack files a document lists in `requiredAssets` (and the CMaps they `usecmap`), base first,
+   * and register them. The names come from the PDF, so only a plain predefined-looking name ever becomes a URL.
+   */
+  async function loadCMaps(e: wasm.Engine, assets: string[], base: string, fetchCMap: (url: string) => Promise<Uint8Array>) {
+    const dir = base.endsWith("/") ? base : `${base}/`;
+    const failed = (name: string, why: string) =>
+      new FoliarkError("ASSET_LOAD_FAILED", `CMap pack file cmap:${name} ${why}`, { details: { feature: `cmap:${name}` } });
+    const load = async (name: string, chain: string[]): Promise<void> => {
+      if (cmaps.has(name)) return;
+      if (!CMAP_NAME.test(name) || chain.includes(name) || chain.length > 4) throw failed(name, "is not a loadable CMap name");
+      const url = new URL(`${name}.cmap`, dir);
+      let bytes: Uint8Array;
+      try {
+        bytes = await fetchCMap(url.href);
+      } catch (err) {
+        throw failed(name, `could not be loaded from ${url.href} (${err instanceof Error ? err.message : String(err)}); set cmapsUrl to a folder that serves the pack`);
+      }
+      for (const [, baseName] of new TextDecoder("latin1").decode(bytes.subarray(0, 4096)).matchAll(USECMAP)) {
+        await load(baseName, [...chain, name]);
+      }
+      try {
+        e.registerCMap(name, bytes);
+      } catch {
+        throw failed(name, "is corrupt or incomplete; reinstall the pack from the same @zilijonas/foliark version");
+      }
+      cmaps.add(name);
+    };
+    for (const a of assets) if (a.startsWith("cmap:")) await load(a.slice(5), []);
+  }
+
   async function run(id: number, op: OpName, doc: string | undefined, a: Args): Promise<Out> {
     if (op === "init") {
       await host.loadWasm(a.wasmUrl).catch((e) => {
@@ -84,13 +131,26 @@ export function createWorkerCore(host: WorkerHost, stepBudget = STEP_BUDGET) {
       });
       engine?.free();
       engine = new wasm.Engine(a.limits, generation!, a.fontMatch);
+      cmaps.clear();
+      cmapsUrl = a.cmapsUrl ?? host.cmapsUrl;
       return { result: null };
     }
     const e = need();
     const d = doc!;
     switch (op) {
-      case "open":
-        return { result: e.open(new Uint8Array(a.bytes), a.password, a.allowRepaired) };
+      case "open": {
+        const opened = e.open(new Uint8Array(a.bytes), a.password, a.allowRepaired);
+        const needed = (opened.info.requiredAssets as string[]).filter((n) => n.startsWith("cmap:") && !cmaps.has(n.slice(5)));
+        if (needed.length === 0) return { result: opened };
+        try {
+          if (!cmapsUrl) throw new FoliarkError("ASSET_LOAD_FAILED", "no CMap pack location: pass cmapsUrl", { details: { feature: needed[0] } });
+          await loadCMaps(e, needed, cmapsUrl, host.fetchCMap ?? fetchPackFile);
+        } catch (err) {
+          e.close(opened.docId); // a document that cannot be read faithfully is not left open
+          throw err;
+        }
+        return { result: opened };
+      }
       case "info":
         return { result: e.info(d) };
       case "pages":

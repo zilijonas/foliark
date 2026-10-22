@@ -12,8 +12,8 @@ use crate::engine::Engine;
 use crate::interpret::{DiagnosticKind, GlyphItem, Item, ItemKind, PathItem, SemanticPage};
 use crate::text::ClusterId;
 use foliark_model::{
-    Collateral, ErrorCode, InstancePath, InstanceStep, Loss, LossCode, Matrix, ObjectId, PdfError,
-    Point, Quad, Rect, RedactionReport, SharedKind, SharedSurvivor, SourceLoc,
+    ErrorCode, InstancePath, InstanceStep, Loss, LossCode, Matrix, ObjectId, PdfError, Point, Quad,
+    Rect, RedactionReport, SharedKind, SharedSurvivor, SourceLoc,
 };
 use hayro::hayro_syntax::object::{Array, Dict, Name};
 use hayro::vello_cpu::peniko::kurbo::{Affine, BezPath, Cap, PathEl, Shape};
@@ -127,18 +127,25 @@ pub struct PlannedImage {
 pub enum VectorClass {
     /// (a) inside the union of regions: removed.
     Inside,
-    /// (b) crossing an axis-aligned, fill-only rectangle: replaced by the rectangle difference.
-    RectCut,
-    /// (c) crossing anything else: removed whole, reported as collateral.
-    Collateral,
+    /// (b) a filled path or a clip outline whose bounds reach a region: the geometry stage
+    /// decides (untouched, removed, or replaced by its difference with the regions).
+    Cut,
+}
+
+/// What a planned entry paints: `B` is a fill entry and a stroke entry, a clipping path adds a
+/// clip entry; each is cut on its own (ADR 0009).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum VectorKind {
+    Fill,
+    Stroke,
+    Clip,
 }
 
 #[derive(Debug, Clone)]
 pub struct PlannedVector {
     pub loc: SourceLoc,
     pub path: InstancePath,
-    /// Index of the subpath inside the painted path.
-    pub subpath: u32,
+    pub kind: VectorKind,
     pub class: VectorClass,
     /// Display bounds, expanded by half the stroke width times the miter limit when stroked.
     pub bounds: Rect,
@@ -327,7 +334,7 @@ pub(crate) fn text_coverage(q: &Quad, r: B) -> Option<f64> {
 
 /// Whether the box `b` lies inside the union of `regions`: every cell of the grid that `b` and
 /// the region edges cut it into has its centre in some region.
-fn covered(b: B, regions: &[B]) -> bool {
+pub(super) fn covered(b: B, regions: &[B]) -> bool {
     let samples = |lo: f64, hi: f64, cuts: &mut Vec<f64>| {
         if lo >= hi {
             return vec![lo];
@@ -375,27 +382,6 @@ pub(super) fn subpaths(path: &BezPath) -> Vec<BezPath> {
         }
     }
     out
-}
-
-/// A closed polyline of four axis-aligned sides (what `re` makes), in display space.
-fn is_axis_rect(p: &BezPath) -> bool {
-    let mut pts: Vec<(f64, f64)> = Vec::new();
-    for el in p.elements() {
-        match el {
-            PathEl::MoveTo(q) | PathEl::LineTo(q) => pts.push((q.x, q.y)),
-            PathEl::ClosePath => {}
-            _ => return false,
-        }
-    }
-    if pts.len() == 5 && pts[0] == pts[4] {
-        pts.pop();
-    }
-    let same = |a: f64, b: f64| (a - b).abs() < 1e-6;
-    pts.len() == 4
-        && (0..4).all(|i| {
-            let (a, b) = (pts[i], pts[(i + 1) % 4]);
-            same(a.0, b.0) != same(a.1, b.1)
-        })
 }
 
 // ---- scanning ---------------------------------------------------------------------------------
@@ -465,11 +451,11 @@ impl Scan {
             images_cloned: 0,
             forms_cloned: 0,
             vector_subpaths_removed: 0,
-            vector_rects_cut: 0,
+            vector_paths_cut: 0,
             collateral: Vec::new(),
             shared_survivors: Vec::new(),
         };
-        let (mut reencoded, mut collateral_pages) = (BTreeSet::new(), BTreeSet::new());
+        let mut reencoded = BTreeSet::new();
         let mut image_pages: BTreeMap<ObjectId, BTreeSet<u32>> = BTreeMap::new();
         let mut form_pages: BTreeMap<ObjectId, BTreeSet<u32>> = BTreeMap::new();
         for p in &mut pages {
@@ -493,16 +479,8 @@ impl Scan {
             }
             for v in &p.vectors {
                 match v.class {
-                    VectorClass::RectCut => report.vector_rects_cut += 1,
+                    VectorClass::Cut => report.vector_paths_cut += 1,
                     VectorClass::Inside => report.vector_subpaths_removed += 1,
-                    VectorClass::Collateral => {
-                        report.vector_subpaths_removed += 1;
-                        report.collateral.push(Collateral {
-                            page_index: p.page_index,
-                            bounds: v.bounds,
-                        });
-                        collateral_pages.insert(p.page_index);
-                    }
                 }
             }
         }
@@ -538,13 +516,6 @@ impl Scan {
                 code: LossCode::ImageReencoded,
                 count: report.images_erased,
                 pages: Some(reencoded.into_iter().collect()),
-            });
-        }
-        if !report.collateral.is_empty() {
-            losses.push(Loss {
-                code: LossCode::VectorCollateral,
-                count: report.collateral.len() as u32,
-                pages: Some(collateral_pages.into_iter().collect()),
             });
         }
         let mut survivors = self.survivors;
@@ -763,27 +734,17 @@ fn plan_page(
                     changed = true;
                 }
             }
-            ItemKind::Path(p) if !p.clip_only && (p.fill.is_some() || p.stroke.is_some()) => {
+            ItemKind::Path(p)
+                if (p.clip_only && clip_from_stream(item))
+                    || (!p.clip_only && (p.fill.is_some() || p.stroke.is_some())) =>
+            {
                 let found = plan_vectors(item.loc, &item.path, p, to_display, disp_scale, &boxes);
                 changed = !found.is_empty();
-                if p.stroke.is_some() {
-                    // `B` reaches the model as a fill item, then a stroke item whose larger box
-                    // decides: the fill item's entries (a rectangle cut) are replaced.
-                    let (stale, keep): (Vec<_>, Vec<_>) = plan
-                        .vectors
-                        .drain(..)
-                        .partition(|v| v.loc == item.loc && v.path == item.path);
-                    plan.vectors = keep;
-                    for v in stale {
-                        for &i in &v.regions {
-                            regions[i as usize].vectors -= 1;
-                        }
-                    }
-                }
                 for v in found {
-                    affect(&mut regions, &v.regions, bounds_of(&v.bounds), |r| {
-                        r.vectors += 1
-                    });
+                    // Cut exactly to the regions: nothing beyond them goes, so `effective` stays.
+                    for &i in &v.regions {
+                        regions[i as usize].vectors += 1;
+                    }
                     plan.vectors.push(v);
                 }
                 if pattern_locs.contains(&item.loc) {
@@ -870,6 +831,12 @@ fn bounds_of_path(path: &BezPath, to_display: Affine) -> B {
     [r.x0, r.y0, r.x1, r.y1]
 }
 
+/// A clip-only item written by a `W n` of the stream it names, not the BBox clip of a Form or
+/// pattern (the interpreter reports those at the `Do` that draws them, in the parent's stream).
+fn clip_from_stream(item: &Item) -> bool {
+    item.loc.stream.num != 0 && item.path.0.last().is_none_or(|s| s.form == item.loc.stream)
+}
+
 fn plan_vectors(
     loc: SourceLoc,
     path: &InstancePath,
@@ -878,60 +845,49 @@ fn plan_vectors(
     disp_scale: f64,
     boxes: &[B],
 ) -> Vec<PlannedVector> {
-    // Half the width times the miter limit (spec §5.4), at least the square-cap corner, along
-    // the CTM's widest axis (`stroke_scale`).
-    let grow = item.stroke.as_ref().map_or(0.0, |s| {
+    // One unit per painted path: fill rules act across subpaths and a stroke's ink is the union
+    // of its subpaths', so only the geometry stage can tell what a cut leaves.
+    let r = (to_display * item.geometry.clone()).bounding_box();
+    let mut b = [r.x0, r.y0, r.x1, r.y1];
+    if let Some(s) = &item.stroke {
+        // Half the width times the miter limit (spec §5.4), at least the square-cap corner, along
+        // the CTM's widest axis (`stroke_scale`): a bound, never the verdict.
         let cap = if matches!(s.line_cap, Cap::Square) {
             std::f64::consts::SQRT_2
         } else {
             1.0
         };
-        f64::from(s.line_width)
+        let grow = f64::from(s.line_width)
             * item.stroke_scale
             * disp_scale
             * 0.5
-            * f64::from(s.miter_limit).max(1.0).max(cap)
-    });
-    let shapes = subpaths(&(to_display * item.geometry.clone()));
-    let subs: Vec<B> = shapes
-        .iter()
-        .map(|sub| {
-            let r = sub.bounding_box();
-            [r.x0, r.y0, r.x1, r.y1]
-        })
-        .collect();
-    let mut out = Vec::new();
-    for (n, r) in subs.iter().enumerate() {
-        let b = [r[0] - grow, r[1] - grow, r[2] + grow, r[3] + grow];
-        let hit: Vec<u32> = (0..boxes.len() as u32)
-            .filter(|&i| overlap(b, boxes[i as usize]))
-            .collect();
-        if hit.is_empty() {
-            continue;
-        }
-        // A rectangle is cut only when it is the whole story of its area: another subpath over
-        // it (a hole, a winding or even-odd interaction) makes the cut ambiguous, so it goes whole.
-        let alone = !subs
-            .iter()
-            .enumerate()
-            .any(|(m, o)| m != n && overlap(b, *o));
-        let class = if covered(b, boxes) {
-            VectorClass::Inside
-        } else if item.stroke.is_none() && is_axis_rect(&shapes[n]) && alone {
-            VectorClass::RectCut
-        } else {
-            VectorClass::Collateral
-        };
-        out.push(PlannedVector {
-            loc,
-            path: path.clone(),
-            subpath: n as u32,
-            class,
-            bounds: rect_of(b),
-            regions: hit,
-        });
+            * f64::from(s.miter_limit).max(1.0).max(cap);
+        b = [b[0] - grow, b[1] - grow, b[2] + grow, b[3] + grow];
     }
-    out
+    let hit: Vec<u32> = (0..boxes.len() as u32)
+        .filter(|&i| overlap(b, boxes[i as usize]))
+        .collect();
+    if hit.is_empty() {
+        return Vec::new();
+    }
+    let class = if !item.clip_only && covered(b, boxes) {
+        VectorClass::Inside
+    } else {
+        VectorClass::Cut
+    };
+    let kind = match (item.clip_only, item.stroke.is_some()) {
+        (true, _) => VectorKind::Clip,
+        (_, true) => VectorKind::Stroke,
+        _ => VectorKind::Fill,
+    };
+    vec![PlannedVector {
+        loc,
+        path: path.clone(),
+        kind,
+        class,
+        bounds: rect_of(b),
+        regions: hit,
+    }]
 }
 
 /// Annotations of the page whose /Rect (mapped to display space) meets a region.

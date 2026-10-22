@@ -4,11 +4,12 @@
 //! streams and strings, with the input as the negative control; fidelity.py: pixels, words and
 //! PyMuPDF/pypdf extraction) and by PyMuPDF's own search.
 mod common;
-use common::{fidelity_oracle, has, objects_oracle, python, run, tiny_pdf};
+use common::{fidelity_oracle, has, objects_oracle, python, run, stream, tiny_pdf};
 use foliark_engine::{Document, Engine};
 use foliark_model::{
     CapabilityStatus, ChangeSet, ErrorCode, ExportMode, ExportPlan, ExportPolicy, ExtractOptions,
-    InvisibleTextPolicy, Limits, LossCode, PdfError, Rect, Redaction, SanitizedItem,
+    FontSource, FontStyle, InvisibleTextPolicy, Limits, LossCode, PdfError, Rect, Redaction,
+    SanitizedItem, TextEdit,
 };
 
 fn export_with(
@@ -16,16 +17,39 @@ fn export_with(
     policy: ExportPolicy,
     redactions: Vec<Redaction>,
 ) -> Result<(ExportPlan, Vec<u8>), PdfError> {
+    export_edited(bytes, policy, vec![], redactions)
+}
+
+fn export_edited(
+    bytes: &[u8],
+    policy: ExportPolicy,
+    edits: Vec<TextEdit>,
+    redactions: Vec<Redaction>,
+) -> Result<(ExportPlan, Vec<u8>), PdfError> {
     let mut e = Engine::new(Limits::default());
+    if !edits.is_empty() {
+        e.register_fonts(vec![FontSource {
+            bytes: std::fs::read(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../foliark-text/tests/data/LiberationSans-Regular.ttf"
+            ))
+            .unwrap(),
+            family: "Liberation Sans".into(),
+            weight: 400,
+            style: FontStyle::Normal,
+        }])
+        .unwrap();
+    }
     let (doc, _) = e.open(bytes.to_vec(), None, false).unwrap();
-    if !redactions.is_empty() {
+    if !redactions.is_empty() || !edits.is_empty() {
         let changes = ChangeSet {
             base_revision: 0,
-            text_edits: None,
-            redactions: Some(redactions),
+            text_edits: (!edits.is_empty()).then_some(edits),
+            redactions: (!redactions.is_empty()).then_some(redactions),
         };
         let t = e.apply_changes(&doc, changes);
-        assert!(run(&mut e, t).unwrap().accepted);
+        let r = run(&mut e, t).unwrap();
+        assert!(r.accepted, "{:?}", r.rejected);
     }
     let t = e.prepare_export(&doc, ExportMode::Native, policy);
     let plan = match run(&mut e, t) {
@@ -320,4 +344,243 @@ fn structure_tree_and_outlines_are_gone_with_their_secrets() {
         &[],
     );
     assert!(!has(&out, "StructTreeRoot") && !has(&out, "/Outlines"));
+}
+
+// ---- keepOcr (ADR 0008): OCR is invisible text over a drawn image --------------------------------
+
+fn keep_ocr() -> ExportPolicy {
+    ExportPolicy {
+        invisible_text: InvisibleTextPolicy::KeepOcr,
+        ..ExportPolicy::default()
+    }
+}
+
+/// Object 6 is a 150 x 100 gray image (`/Im1`, 2 pt a pixel once drawn on 300 x 200); `more` follow as objects 7.. (`/Fm1` is 7), `extra`
+/// adds page entries.
+fn scan(extra: &str, content: &str, more: &[String]) -> Vec<u8> {
+    let pixels: String = (0..150 * 100)
+        .map(|i| format!("{:02X}", 0xB0 + i % 64))
+        .collect();
+    let mut objs = vec![stream(
+        "/Type /XObject /Subtype /Image /Width 150 /Height 100 /ColorSpace /DeviceGray \
+         /BitsPerComponent 8 /Filter /ASCIIHexDecode",
+        &format!("{pixels}>"),
+    )];
+    objs.extend(more.iter().cloned());
+    let form = if more.is_empty() { "" } else { "/Fm1 7 0 R" };
+    tiny_pdf(
+        "",
+        &format!("/Resources << /Font << /F1 5 0 R >> /XObject << /Im1 6 0 R {form} >> >> {extra}"),
+        content,
+        &objs,
+    )
+}
+
+fn form_object(content: &str) -> String {
+    stream(
+        "/Type /XObject /Subtype /Form /BBox [0 0 300 400] /Resources << /Font << /F1 5 0 R >> >>",
+        content,
+    )
+}
+
+/// The image covers the upper half of the 300 x 400 page: user y 200 to 400.
+const UPPER: &str = "q 300 0 0 200 0 200 cm /Im1 Do Q\n";
+
+fn kept_words(out: &[u8], name: &str, keep: &[&str], gone: &[&str]) {
+    let t = words(out);
+    for k in keep {
+        assert!(t.contains(k), "{name}: {k} missing: {t}");
+        assert!(
+            fitz_hits(name, out, k) >= 1,
+            "{name}: PyMuPDF cannot find {k}"
+        );
+    }
+    for g in gone {
+        assert!(!t.contains(g), "{name}: {g} left: {t}");
+        assert_eq!(fitz_hits(name, out, g), 0, "{name}: PyMuPDF finds {g}");
+    }
+}
+
+#[test]
+fn keep_ocr_keeps_scan_text_outside_regions_and_removes_the_redacted_word() {
+    let mut c = String::from(UPPER);
+    c += &show(3, 20, 360, "KEEP_OCR_TOP");
+    c += &show(3, 20, 300, "SECRET_OCR_REGION");
+    c += &show(7, 20, 240, "KEEP_OCR_SEVEN");
+    let input = scan("", &c, &[]);
+    let row = line(20.0, 300.0);
+    let (plan, out) = export_with(&input, keep_ocr(), vec![region("a", row)]).unwrap();
+    kept_words(
+        &out,
+        "scan",
+        &["KEEP_OCR_TOP", "KEEP_OCR_SEVEN"],
+        &["SECRET"],
+    );
+    assert_eq!(plan.report.kept.invisible_text_clusters, 12 + 14);
+    assert!(
+        !plan
+            .report
+            .removed
+            .contains_key(&SanitizedItem::InvisibleText)
+    );
+    assert_eq!(loss(&plan, LossCode::TextSearchLost), 0);
+    judge(
+        "scan",
+        &input,
+        &out,
+        &["SECRET_OCR_REGION"],
+        &["KEEP_OCR_TOP", "KEEP_OCR_SEVEN"],
+        // The image loses whole 2 pt pixels under the region.
+        &[(row.0 - 3.0, row.1 - 3.0, row.2 + 3.0, row.3 + 3.0)],
+    );
+}
+
+#[test]
+fn keep_ocr_removes_invisible_payload_that_is_not_over_the_image() {
+    let mut c = String::from(UPPER);
+    c += &show(3, 20, 300, "KEEP_OCR_SCAN");
+    c += &show(3, 20, 100, "SECRET_BLANK_AREA");
+    // Straddles the image's lower edge (user y 200): half of the glyph box is over it.
+    c += &show(7, 20, 197, "SECRET_STRADDLE");
+    // Inside the image on the page, but painted off the page: removed as off-page content.
+    c += &show(3, 20, 500, "SECRET_OFF_PAGE");
+    let input = scan("", &c, &[]);
+    let (plan, out) = export_with(&input, keep_ocr(), vec![]).unwrap();
+    kept_words(
+        &out,
+        "blank",
+        &["KEEP_OCR_SCAN"],
+        &["SECRET_BLANK", "SECRET_STRADDLE", "SECRET_OFF"],
+    );
+    let n = 17 + 15;
+    assert_eq!(plan.report.removed[&SanitizedItem::InvisibleText], n);
+    assert_eq!(loss(&plan, LossCode::TextSearchLost), n);
+    assert_eq!(plan.report.kept.invisible_text_clusters, 13);
+    judge(
+        "blank",
+        &input,
+        &out,
+        &["SECRET_BLANK_AREA", "SECRET_STRADDLE", "SECRET_OFF_PAGE"],
+        &["KEEP_OCR_SCAN"],
+        &[line(20.0, 100.0), line(20.0, 197.0), line(20.0, 500.0)],
+    );
+    // `remove` loses the scan's own layer too: the difference the new value makes.
+    let remove = ExportPolicy {
+        invisible_text: InvisibleTextPolicy::Remove,
+        ..ExportPolicy::default()
+    };
+    let (_, all_gone) = export_with(&input, remove, vec![]).unwrap();
+    assert!(!words(&all_gone).contains("KEEP_OCR_SCAN"));
+}
+
+#[test]
+fn keep_ocr_text_without_a_place_on_the_page_is_not_kept() {
+    // Font size 0 and a singular matrix put a glyph nowhere: it may be anything.
+    let mut c = String::from(UPPER);
+    c += &show(3, 20, 300, "KEEP_OCR_SCAN");
+    c += "q 0 0 0 0 20 260 cm BT 3 Tr /F1 12 Tf (SECRET_NOWHERE) Tj ET Q\n";
+    c += "BT 3 Tr /F1 0 Tf 20 240 Td (SECRET_SIZE_ZERO) Tj ET\n";
+    let input = scan("", &c, &[]);
+    let (_, out) = export_with(&input, keep_ocr(), vec![region("a", line(20.0, 300.0))]).unwrap();
+    kept_words(
+        &out,
+        "nowhere",
+        &[],
+        &["SECRET_NOWHERE", "SECRET_SIZE", "KEEP_OCR_SCAN"],
+    );
+    let (_, out) = export_with(&input, keep_ocr(), vec![]).unwrap();
+    kept_words(
+        &out,
+        "nowhere2",
+        &["KEEP_OCR_SCAN"],
+        &["SECRET_NOWHERE", "SECRET_SIZE"],
+    );
+}
+
+#[test]
+fn keep_ocr_holds_on_a_rotated_cropped_scan() {
+    // /Rotate 90 and a CropBox that cuts the page: user (x, y) shows at (y - 100, x). The image
+    // covers user y 200 to 400 (display x 100 to 300).
+    let mut c = String::from(UPPER);
+    c += &show(3, 20, 300, "KEEP_OCR_ROT");
+    c += &show(3, 20, 250, "SECRET_ROT_REGION");
+    c += &show(3, 20, 150, "SECRET_ROT_BLANK");
+    c += &show(7, 20, 50, "SECRET_ROT_CROPPED");
+    let input = scan("/Rotate 90 /CropBox [0 100 300 400]", &c, &[]);
+    let r = (96.0, 10.0, 160.0, 140.0);
+    let (_, out) = export_with(&input, keep_ocr(), vec![region("a", r)]).unwrap();
+    kept_words(
+        &out,
+        "rot",
+        &["KEEP_OCR_ROT"],
+        &[
+            "SECRET_ROT_REGION",
+            "SECRET_ROT_BLANK",
+            "SECRET_ROT_CROPPED",
+        ],
+    );
+    let (ok, log) = objects_oracle(
+        "sanitize-semantics",
+        "rot.pdf",
+        &out,
+        &[
+            "SECRET_ROT_REGION",
+            "SECRET_ROT_BLANK",
+            "SECRET_ROT_CROPPED",
+        ],
+    );
+    assert!(ok, "rot: objects.py: {log}");
+}
+
+#[test]
+fn keep_ocr_decides_a_shared_form_for_every_place_it_is_drawn() {
+    // One Form (object 7) with an OCR word, drawn over the image and over blank paper: the
+    // operator is one object, so what removes it in one place removes it in both.
+    let form = form_object("BT 3 Tr /F1 12 Tf 20 10 Td (SHARED_OCR_WORD) Tj ET");
+    let both = format!(
+        "{UPPER}q 1 0 0 1 0 300 cm /Fm1 Do Q\nq 1 0 0 1 0 40 cm /Fm1 Do Q\n{}",
+        show(3, 20, 360, "KEEP_OCR_PAGE")
+    );
+    let (plan, out) = export_with(
+        &scan("", &both, std::slice::from_ref(&form)),
+        keep_ocr(),
+        vec![],
+    )
+    .unwrap();
+    kept_words(&out, "form-both", &["KEEP_OCR_PAGE"], &["SHARED_OCR"]);
+    assert_eq!(plan.report.removed[&SanitizedItem::InvisibleText], 15);
+    // Over the image in every place: kept.
+    let over = format!("{UPPER}q 1 0 0 1 0 300 cm /Fm1 Do Q\nq 1 0 0 1 0 220 cm /Fm1 Do Q\n");
+    let (_, out) = export_with(&scan("", &over, &[form]), keep_ocr(), vec![]).unwrap();
+    kept_words(&out, "form-over", &["SHARED_OCR_WORD"], &[]);
+}
+
+#[test]
+fn keep_ocr_survives_a_paragraph_edit_and_still_honors_regions() {
+    // Native text below a scan that carries OCR is edited; one OCR row is redacted.
+    let mut c = String::from(UPPER);
+    c += "BT /F1 10 Tf 20 100 Td (OLD_VISIBLE_WORDS_IN_A_LONG_ROW) Tj ET\nBT /F1 10 Tf 20 86 Td (second line of it) Tj ET\n";
+    c += &show(3, 20, 320, "KEEP_OCR_BESIDE");
+    c += &show(3, 20, 280, "SECRET_OCR_EDIT");
+    let input = scan("", &c, &[]);
+    let edit = TextEdit {
+        id: "e".into(),
+        page_index: 0,
+        rects: vec![Rect {
+            x: 10.0,
+            y: 285.0,
+            width: 150.0,
+            height: 37.0,
+        }],
+        text: "NEW_VISIBLE_WORDS".into(),
+        font: None,
+    };
+    let row = line(20.0, 280.0);
+    let (_, out) = export_edited(&input, keep_ocr(), vec![edit], vec![region("a", row)]).unwrap();
+    kept_words(
+        &out,
+        "edit",
+        &["NEW_VISIBLE_WORDS", "KEEP_OCR_BESIDE"],
+        &["OLD_VISIBLE", "SECRET_OCR_EDIT"],
+    );
 }

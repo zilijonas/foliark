@@ -158,7 +158,7 @@ describe("image and vector redaction over the real wasm", () => {
     const plan = await doc.prepareExport({ mode: "native" });
     expect(plan.report.redaction).toEqual({
       regions: 1, clustersRemoved: 0, imagesErased: 1, imagesCloned: 0, formsCloned: 0,
-      vectorSubpathsRemoved: 1, vectorRectsCut: 0, collateral: [], sharedSurvivors: [],
+      vectorSubpathsRemoved: 1, vectorPathsCut: 0, collateral: [], sharedSurvivors: [],
     });
     expect(plan.report.losses).toContainEqual({ code: "IMAGE_REENCODED", count: 1, pages: [0] });
     expect((await (await f.open(await doc.export(plan))).info()).pageCount).toBe(1);
