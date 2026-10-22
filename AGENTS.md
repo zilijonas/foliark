@@ -99,7 +99,7 @@ Process:
 Git, push, publish:
 - Commit on the branch you were given. Conventional commits, `type(scope): summary (TASK-ID)`, one logical change per commit, body says why, ending with a `Co-Authored-By:` trailer naming your actual model (for example `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>`).
 - Stage only your own files (other agents commit concurrently). `git pull --ff-only` before pushing.
-- Push to the existing `origin` only when the lead or owner asks, as normal fast-forward pushes. Never force-push, change repository visibility, add remotes, create tags or releases, or publish packages (npm, crates) unless the task explicitly authorizes that exact action. Login/2FA stays with the owner.
+- Never push per commit or per task (each push costs GitHub Actions minutes). Commit locally; the lead pushes one batch branch, opens one PR, and merges it when the wave is done. Push only when the lead or owner asks, as normal fast-forward pushes. Never force-push, change repository visibility, add remotes, create tags or releases, or publish packages (npm, crates) unless the task explicitly authorizes that exact action. Login/2FA stays with the owner.
 
 Local machine (owner's Mac mini, only where `~/ai/bin/memory-queue` exists; plain runs elsewhere):
 - Every `cargo build/test/clippy`, `wasm-bindgen`, browser and Playwright run goes through the queue:
