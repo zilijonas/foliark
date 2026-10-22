@@ -3,16 +3,17 @@
 PRIVATE and UNRELEASED. Nothing is published, no remote exists, `package.json` has `"private": true` and `"license": "UNLICENSED"`.
 `packages/sdk/LICENSE` is a marked placeholder ("UNLICENSED - all rights reserved pending owner decision (NEW-73)").
 
-## Artifact
+## Artifact (rc2, supersedes `b47dafd9`)
+rc2 re-cuts the candidate after NEW-82 (decode-ratio limit, HDDN isolated findings) and NEW-83 (native export size). The previous candidate `b47dafd9aa5a...1859` (built from `a75a9cd`) is superseded and must not be installed.
 | | |
 |---|---|
 | file | `dist-pkg/foliark-sdk-0.1.0.tgz` (gitignored; rebuild with the commands below) |
-| sha256 | `b47dafd9aa5a46846dfdce4c6c7ed90361c990f4572128cfe2bc8941d3911859` |
-| size | 2,213,857 B (209 entries) |
-| built from | foliark git `a75a9cde4a9068822337867d7df33ae5b3679e80` (`a75a9cd`), clean tree (`git status --porcelain` empty before and after) |
-| wasm | `wasm/foliark_wasm_bg.wasm` sha256 `f0a808ae563f719f5bbf621831ebe585f26ea3cd0ca485193bf84cd4840faea6`, 5,567,725 B raw, 2,126,019 B `gzip -9 -n` (wasm-bindgen output 5,768,864 / 2,137,890 before `wasm-opt -O1`) |
+| sha256 | `4ead7f33334259f020d25ebac2c1abae3739fc03b797b039a6c60064a46c4af4` |
+| size | 2,224,913 B (209 entries; was 2,213,857 B) |
+| built from | foliark git `ca63d502568489c4ed84c39aca392f02d676dc37` (`ca63d50`), clean tree (`git status --porcelain` empty before and after the whole run) |
+| wasm | `wasm/foliark_wasm_bg.wasm` sha256 `4e0b704521a1aa931a303c35fb3e7a31fe00fd40fa76d2cd1698535ecc4514a5`, 5,603,727 B raw, 2,135,160 B `gzip -9 -n` (wasm-bindgen output 5,806,287 / 2,147,965 before `wasm-opt -O1`) |
 | toolchain | rustc/cargo 1.99.1 (`rust-toolchain.toml`), wasm32-unknown-unknown, wasm-bindgen 0.2.129, binaryen wasm-opt 132 (npm), Node 26.8.1, pnpm 11.9.0, macOS arm64 (Apple M4) |
-| reproducibility | packing twice from the same build gives the same sha256 (above). The wasm was built twice (working tree before the commit, candidate commit) with the same sha256. Same machine and toolchain only |
+| reproducibility | packing twice from the same build gives the same sha256 (above); the acceptance run packed and installed the same hash (`4ead7f33334259f0`). The wasm was built once for this record (rc1 was built twice with the same hash). Same machine and toolchain only |
 
 This record is committed after the candidate commit (a record cannot contain its own commit hash); it changes no file that is in the tarball.
 
@@ -33,22 +34,26 @@ The dependency inventory in `docs/provenance/dependencies.json` is the bill of m
 scripts/build-wasm.sh && pnpm build:sdk && tests/package-consumers/pack.sh dist-pkg      # each through ~/ai/bin/memory-queue
 ```
 
-## Verification on `a75a9cd` (one queue reservation, 4 GB; logs of this run were kept outside the repo)
+## Verification on `ca63d50` (one 4 GB queue reservation for the build and every suite except the fuzz smoke, which reserves for itself; logs of this run were kept outside the repo)
 | Check | Command | Exit | Result |
 |---|---|---|---|
 | format | `cargo fmt --check` | 0 | |
 | lint | `cargo clippy --workspace --all-targets --locked -- -D warnings` | 0 | |
-| Rust tests | `cargo test --workspace --locked --no-fail-fast` | 0 | 366 passed, 0 failed, 1 ignored over 54 test targets, including `strict_native` (39 fixtures: 31 supported, 8 refused) |
+| Rust tests | `cargo test --workspace --locked --no-fail-fast` | 0 | 367 passed, 0 failed, 1 ignored over 54 test targets, including `strict_native` (every fixture exports safely or refuses with its typed code) |
 | wasm build | `scripts/build-wasm.sh` | 0 | sizes above |
 | SDK build | `pnpm build:sdk` | 0 | |
+| pack twice | `tests/package-consumers/pack.sh dist-pkg` x2 | 0, 0 | identical sha256 |
 | TS parity | `scripts/check-ts-parity.sh` | 0 | 89 files in sync |
 | SDK tests | `pnpm --filter @foliark/sdk test` | 0 | 11 files, 78 tests passed |
 | smoke | `pnpm smoke chromium`, `pnpm smoke webkit` | 0, 0 | render 200x100 ok, watchdog hang test ok in both |
 | package consumers | `tests/package-consumers/run.sh` | 0 | 6 builds ok (vanilla, Vite, esbuild at `/` and `/app/`), tarball installed, not linked |
 | browser specs | `tests/browser/run.sh` | 0 | 21 passed (7 specs x chromium, firefox, webkit) |
-| acceptance | `SKIP_BUILD=1 tests/integration/acceptance/run.sh` | 0 | 80 cases, 480 results: SAFE 388, REFUSED 58, EXPLAINED 34, 0 blockers; negative controls 109/109 caught; cancellation 27 attempts, 0 findings; installed the same tarball sha (`b47dafd9aa5a4684`) |
-| budgets | `node --test tools/bench/check-budgets.test.mjs`; fresh `sdk.mjs --extended` + `scans-sdk.mjs` (chromium) through `check-budgets.mjs` | 0, 0 | 5 gate tests; 40 chromium budgets ok, 38 webkit budgets skipped (no webkit run), 0 failing |
+| acceptance | `SKIP_BUILD=1 tests/integration/acceptance/run.sh` | 0 | 80 cases, 480 results: SAFE 388, REFUSED 58, EXPLAINED 34, 0 blockers; negative controls 109/109 caught; cancellation 27 attempts, 0 findings; installed the rc2 tarball (`4ead7f33334259f0`) |
+| fuzz smoke | `FUZZ_SECS=30 tools/fuzz-smoke/run.sh` (self-queued) | 0 | 7 targets x 30 s (about 14.4 M runs on the last), all clean |
+| budgets | `node --test tools/bench/check-budgets.test.mjs`; fresh `sdk.mjs --extended` + `scans-sdk.mjs` (chromium) through `check-budgets.mjs` | 0, 0, 0 | 5 gate tests; 40 chromium budgets ok, 38 webkit budgets skipped (no webkit run), 0 failing |
+| export size | `cargo build --release -p foliark-engine --example export_size`; `tests/oracles/.venv/bin/python tools/bench/export-size.py --check` | 0, 0 | Foliark <= PyMuPDF on all 8 exportable fixtures (native-30p 27,500 vs 28,747 B = 0.96; table in `docs/performance/comparison.md`); `compressed-stream` and `oversized-image` refused by design |
 | notices | `node scripts/gen-notices.mjs --check` | 0 | up to date |
+| release dry run | `tools/release/dry-run.sh` | 0 | see the record below |
 
 ## Limits and what is left for the owner
 - Licence: placeholder until NEW-73. The tarball is not licensed for redistribution. Recipients and obligations: `docs/provenance/assets.md` (not legal clearance; Foxit font terms beyond the PDFium notice are unverified; cargo-deny ran without an advisory check; `ts-rs` ships no licence file in its crate source).

@@ -14,7 +14,15 @@ Not published. Candidate tarball and checksums: `docs/release/candidate.md`. The
 - Native export: edit, flatten, redact, sanitize, rewrite, verify. Independent oracles found no leftover content and no collateral damage on the cited corpus (`docs/evidence/strict-native.md`).
 - Raster export (image-only, redactions burned in), behind explicit `acknowledgeLosses` consent.
 - Typed refusals and warnings instead of silent fallback (`MALFORMED_PDF`, `ENCRYPTION_UNSUPPORTED`, `SIGNED_INPUT`, `LIMIT_EXCEEDED`, `RENDER_INCOMPLETE`, `CMAP_MISSING` and others), cancellation, worker watchdog and recovery.
+- Scanned pages render fast: scaled image decode and a per-document reduced-image cache, so a re-render after an edit or a preview refresh no longer decodes the scan again (NEW-81).
 - Notices (`THIRD_PARTY_NOTICES.md`, `NOTICE`, `LICENSE_FOXIT`), support matrix in the package, CycloneDX SBOM next to the tarball, release workflow and local dry run.
+
+### Changed (candidate rc2)
+- Native export is smaller: one content stream per page, identical objects stored once, compact operands. On the keyword flow of `tools/bench/export-size.py` every exportable fixture is at or below PyMuPDF's size for the same input (native-30p 27,500 B vs 28,747 B), checked against `tools/bench/budgets.json` (NEW-83).
+
+### Fixed (candidate rc2)
+- The decode-ratio limit no longer refuses flat image XObjects (a blank 150 dpi scan was refused at 1026:1); stream bombs and the 10^10-pixel image still refuse, with regressions in `resource_limits.rs` (NEW-82).
+- HDDN's isolated export-integrity findings were triaged: the engine fix is the limit above; the rest were adapter policy or check tolerance (`docs/integration/hddn-acceptance.md`). Native export still refuses (`native-redaction-unsupported`) while a marked shared graphic is drawn on an unmarked page.
 
 ### Known limits
 - Browsers: Chromium (desktop, macOS arm64) supported with budgets; WebKit engine supported, not as Safari; Firefox functional only. Real Safari, iPhone, iPad, Android, Windows and Linux: not established (NEW-64, device access NEW-22). No minimum browser version is promised.
