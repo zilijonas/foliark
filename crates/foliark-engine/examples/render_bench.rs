@@ -17,7 +17,11 @@ fn main() {
     let scale: f32 = a.get(2).map_or(1.35, |s| s.parse().unwrap());
     let rounds: usize = a.get(3).map_or(5, |s| s.parse().unwrap());
     let pages = pdf.pages();
-    let px = PixmapSettings { x_scale: scale, y_scale: scale, bg_color: WHITE };
+    let px = PixmapSettings {
+        x_scale: scale,
+        y_scale: scale,
+        bg_color: WHITE,
+    };
     let shared = RenderCache::new();
     for (name, share) in [("fresh cache per call", false), ("shared cache", true)] {
         let mut t = vec![];
@@ -26,12 +30,23 @@ fn main() {
                 let t0 = Instant::now();
                 let fresh = RenderCache::new();
                 let c = if share { &shared } else { &fresh };
-                let _ = render(p, c, &InterpreterSettings::default(), &RenderSettings::default(), &px).take_rgba8(hayro::vello_cpu::peniko::ImageAlphaType::Alpha);
+                let _ = render(
+                    p,
+                    c,
+                    &InterpreterSettings::default(),
+                    &RenderSettings::default(),
+                    &px,
+                )
+                .take_rgba8(hayro::vello_cpu::peniko::ImageAlphaType::Alpha);
                 if r > 0 {
                     t.push(t0.elapsed().as_secs_f64() * 1e3);
                 }
             }
         }
-        println!("{name}: {:.2} ms/page median ({} pages)", median(t), pages.len());
+        println!(
+            "{name}: {:.2} ms/page median ({} pages)",
+            median(t),
+            pages.len()
+        );
     }
 }
