@@ -62,3 +62,6 @@ Foxit Base-14 `.pfb` files are font data under the PDFium BSD-style notice, not 
 
 ## (f) Test-only fonts (NEW-49, never shipped)
 `crates/foliark-text/tests/data/`: LiberationSans-Regular/Bold, LiberationSerif-Regular, LiberationMono-Regular (SIL OFL 1.1, `LICENSE-Liberation.txt`) and Carlito-Regular (SIL OFL 1.1, `OFL-Carlito.txt`), copied unmodified from HDDN `public/fonts/pdf/`. Used only by `cargo test -p foliark-text`; not in the production graph.
+
+## (g) Source-font reuse and editor face (NEW-48)
+No font asset added or shipped. The editor face is a rewrite of a program already inside the user's PDF (cmap, OS/2, name, post tables added; outlines untouched), not a redistributed font. `crates/foliark-engine/tests/font_registry.rs` reuses the NEW-49 Liberation Sans test font (OFL, above) and the DejaVu subset inside the HDDN fixture `unicode-glyph-widths.pdf` (DejaVu licence, see manifest). Subsetter compatibility: `subsetter` 0.2.6 output (glyf/loca/head/hhea/hmtx/maxp, no cmap, OS/2, name or post) is the shape the editor face repairs and the tests build from it; a later subsetter that starts keeping `cmap` is also handled (the cmap is kept only if it agrees with the glyph evidence).

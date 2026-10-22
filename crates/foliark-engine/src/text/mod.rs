@@ -4,11 +4,14 @@
 //! cluster sits on, which selection needs. `extract_text` returns the wire `TextPage`.
 use foliark_model::{ExtractOptions, PdfError, SearchHit, SearchOptions, TextPage};
 
+mod editor_face;
 mod extract;
 mod search;
 mod selection;
+mod source_face;
 
 pub use extract::TextLayout;
+pub use source_face::{SourceApprox, SourceFontFace};
 
 impl crate::Document {
     /// The extracted text of one page (spec §3.4). `doc_id` is empty and `revision` is 0 here:
