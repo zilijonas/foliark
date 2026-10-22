@@ -97,6 +97,8 @@ impl Document {
     pub fn info(&self) -> Result<DocumentInfo, PdfError> {
         let pdf = &self.pdf;
         let scan = self.scan()?;
+        // The same walk is the render path's budget check: do not decode every stream a second time at the first render.
+        let _ = self.scanned.set(Ok(()));
         let catalog = pdf
             .xref()
             .get::<Dict<'_>>(pdf.xref().root_id())
