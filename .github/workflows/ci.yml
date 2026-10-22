@@ -1,25 +1,100 @@
-# Written for the day a remote exists; local-only for now (never run).
+# Push and pull-request CI on Linux runners (macOS minutes cost 10x on private repos).
+# Heavy suites (WebKit smoke, the three-browser deployment specs, the package-consumer matrix) run only on a manual
+# dispatch: Actions > ci > Run workflow. Acceptance, fuzz and the timing-budget bench stay local (docs/development.md).
 name: ci
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      extended:
+        description: "Also run WebKit smoke, browser specs and the package-consumer matrix"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  WASM_BINDGEN_VERSION: 0.2.129
+
 jobs:
-  check:
-    runs-on: macos-latest
+  rust:
+    name: rust (fmt, clippy, test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      # Dev-only independent oracles (PyMuPDF, pypdf, pikepdf): several engine tests shell out to this venv.
+      - name: Oracle venv
+        run: |
+          python -m venv tests/oracles/.venv
+          tests/oracles/.venv/bin/pip install --quiet --only-binary=:all: -r tests/oracles/requirements.txt
+      - run: cargo fmt --check
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo test --workspace --locked
+      # cargo test regenerates the ts-rs DTOs; they are committed and must not drift
+      - name: Generated types are committed
+        run: git diff --exit-code -- packages/sdk/src/generated
+
+  sdk:
+    name: sdk (wasm, build, vitest, chromium smoke)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - name: wasm-bindgen-cli (prebuilt)
+        run: |
+          base=https://github.com/wasm-bindgen/wasm-bindgen/releases/download/$WASM_BINDGEN_VERSION
+          name=wasm-bindgen-$WASM_BINDGEN_VERSION-x86_64-unknown-linux-musl
+          curl -fsSL "$base/$name.tar.gz" | tar xz -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/$name" >> "$GITHUB_PATH"
+      - uses: pnpm/action-setup@v4          # version from "packageManager"
+      - uses: actions/setup-node@v4
+        with: { node-version: 26, cache: pnpm }
+      # binaryen (wasm-opt) comes from the root devDependencies, so install before the wasm build
+      - run: pnpm install --frozen-lockfile
+      - run: scripts/build-wasm.sh
+      - run: pnpm build:sdk
+      - run: pnpm --filter @foliark/sdk test
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm smoke chromium
+      # the budget gate's own self-test; the timing budgets are frozen on an Apple M4, so the bench itself runs locally
+      - run: node --test tools/bench/check-budgets.test.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdk-wasm
+          path: packages/sdk/wasm
+          retention-days: 3
+
+  extended:
+    name: extended (webkit, browser specs, consumers)
+    if: github.event_name == 'workflow_dispatch' && inputs.extended
+    needs: sdk
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 26 }
-      - run: rustup show active-toolchain || rustup toolchain install
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo fmt --check
-      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
-      - run: cargo test --workspace --locked
-      - run: cargo install wasm-bindgen-cli --version 0.2.129 --locked
-      - run: scripts/build-wasm.sh
+        with: { node-version: 26, cache: pnpm }
+      - uses: actions/download-artifact@v4
+        with: { name: sdk-wasm, path: packages/sdk/wasm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm build:sdk
-      - run: pnpm exec playwright install chromium webkit
-      - run: pnpm smoke chromium
+      - run: pnpm exec playwright install --with-deps chromium firefox webkit
       - run: pnpm smoke webkit
-      # the budget gate itself; timing budgets are frozen on the reference Apple M4 (docs/support-matrix.md), so the bench is run locally
-      - run: node --test tools/bench/check-budgets.test.mjs
+      - run: tests/browser/run.sh
+      - run: tests/package-consumers/run.sh

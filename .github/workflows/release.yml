@@ -1,4 +1,4 @@
-# Release candidate pipeline. Written, never executed (CI has never run, no remote exists).
+# Release candidate pipeline. Written, never executed.
 # Manual only: never runs on push or pull_request. Real publication needs NEW-78 (owner), the `npm-release` environment's
 # manual approval and an NPM_TOKEN secret held by that environment only. docs/release/process.md is the checklist.
 name: release
