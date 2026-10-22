@@ -20,6 +20,9 @@ Rules for the unknown: a reachable object whose class cannot be decided, a strea
 - **Full re-synthesis from the semantic model.** Large surface (every operator, state, text mode), and any gap silently changes appearance. Fidelity risk with no benefit over spans.
 - **Byte passthrough of content streams.** Comments, junk between instructions and unreferenced tokens can carry data a user believes removed; spans for later rewrites would also depend on untouched, unnormalized bytes.
 
+## Size pass (NEW-83)
+On a non-preserve write the finished graph is shrunk (`writer/shrink.rs`): a page's content streams become one (joined with a newline where a part does not end in whitespace), objects with equal value and bytes become one (pages excepted), ids are renumbered 3..N. Safe because the output catalog names only the page tree, so no object's identity matters. Re-emission writes a string operand as hex or literal, whichever is shorter; the token reads back as the same bytes. Classic xref and no object streams stay.
+
 ## Consequences
 - Output is deterministic for a given input and substitutions. Numbers in content stay exact; numbers in dictionaries pass through f32 (pdf-writer), which is exact for typical page geometry and weights.
 - Annotations and widgets are not allowlisted. Until the flatten task draws them as Forms before writing, they are absent from the output.

@@ -25,6 +25,7 @@
 use crate::Document;
 use crate::document::{Binding, Committed, StoredRedaction};
 use crate::redaction::plan::{RedactionPlan, bounds_of, glyph_boxes, text_coverage};
+use crate::redaction::text::num;
 use crate::redaction::{Executed, execute, image};
 use crate::sanitize::document::scan;
 use crate::sanitize::{interactive, prune, resources, text_semantics, visibility};
@@ -89,37 +90,46 @@ fn merge(losses: &mut Vec<Loss>, add: impl IntoIterator<Item = Loss>) {
     }
 }
 
-/// An opaque rectangle per region with a fill, painted last on its page (spec §5.5).
+/// An opaque rectangle per region with a fill, painted last on its page (spec §5.5). Redactions
+/// with the same fill in a row share one `q` ... `Q`.
 fn fills(doc: &Document, committed: &Committed) -> Result<BTreeMap<u32, String>, PdfError> {
-    let mut out: BTreeMap<u32, String> = BTreeMap::new();
+    let mut out: BTreeMap<u32, (String, Option<[f64; 3]>)> = BTreeMap::new();
+    let n = |v: f64| num(v, 4);
     for r in &committed.redactions {
         let geometry = doc.page_geometry(r.page_index as usize)?;
         let Some([cr, cg, cb]) = r.fill else {
             continue;
         };
-        let ops = out.entry(r.page_index).or_default();
-        for q in &r.regions {
-            let corners = [
-                (q.x, q.y),
-                (q.x + q.width, q.y),
-                (q.x + q.width, q.y + q.height),
-                (q.x, q.y + q.height),
-            ];
-            let _ = write!(ops, "q {cr:.4} {cg:.4} {cb:.4} rg");
-            for (i, (x, y)) in corners.into_iter().enumerate() {
-                let p = geometry.display_to_user.apply(Point { x, y });
-                let _ = write!(
-                    ops,
-                    " {:.4} {:.4} {}",
-                    p.x,
-                    p.y,
-                    if i == 0 { "m" } else { "l" }
-                );
+        let (ops, open) = out.entry(r.page_index).or_default();
+        if *open != r.fill {
+            if open.is_some() {
+                ops.push_str("Q\n");
             }
-            ops.push_str(" h f Q\n");
+            let _ = writeln!(ops, "q {} {} {} rg", n(cr), n(cg), n(cb));
+            *open = r.fill;
+        }
+        for q in &r.regions {
+            // The display-to-user map only turns, flips and scales, so two opposite corners
+            // give the rectangle.
+            let user = |x, y| geometry.display_to_user.apply(Point { x, y });
+            let (a, c) = (user(q.x, q.y), user(q.x + q.width, q.y + q.height));
+            let _ = writeln!(
+                ops,
+                "{} {} {} {} re f",
+                n(a.x.min(c.x)),
+                n(a.y.min(c.y)),
+                n((a.x - c.x).abs()),
+                n((a.y - c.y).abs())
+            );
         }
     }
-    Ok(out)
+    Ok(out
+        .into_iter()
+        .map(|(page, (mut ops, _))| {
+            ops.push_str("Q\n");
+            (page, ops)
+        })
+        .collect())
 }
 
 /// How far a region is shrunk for the output re-plan, so that the rectangles a cut leaves next

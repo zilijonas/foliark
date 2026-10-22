@@ -6,7 +6,7 @@ Reproduce (HDDN worktree built at 2fe0f9a, see README.md; `HDDN_DIST` overrides 
 `~/ai/bin/memory-queue run --owner <id> --label 'foliark compare' --need-gb 2 --restartable --wait 1800 -- node tools/bench/compare.mjs` then `node tools/bench/table.mjs docs/performance/comparison.json`.
 
 ## Read this before quoting a speedup
-- **Native export is like-for-like on output, not on guarantees.** PyMuPDF re-read: both outputs lose exactly the same 129 words in the same 10 regions (input control: 129), keep all other words (16,761), no Info metadata, 0 embedded files. The SDK writer additionally has the strict-native proof (`strict_native` suite) and fails closed; HDDN has no equivalent and refuses native export for forms, invisible text and optional content. The SDK file is 322,769 B vs 213,136 B.
+- **Native export is like-for-like on output, not on guarantees.** PyMuPDF re-read: both outputs lose exactly the same 129 words in the same 10 regions (input control: 129), keep all other words (16,761), no Info metadata, 0 embedded files. The SDK writer additionally has the strict-native proof (`strict_native` suite) and fails closed; HDDN has no equivalent and refuses native export for forms, invisible text and optional content. The SDK file was 322,769 B vs 213,136 B when measured; NEW-83 below brought it under PyMuPDF's.
 - **Raster export**: HDDN = PyMuPDF `render_page_png` + pdf-lib; SDK = hayro raster with redactions burned in and losses disclosed. Different rasterizers and codecs (13.4 MB vs 9.1 MB). Both outputs have 30 images and no text layer, 0 words in the redacted regions.
 - **Render**: HDDN time includes PNG encoding; the SDK returns raw RGBA. Not the same work.
 - **Extraction** has no isolated HDDN op: HDDN `LOAD_PDF` = parse + span extraction + a preview per page, so it is compared only with the SDK composite "open + extract + render@1.35 every page".
@@ -78,6 +78,33 @@ Selected by the data above, not by guess. Before/after on the same bench (`tools
 6. Tried and dropped: opt-level 3 for `miniz_oxide fdeflate png crc32fast adler2 simd-adler32` (flate decode and PNG encode): no measurable gain on export or raster export, cost size.
 
 Regressions run after the change: `cargo test --workspace --no-fail-fast` (359 passed, 0 failed, 1 ignored; includes `strict_native`), `pnpm --filter @foliark/sdk test` (78 passed), `tests/smoke/run.mjs` chromium and webkit (ok, hang watchdog ok), `tests/package-consumers/run.sh` (6 builds ok).
+
+## NEW-83: native export size
+Same input, same flow as HDDN's keyword export: the most frequent 4+ letter word of the file, every hit redacted with a black fill. PyMuPDF = `apply_redactions` + `tobytes(garbage=4, deflate=True)`; Foliark = `Engine` native export (`crates/foliark-engine/examples/export_size.rs`). Reproduce: `tests/oracles/.venv/bin/python tools/bench/export-size.py` (`--check` enforces `exportBytes` in `budgets.json`). "Before" is the commit before this change (5d8662e).
+
+| fixture | input B | keyword | Foliark before | Foliark after | PyMuPDF | after / PyMuPDF |
+|---|---|---|---|---|---|---|
+| native-30p | 311,713 | alpha | 349642 | 27500 | 28747 | 0.96 |
+| hddn/metadata-xmp | 1,218 | metadata | 1444 | 1052 | 1411 | 0.75 |
+| hddn/compressed-stream | 9,023 | compressed | refused | refused | 953 | - |
+| hddn/unicode-glyph-widths | 41,049 | unicode | 8666 | 8102 | 22784 | 0.36 |
+| hddn/rotation-crop | 1,915 | crop | 3381 | 1608 | 1715 | 0.94 |
+| hddn/shared-image | 61,355 | image | 4464 | 3654 | 3812 | 0.96 |
+| hddn/shared-vector | 1,666 | shared | 2472 | 1798 | 1839 | 0.98 |
+| hddn/outline-bookmark | 1,015 | bookmark | 1448 | 1056 | 1190 | 0.89 |
+| hddn/annotation-comment | 909 | annotation | 1453 | 1062 | 1090 | 0.97 |
+| hddn/oversized-image | 978 | image | refused | refused | 1184 | - |
+
+`native-30p` is the HDDN 30-page export of NEW-76 (349,682 B vs 28,926 B there; 349,642 B vs 28,747 B here, same flow). `compressed-stream` and `oversized-image` are refused by Foliark before and after (limits, not size).
+
+**Causes, measured on `native-30p` (349,642 B).** The input has 1,230 content streams (one per `insert_text` call, 41 per page); the export kept them as 1,261 separate objects:
+1. Content streams stayed split. 1,324 objects, each with its own Flate header, dictionary and xref line, and 1,261 small streams compress badly. Now one stream per page (the spec concatenates the array): 349,642 to 45,558 B.
+2. Operand text. Hex strings and 5-decimal numbers (`-2445.99998`) were written as is. A string is now written as hex or literal, whichever is shorter (`writer::string_token`), shifts keep 3 decimals, fill coordinates drop trailing zeros: to 40,648 B.
+3. Region fills were four-corner paths, one `q`..`Q` each. Now `x y w h re f`, one `q`..`Q` per run of equal fill: to 30,847 B.
+4. Identical objects were copied per page (30 equal resources dictionaries, equal fonts, equal images). Objects with the same value and bytes are now one (pages stay apart), ids close up, and the writer no longer pretty-prints (`Settings { pretty: false }`): to 27,640 B. Flate level 9 (deterministic) is in the same step.
+Byte classes after (pikepdf): content streams 19,962 B (14,357 B of text and 5,600 B of 840 fill rectangles, which PyMuPDF with a black fill also has), 64 objects, 7.2 KB dictionaries and xref. No fonts or images in this file.
+
+**Not changed.** Object streams stay off (classic xref, spec 8, ADR 0002). Images and font programs keep their bytes (never re-encoded). Preserve-mode working copies are not shrunk. PyMuPDF with its default white fill paints nothing visible and writes 21,638 B on `native-30p`; the difference to the black-fill figure is the rectangles Foliark is asked to paint.
 
 ## NEW-81: scanned and image-heavy pages
 Data: `comparison.json` key `scans` (HDDN, SDK before, SDK after, fidelity). Fixtures: `tests/fixtures/generators/scans.py`, seven synthetic 300 dpi A4 scans, 3 pages each (baseline and progressive JPEG in RGB and gray, JBIG2 generic region, CCITT G4, Flate gray), byte-identical for both engines. Chromium 151, Apple M4, medians over 15 pages (HDDN) / 15 renders (SDK).
