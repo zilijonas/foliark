@@ -18,7 +18,7 @@ use hayro_syntax::content::TypedIter;
 use hayro_syntax::content::ops::TypedInstruction;
 use hayro_syntax::object::dict::keys::{ANNOTS, AP, AS, F, MCID, N, OC, RECT};
 use hayro_syntax::object::{Array, Dict, Name, Object, Rect, Stream, dict_or_stream};
-use hayro_syntax::page::{Page, Resources};
+use hayro_syntax::page::{Page, Resources, Rotation};
 use kurbo::{Affine, Point, Shape};
 use rustc_hash::FxHashMap;
 use smallvec::smallvec;
@@ -249,14 +249,34 @@ pub fn interpret_page<'a>(
                 // corner with the greatest x and y coordinates) of the
                 // transformed appearance box to the corresponding corners
                 // of the annotation’s rectangle.
-                let affine = Affine::new([
+                let (sx, sy) = (
                     annot_rect.width() / transformed_rect.width(),
-                    0.0,
-                    0.0,
                     annot_rect.height() / transformed_rect.height(),
-                    annot_rect.x0 - transformed_rect.x0,
-                    annot_rect.y0 - transformed_rect.y0,
-                ]);
+                );
+                let (lo, hi) = (transformed_rect.x0, transformed_rect.y1);
+                // 12.5.3 (NoRotate, flag 16): the appearance stays upright on the displayed page
+                // and the upper-left corner of Rect (in the unrotated page) stays where it is,
+                // so the page rotation is composed into A. The origin is scaled with the box.
+                let (ax, ay) = (annot_rect.x0, annot_rect.y1);
+                let affine = match (flags & 16 != 0, page.rotation()) {
+                    (true, Rotation::Horizontal) => {
+                        Affine::new([0.0, sx, -sy, 0.0, ax + hi * sy, ay - lo * sx])
+                    }
+                    (true, Rotation::Flipped) => {
+                        Affine::new([-sx, 0.0, 0.0, -sy, ax + lo * sx, ay + hi * sy])
+                    }
+                    (true, Rotation::FlippedHorizontal) => {
+                        Affine::new([0.0, -sx, sy, 0.0, ax - hi * sy, ay + lo * sx])
+                    }
+                    _ => Affine::new([
+                        sx,
+                        0.0,
+                        0.0,
+                        sy,
+                        annot_rect.x0 - transformed_rect.x0 * sx,
+                        annot_rect.y0 - transformed_rect.y0 * sy,
+                    ]),
+                };
 
                 // 3) Matrix shall be concatenated with A to form a matrix
                 // AA that maps from the appearance’s coordinate system to

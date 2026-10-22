@@ -4,7 +4,7 @@
 //! report counts against a pikepdf count of the input.
 mod common;
 use common::{fidelity_oracle, fixture, objects_oracle, python, run, tmp};
-use foliark_engine::Engine;
+use foliark_engine::{Document, Engine, RenderOptions};
 use foliark_model::{
     AnnotationPolicy, ChangeSet, ErrorCode, ExportMode, ExportPlan, ExportPolicy, Limits, LossCode,
     PdfError, Rect, Redaction, SanitizedItem, SignedInputPolicy,
@@ -259,6 +259,22 @@ fn a_no_rotate_note_keeps_its_upper_left_corner_and_stands_upright_on_a_rotated_
             &["KEEP_PUBLIC"],
         );
         assert!(ok, "rotate {rotate}: {log}");
+        // The raster renderer (image-only export) draws the input's notes where flattening put
+        // them: both pages show the same pixels.
+        let draw = |bytes: &[u8]| {
+            let d = Document::open(bytes.to_vec(), None).unwrap();
+            d.render_page(0, RenderOptions::at(1.0)).unwrap().data
+        };
+        let (a, b) = (draw(&input), draw(&out));
+        let off = a
+            .iter()
+            .zip(&b)
+            .filter(|(x, y)| x.abs_diff(**y) > 32)
+            .count();
+        assert!(
+            off < a.len() / 1000,
+            "rotate {rotate}: {off} samples differ"
+        );
     }
 }
 

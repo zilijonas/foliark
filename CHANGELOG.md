@@ -11,6 +11,8 @@ Engine fixes from HDDN's public-corpus gate (NEW-94) and the npm page polish. So
 ### Fixed
 - A legitimate large scan imports: an image XObject is held to its declared size (width x height x components x bits, one predictor byte per row, never below `maxStreamDecodedBytes`) instead of the generic 128 MiB stream cap, so a 9000 x 9000 RGB scan (81 MP, 243 MB decoded) opens, renders and exports. `maxImagePixels` still refuses dimension bombs, the cap still stops a stream that inflates past its declaration, and the redaction image budget no longer double-counts against the stream cap (ADR 0010).
 - Annotations with the `NoRotate` flag (Text notes) are flattened upright with the upper-left corner of their rectangle fixed on a rotated page, as viewers draw them; they used to turn with the page and move (HDDN `public-cropped-rotated`, 0.67 to 0.78 percent of pixels changed on three pages, now 0.14 to 0.18) (ADR 0010).
+- Opening a file no longer holds a Flate-only image in memory just to measure it: the budget scan counts the inflated bytes in a fixed buffer (the 81 MP scan opened at +524 MB of memory, now +17 MB).
+- The raster renderer places annotation appearances with the origin scaled with the box and honours `NoRotate` the same way (hayro patch P20); image-only export of rotated pages showed the same note displacement.
 - Regression tests: edge-straddling text, fill and image keep their pixels on every page rotation while wholly outside content goes (`sanitize_visibility.rs`); NoRotate notes against MuPDF at 90, 180 and 270 degrees (`sanitize_interactive.rs`); the 81 MP scan and the lying-stream bomb (`resource_limits.rs`).
 
 ### Changed

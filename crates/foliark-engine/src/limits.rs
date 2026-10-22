@@ -1,6 +1,7 @@
 //! Resource budgets (spec §9). Every check uses checked arithmetic and runs before the
 //! allocation or work it guards; `LIMIT_EXCEEDED` carries which limit, the value and the max.
 use foliark_model::{ErrorCode, Limits, ObjectId, PdfError};
+use hayro::hayro_syntax::Filter;
 use hayro::hayro_syntax::object::stream::DecodeFailure;
 use hayro::hayro_syntax::object::{Dict, Name, Stream};
 use std::borrow::Cow;
@@ -90,18 +91,8 @@ fn image_decoded_bound(d: &Dict<'_>, w: u32, h: u32) -> u64 {
     row.saturating_mul(u64::from(h))
 }
 
-/// Strict decode of one stream under `maxStreamDecodedBytes` and `maxDecodeRatio`. An image
-/// XObject is held to its declared size instead (`image_decoded_bound`, never below the generic
-/// cap) and exempt from the ratio: deflate reaches about 1030:1 on flat data, so a blank
-/// scanned page, 6.3 MB of white at 150 dpi, would otherwise look like a bomb. The ratio only
-/// applies to other streams once the output passes 1 MiB. The decoder stops at the cap, so a
-/// bomb is never built. `actual` is a lower bound: decoding stops at the first byte over the cap.
-pub(crate) fn decode_stream<'a>(
-    stream: &Stream<'a>,
-    obj: ObjectId,
-    limits: &Limits,
-    budget: &mut Budget,
-) -> Result<Cow<'a, [u8]>, PdfError> {
+/// The decode cap of `stream`: (cap, the generic limit, whether the ratio set it). See `decode_stream`.
+fn cap_of(stream: &Stream<'_>, limits: &Limits) -> Result<(u64, u64, bool), PdfError> {
     let mut max = u64::from(limits.max_stream_decoded_bytes);
     let ratio = u64::from(limits.max_decode_ratio);
     let allowed = (stream.raw_data().len() as u64)
@@ -119,7 +110,56 @@ pub(crate) fn decode_stream<'a>(
         max = max.max(image_decoded_bound(d, w, h));
     }
     let by_ratio = !image && allowed < max;
-    let cap = if by_ratio { allowed } else { max };
+    Ok((if by_ratio { allowed } else { max }, max, by_ratio))
+}
+
+/// The budget scan's check of an image that only Flate encodes: the inflated size is counted in a
+/// fixed buffer and refused past the cap, so a 243 MB scan is not held in memory just to be
+/// measured (the predictor stage and the pixels are the reader's work, when the image is drawn).
+/// `None` for any other filter chain: those go through `decode_stream`.
+pub(crate) fn count_flate_image(
+    stream: &Stream<'_>,
+    limits: &Limits,
+    budget: &mut Budget,
+) -> Option<Result<(), PdfError>> {
+    use std::io::Read;
+    if stream.filters().as_slice() != [Filter::FlateDecode] {
+        return None;
+    }
+    let (cap, max, _) = match cap_of(stream, limits) {
+        Ok(c) => c,
+        Err(e) => return Some(Err(e)),
+    };
+    let raw = stream.raw_data();
+    let mut inflate = flate2::read::ZlibDecoder::new(&raw[..]);
+    let (mut buf, mut n) = (vec![0u8; 64 * 1024], 0u64);
+    // A stream zlib cannot read is `decode_stream`'s DecodeFailed, which the scan ignores.
+    while let Ok(got) = inflate.read(&mut buf) {
+        if got == 0 {
+            return Some(budget.charge_bytes(usize::try_from(n).unwrap_or(usize::MAX)));
+        }
+        n += got as u64;
+        if n > cap {
+            return Some(Err(PdfError::limit("maxStreamDecodedBytes", cap + 1, max)));
+        }
+    }
+    None
+}
+
+/// Strict decode of one stream under `maxStreamDecodedBytes` and `maxDecodeRatio`. An image
+/// XObject is held to its declared size instead (`image_decoded_bound`, never below the generic
+/// cap) and exempt from the ratio: deflate reaches about 1030:1 on flat data, so a blank
+/// scanned page, 6.3 MB of white at 150 dpi, would otherwise look like a bomb. The ratio only
+/// applies to other streams once the output passes 1 MiB. The decoder stops at the cap, so a
+/// bomb is never built. `actual` is a lower bound: decoding stops at the first byte over the cap.
+pub(crate) fn decode_stream<'a>(
+    stream: &Stream<'a>,
+    obj: ObjectId,
+    limits: &Limits,
+    budget: &mut Budget,
+) -> Result<Cow<'a, [u8]>, PdfError> {
+    let (cap, max, by_ratio) = cap_of(stream, limits)?;
+    let ratio = u64::from(limits.max_decode_ratio);
     let cap_usize = usize::try_from(cap).unwrap_or(usize::MAX);
     match stream.decoded_capped(cap_usize) {
         Ok(data) => {
