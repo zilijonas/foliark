@@ -59,6 +59,21 @@ pub struct NewStream {
     pub data: Vec<u8>,
 }
 
+/// XObject resources added (name, object) and dropped (name).
+pub(crate) type XObjectEdits = (Vec<(Vec<u8>, Val)>, Vec<Vec<u8>>);
+
+/// Where a clone of a source object goes and what a Form's resources gain or lose. Clones get
+/// ids no input object has (generation 65535 is a free slot, never a live object).
+#[derive(Debug, Default)]
+pub(crate) struct Redirects {
+    /// Clone id -> the source object it copies (dictionary and stream data).
+    pub aliases: BTreeMap<ObjectId, ObjectId>,
+    /// A page's `/Contents` entry `source` is written as the clone instead.
+    pub page_streams: BTreeMap<(usize, ObjectId), ObjectId>,
+    /// Per Form (source or clone id): XObject resources added and dropped.
+    pub form_xobjects: BTreeMap<ObjectId, XObjectEdits>,
+}
+
 pub struct Writer<'d> {
     doc: &'d reader::Document,
     limits: Limits,
@@ -72,6 +87,7 @@ pub struct Writer<'d> {
     to_unicode: BTreeMap<ObjectId, Vec<u8>>,
     /// Registered font ids already written (`fonts::embed_registered_font`).
     embedded: BTreeSet<String>,
+    redirects: Redirects,
 }
 
 /// Resources added per page: (resource name, object).
@@ -91,6 +107,7 @@ impl<'d> Writer<'d> {
             dropped_xobjects: BTreeMap::new(),
             to_unicode: BTreeMap::new(),
             embedded: BTreeSet::new(),
+            redirects: Redirects::default(),
         }
     }
 
@@ -182,6 +199,51 @@ impl<'d> Writer<'d> {
         Ok(self)
     }
 
+    /// Make `clone` a separate output object that copies `source` (dictionary, stream data).
+    /// Spans, replacements and resource edits keyed by `clone` apply to the copy only. Refused
+    /// when `clone` is already used. Reference it as `Val::Src(clone)` or through
+    /// `redirect_page_content`.
+    pub fn alias(&mut self, clone: ObjectId, source: ObjectId) -> Result<&mut Self, PdfError> {
+        if self.redirects.aliases.insert(clone, source).is_some() {
+            return Err(err(ErrorCode::InvalidArgument, "clone id in use"));
+        }
+        Ok(self)
+    }
+
+    /// Whether `id` was made a clone by `alias`.
+    pub fn is_clone(&self, id: ObjectId) -> bool {
+        self.redirects.aliases.contains_key(&id)
+    }
+
+    /// Page `page` draws the clone `clone` where its `/Contents` names the stream `source`.
+    pub fn redirect_page_content(
+        &mut self,
+        page: usize,
+        source: ObjectId,
+        clone: ObjectId,
+    ) -> Result<&mut Self, PdfError> {
+        if page >= self.doc.page_count() {
+            return Err(PdfError::page_out_of_range(page));
+        }
+        self.redirects.page_streams.insert((page, source), clone);
+        Ok(self)
+    }
+
+    /// Make `xobject` usable as `/name Do` inside Form `form` (a source Form or a clone). The
+    /// Form must have `/Resources` of its own; a name it already has is refused at `write`.
+    pub fn add_form_xobject(&mut self, form: ObjectId, name: &str, xobject: Val) -> &mut Self {
+        let entry = self.redirects.form_xobjects.entry(form).or_default();
+        entry.0.push((name.as_bytes().to_vec(), xobject));
+        self
+    }
+
+    /// Take `/name` out of Form `form`'s XObject resources (see `drop_page_xobject`).
+    pub fn drop_form_xobject(&mut self, form: ObjectId, name: &str) -> &mut Self {
+        let entry = self.redirects.form_xobjects.entry(form).or_default();
+        entry.1.push(name.as_bytes().to_vec());
+        self
+    }
+
     /// Use `cmap` (plain CMap text) as the ToUnicode of the source font dictionary `font`.
     pub fn set_to_unicode(&mut self, font: ObjectId, cmap: Vec<u8>) -> &mut Self {
         self.to_unicode.insert(font, cmap);
@@ -206,6 +268,7 @@ impl<'d> Writer<'d> {
             &self.repl,
             &self.spans,
             (&self.extras, &self.to_unicode),
+            &self.redirects,
         );
         let pages = walk.build(
             &self.appended,

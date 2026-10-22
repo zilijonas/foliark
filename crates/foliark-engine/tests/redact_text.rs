@@ -10,7 +10,7 @@ use foliark_engine::redaction::text::redact_text;
 use foliark_engine::writer::Writer;
 use foliark_engine::writer::fonts::rebuild_to_unicode;
 use foliark_engine::{Binding, Committed, Document, StoredRedaction};
-use foliark_model::{ErrorCode, ExtractOptions, Limits, Quad, Rect};
+use foliark_model::{ExtractOptions, Limits, Quad, Rect};
 use skrifa::instance::{LocationRef, Size};
 use skrifa::outline::{DrawSettings, OutlinePen};
 use skrifa::{FontRef, GlyphId, MetadataProvider};
@@ -552,7 +552,7 @@ fn form_pdf(places: &[(f64, f64)]) -> Vec<u8> {
 }
 
 #[test]
-fn a_form_drawn_once_is_rewritten_in_place_and_a_shared_one_is_refused_untouched() {
+fn a_form_drawn_once_is_rewritten_in_place() {
     let once = form_pdf(&[(0.0, 0.0)]);
     let doc = Document::open(once.clone(), None).unwrap();
     let regions = secret_regions(&doc);
@@ -568,27 +568,4 @@ fn a_form_drawn_once_is_rewritten_in_place_and_a_shared_one_is_refused_untouched
         false,
     );
     assert!(plan.pages[0].forms.iter().all(|f| !f.shared));
-
-    // Drawn twice: removing from the shared stream would change the other occurrence too.
-    let twice = form_pdf(&[(0.0, 0.0), (0.0, -100.0)]);
-    let doc = Document::open(twice, None).unwrap();
-    let first_only = secret_regions(&doc);
-    let region = first_only[0];
-    let plan = plan_for(&doc, &[region]);
-    assert!(plan.pages[0].forms[0].shared);
-    let baseline = Writer::new(doc.reader(), Limits::default())
-        .write()
-        .unwrap();
-    let mut w = Writer::new(doc.reader(), Limits::default());
-    let err = redact_text(&doc, &plan, &mut w).unwrap_err();
-    assert_eq!(err.code, ErrorCode::InvalidArgument);
-    assert_eq!(
-        err.details.and_then(|d| d.feature).as_deref(),
-        Some("redactionSharedFormText")
-    );
-    assert_eq!(
-        w.write().unwrap(),
-        baseline,
-        "a refusal leaves the writer untouched"
-    );
 }

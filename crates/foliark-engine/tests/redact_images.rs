@@ -3,9 +3,9 @@
 //! with the engine), and every output is read back by pikepdf (decoded samples) and by the
 //! tests/oracles objects.py image-region check (PyMuPDF), never by the engine itself.
 mod image_pdf;
+use foliark_engine::Document;
 use foliark_engine::redaction::image::redact_images;
 use foliark_engine::writer::Writer;
-use foliark_engine::{Document, interpret::ItemKind};
 use foliark_model::{ErrorCode, Limits};
 use image_pdf::*;
 use serde_json::Value;
@@ -522,40 +522,4 @@ fn undecodable_oversized_and_formed_images_are_refused_with_the_writer_untouched
         redact_images(&doc, &plan, &mut w).unwrap_err().code,
         ErrorCode::DecodeFailed
     );
-    // An image the Form draws twice would need the Form cloned: NEW-38.
-    let base = first_obj(1);
-    let form = stream(
-        &format!(
-            "/Type /XObject /Subtype /Form /BBox [0 0 300 400] /Resources << /XObject << /Im0 {} 0 R >> >>",
-            base + 1
-        ),
-        b"q 80 0 0 80 100 200 cm /Im0 Do Q",
-    );
-    let input = pdf(
-        &[page(
-            "",
-            "/F Do q 1 0 0 1 0 -150 cm /F Do Q",
-            &[("F", base)],
-        )],
-        &[form, img8()],
-    );
-    let doc = Document::open(input, None).unwrap();
-    assert!(
-        doc.page_model(0)
-            .unwrap()
-            .items
-            .iter()
-            .filter(|i| matches!(i.kind, ItemKind::Image(_)))
-            .count()
-            == 2
-    );
-    let plan = make_plan(&doc, &[(0, &[rect(100.0, 100.0, 200.0, 220.0)])]);
-    let mut w = Writer::new(doc.reader(), Limits::default());
-    let err = redact_images(&doc, &plan, &mut w).unwrap_err();
-    assert_eq!(err.code, ErrorCode::InvalidArgument);
-    assert_eq!(
-        err.details.as_ref().and_then(|d| d.feature.as_deref()),
-        Some("redactionFormImageClone")
-    );
-    assert_eq!(w.write().unwrap(), untouched(&doc));
 }

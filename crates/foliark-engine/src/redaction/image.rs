@@ -15,10 +15,9 @@
 //! flip) are inside the `user_to_display` and `ctm` matrices.
 //!
 //! Limits, all typed refusals, none silent:
-//! - A clone or an inline conversion needs a resource entry, which only a page has here: an
-//!   occurrence drawn through a Form refuses with `INVALID_ARGUMENT`,
-//!   `details.feature = "redactionFormImageClone"` (NEW-38 clones Forms). So does a content
-//!   stream shared by several pages (`"redactionSharedContent"`).
+//! - A clone or an inline conversion adds a resource entry to the page or, through a Form, to
+//!   the Form (the clone of that occurrence if the Form is shared). A Form with no `/Resources`
+//!   of its own refuses with `"redactionFormInheritedResources"`.
 //! - Decoded size beyond the limits is `LIMIT_EXCEEDED`; an undecodable image, or one whose
 //!   decoded size differs from its dictionary, is `DECODE_FAILED` naming the object.
 //! - An inline image whose color space is a named resource is refused (`"redactionInlineColorSpace"`).
@@ -28,13 +27,14 @@
 //! applied and dropped; `Matte` is applied. Nothing of this is reversible, which is the point.
 //!
 //! On `Err` the writer is untouched: everything is decoded and encoded before the first call.
+use super::forms::Targets;
 use super::masks;
 use super::plan::{PlannedImage, RedactionPlan};
 use crate::Document;
 use crate::interpret::{ImageItem, ItemKind};
 use crate::limits::{self, Budget};
 use crate::writer::{NewStream, Val, Writer};
-use foliark_model::{ErrorCode, ErrorDetails, Limits, ObjectId, PdfError};
+use foliark_model::{ErrorCode, ErrorDetails, InstanceStep, Limits, ObjectId, PdfError};
 use hayro::hayro_interpret::{ImageData, RasterImage};
 use hayro::hayro_syntax::Filter;
 use hayro::hayro_syntax::content::UntypedIter;
@@ -319,6 +319,8 @@ enum Target {
     /// A new object drawn by `/name Do` in place of the instruction at `span`.
     Clone {
         page: u32,
+        /// Empty: the page's own resources; else the Form (`span.0`) holds the entry.
+        path: Vec<InstanceStep>,
         span: (ObjectId, std::ops::Range<usize>),
     },
 }
@@ -477,8 +479,17 @@ pub fn redact_images(
     let mut models = HashMap::new();
     // Resource entries of images whose occurrence was cloned, and the (page, image) pairs that
     // still have an occurrence drawing the original.
-    let mut cloned_names: Vec<(u32, ObjectId, String)> = Vec::new();
-    let mut survivors: HashSet<(u32, ObjectId)> = HashSet::new();
+    // The owner holds the resource entry: the page (`None`) or the Form that is written to.
+    type Owner = (u32, Option<ObjectId>);
+    let mut cloned_names: Vec<(Owner, ObjectId, String)> = Vec::new();
+    let mut survivors: HashSet<(Owner, ObjectId)> = HashSet::new();
+    let targets = Targets::new(doc, plan)?;
+    let owner = |page: u32, path: &[InstanceStep], stream: ObjectId| -> Owner {
+        (
+            page,
+            path.last().map(|_| targets.stream(page, path, stream)),
+        )
+    };
     for page in &plan.pages {
         for pi in &page.images {
             let model = match models.entry(page.page_index) {
@@ -492,7 +503,8 @@ pub fn redact_images(
                 if let ItemKind::Image(ImageItem { obj: Some(o), .. }) = &it.kind
                     && !planned.contains(&(it.loc, &it.path))
                 {
-                    survivors.insert((page.page_index, *o));
+                    let own = owner(page.page_index, &it.path.0, it.loc.stream);
+                    survivors.insert((own, *o));
                 }
             }
             let item = model
@@ -512,20 +524,12 @@ pub fn redact_images(
             let rs = rects(pi, &page.regions);
             let clone = pi.needs_clone || pi.obj.is_none();
             if clone {
-                if !pi.path.0.is_empty() {
-                    return Err(refuse("redactionFormImageClone", page.page_index));
-                }
-                if plan
-                    .stream_pages
-                    .get(&pi.loc.stream)
-                    .is_some_and(|p| p.len() > 1)
-                {
-                    return Err(refuse("redactionSharedContent", page.page_index));
-                }
+                targets.check_resources(doc, page.page_index, &pi.path.0)?;
             }
             if let (true, Some(obj)) = (clone, pi.obj) {
                 let span = pi.loc.start as usize..pi.loc.end as usize;
-                cloned_names.push((page.page_index, obj, do_name(doc, pi.loc.stream, span)?));
+                let own = owner(page.page_index, &pi.path.0, pi.loc.stream);
+                cloned_names.push((own, obj, do_name(doc, pi.loc.stream, span)?));
             }
             let (enc, conv) = match pi.obj {
                 Some(obj) => encode(
@@ -555,22 +559,34 @@ pub fn redact_images(
                 (false, Some(obj)) => Target::InPlace(obj),
                 _ => Target::Clone {
                     page: page.page_index,
-                    span: (pi.loc.stream, pi.loc.start as usize..pi.loc.end as usize),
+                    path: pi.path.0.clone(),
+                    span: (
+                        targets.stream(page.page_index, &pi.path.0, pi.loc.stream),
+                        pi.loc.start as usize..pi.loc.end as usize,
+                    ),
                 },
             };
             jobs.push(Job { target, enc });
         }
     }
+    targets.apply(doc, plan, w)?;
     for (n, job) in jobs.into_iter().enumerate() {
         let (dict, data) = with_smask(w, job.enc);
         match job.target {
             Target::InPlace(obj) => {
                 w.replace_stream(obj, NewStream { dict, data });
             }
-            Target::Clone { page, span } => {
+            Target::Clone { page, path, span } => {
                 let name = format!("FlkImg{n}");
                 let new = w.add_object(dict_val(dict), Some(data));
-                w.add_page_xobject(page as usize, &name, new)?;
+                match path.last() {
+                    None => {
+                        w.add_page_xobject(page as usize, &name, new)?;
+                    }
+                    Some(_) => {
+                        w.add_form_xobject(span.0, &name, new);
+                    }
+                }
                 w.replace_span(span.0, span.1, format!("/{name} Do").as_bytes());
             }
         }
@@ -579,9 +595,12 @@ pub fn redact_images(
     // the page's resources (it holds the erased pixels).
     cloned_names.sort();
     cloned_names.dedup();
-    for (page, obj, name) in cloned_names {
-        if !survivors.contains(&(page, obj)) {
-            w.drop_page_xobject(page as usize, &name)?;
+    for (own, obj, name) in cloned_names {
+        if !survivors.contains(&(own, obj)) {
+            match own.1 {
+                None => w.drop_page_xobject(own.0 as usize, &name)?,
+                Some(form) => w.drop_form_xobject(form, &name),
+            };
         }
     }
     Ok(report)

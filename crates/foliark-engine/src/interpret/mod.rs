@@ -42,6 +42,16 @@ pub struct SemanticPage {
     /// Every font a glyph of this page uses whose dictionary is an indirect object.
     pub fonts: BTreeMap<ObjectId, FontInfo>,
     pub diagnostics: Vec<Diagnostic>,
+    /// Every Form occurrence the page enters, outermost first.
+    pub forms: Vec<FormUse>,
+}
+
+/// One Form drawn by a `Do`: `path` ends with the Form's own step and `loc` is the `Do`
+/// operator, in the stream of the parent (the page's content or the enclosing Form).
+#[derive(Debug, Clone)]
+pub struct FormUse {
+    pub path: InstancePath,
+    pub loc: SourceLoc,
 }
 
 #[derive(Debug, Clone)]
@@ -172,6 +182,7 @@ struct Builder<'x> {
     loc: SourceLoc,
     hidden: bool,
     items: Vec<Item>,
+    forms: Vec<FormUse>,
     fonts: BTreeMap<ObjectId, FontInfo>,
     diagnostics: Vec<Diagnostic>,
     /// Fonts that already have a `Type3NotDescended` (`NO_OBJECT` = direct dictionary).
@@ -455,6 +466,11 @@ impl<'a> Device<'a> for Builder<'_> {
             owner,
             drawn: HashMap::new(),
         });
+        let path = InstancePath(self.stack[1..].iter().map(|f| f.step).collect());
+        self.forms.push(FormUse {
+            path,
+            loc: self.loc,
+        });
         true
     }
 
@@ -535,6 +551,7 @@ impl Document {
             },
             hidden: false,
             items: Vec::new(),
+            forms: Vec::new(),
             fonts: BTreeMap::new(),
             diagnostics: Vec::new(),
             type3: HashSet::new(),
@@ -583,6 +600,7 @@ impl Document {
             items: device.items,
             fonts: device.fonts,
             diagnostics,
+            forms: device.forms,
         })
     }
 }

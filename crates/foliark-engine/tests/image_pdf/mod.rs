@@ -96,6 +96,11 @@ pub fn pdf(pages: &[Page], objs: &[Vec<u8>]) -> Vec<u8> {
         bodies.push(stream("", &p.content));
     }
     bodies.extend(objs.iter().cloned());
+    assemble(&bodies)
+}
+
+/// A file of the complete object bodies, object `n` = `bodies[n - 1]`; object 1 is the catalog.
+pub fn assemble(bodies: &[Vec<u8>]) -> Vec<u8> {
     let mut out = b"%PDF-1.7\n".to_vec();
     let mut offsets = Vec::new();
     for (i, b) in bodies.iter().enumerate() {

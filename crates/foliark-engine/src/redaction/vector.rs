@@ -23,9 +23,10 @@
 //!   `MALFORMED_PDF`. Both are raised before the writer is touched.
 //! - Tiling-pattern paint under a region whose cell holds text or images (or whose cell cannot
 //!   be resolved) is `REDACT_PATTERN_UNSUPPORTED`: the cell is not interpreted.
-//! - A path drawn through a Form or stream that something else draws too is refused with
-//!   `INVALID_ARGUMENT`, `details.feature = "redactionSharedFormVector"` (NEW-38 clones Forms).
+//! - A path drawn through a Form or stream that something else draws too is rewritten in a
+//!   clone of its occurrence (`forms`); the other occurrences keep the original.
 //! - Every operator scanned is charged to the work budget (`maxWorkUnits`).
+use super::forms::Targets;
 use super::plan::{PlannedVector, RedactionPlan, VectorClass, subpaths};
 use super::text::{at, decode};
 use crate::Document;
@@ -395,17 +396,6 @@ fn cell_is_unsupported(
 
 // ---- entry point ------------------------------------------------------------------------------
 
-fn refuse_shared(pages: BTreeSet<u32>) -> PdfError {
-    PdfError::with(
-        ErrorCode::InvalidArgument,
-        ErrorDetails {
-            feature: Some("redactionSharedFormVector".into()),
-            pages: Some(pages.into_iter().collect()),
-            ..ErrorDetails::default()
-        },
-    )
-}
-
 type Index<'m> = HashMap<(SourceLoc, InstancePath), &'m PathItem>;
 
 fn path_items(model: &SemanticPage) -> Index<'_> {
@@ -432,26 +422,14 @@ pub fn redact_vectors(
     w: &mut Writer<'_>,
 ) -> Result<VectorReport, PdfError> {
     let mut budget = Budget::new(doc.reader().limits());
+    let targets = Targets::new(doc, plan)?;
     let mut wanted: BTreeMap<ObjectId, BTreeSet<u32>> = BTreeMap::new();
     // (page, stream, end, resource owner) of tiling paint under a region.
     let mut tiling: Vec<(u32, ObjectId, u32, ObjectId)> = Vec::new();
     let mut models: HashMap<u32, SemanticPage> = HashMap::new();
 
     for page in &plan.pages {
-        let shared: HashSet<&InstancePath> = page
-            .forms
-            .iter()
-            .filter(|f| f.shared)
-            .map(|f| &f.path)
-            .collect();
         for v in &page.vectors {
-            let steps = &v.path.0;
-            let form_shared =
-                (1..=steps.len()).any(|n| shared.contains(&InstancePath(steps[..n].to_vec())));
-            let stream_pages = plan.stream_pages.get(&v.loc.stream);
-            if form_shared || stream_pages.is_some_and(|p| p.len() > 1) {
-                return Err(refuse_shared(stream_pages.cloned().unwrap_or_default()));
-            }
             wanted.entry(v.loc.stream).or_default().insert(v.loc.end);
         }
         if page.vectors.is_empty() && page.patterns.is_empty() {
@@ -572,6 +550,7 @@ pub fn redact_vectors(
                 return Err(internal());
             }
             let mut fates = HashMap::new();
+            let first_path = group[0].path.clone();
             for v in group {
                 let i = v.subpath as usize;
                 let (sub, shape) = (p.subs.get(i).ok_or_else(internal)?, &shapes[i]);
@@ -619,14 +598,16 @@ pub fn redact_vectors(
                     }
                 }
             }
+            let target = targets.stream(page.page_index, &first_path.0, stream);
             rewrites.push((
-                stream,
+                target,
                 p.first..p.end,
                 rewrite(&streams[&stream], p, &fates)?,
             ));
         }
     }
     report.operators_rewritten = rewrites.len() as u32;
+    targets.apply(doc, plan, w)?;
     for (stream, span, ops) in rewrites {
         w.replace_span(stream, span, &ops);
     }

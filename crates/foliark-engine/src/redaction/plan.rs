@@ -148,6 +148,9 @@ pub struct PlannedForm {
     /// The Form object is drawn more than once in the document, so it must be cloned rather
     /// than edited in place.
     pub shared: bool,
+    /// The `Do` that draws this occurrence, in the stream of its parent (the page's content or
+    /// the enclosing Form).
+    pub do_loc: SourceLoc,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -631,6 +634,8 @@ fn plan_page(
     };
     let mut resolved: HashSet<&ClusterId> = HashSet::new();
     let mut form_seen: HashSet<Vec<InstanceStep>> = HashSet::new();
+    let form_uses: HashMap<&InstancePath, SourceLoc> =
+        model.forms.iter().map(|f| (&f.path, f.loc)).collect();
     let mut effective: Vec<B> = boxes.clone();
     let mut affect =
         |regions: &mut Vec<PlannedRegion>, hit: &[u32], b: B, f: fn(&mut PlannedRegion)| {
@@ -768,10 +773,16 @@ fn plan_page(
                 let chain = item.path.0[..n].to_vec();
                 if form_seen.insert(chain.clone()) {
                     scan.changed.insert((page, chain.clone()));
+                    let path = InstancePath(chain.clone());
+                    let do_loc = form_uses
+                        .get(&path)
+                        .copied()
+                        .ok_or(PdfError::at(ErrorCode::Internal, chain[n - 1].form))?;
                     plan.forms.push(PlannedForm {
-                        path: InstancePath(chain.clone()),
+                        path,
                         form: chain[n - 1].form,
                         shared: false,
+                        do_loc,
                     });
                 }
             }
