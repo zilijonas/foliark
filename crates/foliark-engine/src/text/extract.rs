@@ -1,8 +1,8 @@
 //! Clusters, styles, lines, words and blocks (spec §3.1 to §3.4).
 use crate::interpret::{FontInfo, ItemKind, SemanticPage};
 use foliark_model::{
-    Cluster, GROUPING, InstancePath, Matrix, PdfError, Point, Quad, SourceLoc, StyleFlags,
-    StyleRun, TextPage, TextStats, Word, WordSource, page_geometry,
+    Cluster, GROUPING, InstancePath, InstanceStep, Matrix, PdfError, Point, Quad, SourceLoc,
+    StyleFlags, StyleRun, TextPage, TextStats, Word, WordSource, page_geometry,
 };
 
 const INVISIBLE: u32 = 1;
@@ -18,6 +18,15 @@ pub struct TextLayout {
     /// Parallel to `page.clusters`: the visual line (page-wide id) and the index into
     /// `page.words` of each cluster.
     pub(super) meta: Vec<ClusterMeta>,
+}
+
+impl TextLayout {
+    /// Heap held by the per-cluster meta (the ids own their form-path vectors).
+    pub(super) fn meta_bytes(&self) -> usize {
+        let steps = |m: &ClusterMeta| m.id.path.0.len() * std::mem::size_of::<InstanceStep>();
+        self.meta.len() * std::mem::size_of::<ClusterMeta>()
+            + self.meta.iter().map(steps).sum::<usize>()
+    }
 }
 
 #[derive(Debug, Clone)]
