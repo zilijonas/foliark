@@ -155,7 +155,10 @@ export function makeHandle(link: Link, id: string, info: DocumentInfo): Document
       return { ...r, data: new Uint8ClampedArray(r.data) };
     },
     async prepareParagraph(p, rects, o) {
-      return call("prepareParagraph", { page: page(p), rects, font: o?.font, editorFace: o?.editorFace });
+      const r = await call<ParagraphInfo>("prepareParagraph", { page: page(p), rects, font: o?.font, editorFace: o?.editorFace });
+      // The face crosses the worker boundary as a transferred ArrayBuffer.
+      if (r.editorFace) r.editorFace.bytes = new Uint8Array(r.editorFace.bytes as unknown as ArrayBuffer);
+      return r;
     },
     async applyChanges(changes, o) {
       const r = await call<ChangeResult>("applyChanges", { changes }, o?.signal);

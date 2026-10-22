@@ -10,9 +10,10 @@ use crate::Document;
 use crate::engine::not_built;
 use crate::text::{ClusterId, TextIndex, TextLayout};
 use foliark_model::{
-    ChangeResult, ChangeSet, DocumentInfo, EditLayout, ErrorCode, Limits, PdfError, Rect,
-    Redaction, RejectedChange, TextEdit,
+    ChangeResult, ChangeSet, DocumentInfo, EditLayout, ErrorCode, ErrorDetails, FontMatchRule,
+    Limits, PdfError, Rect, Redaction, RejectedChange, TextEdit,
 };
+use foliark_text::Registry;
 use std::collections::{BTreeSet, HashSet};
 
 /// What a plan or cache must match to still be valid (spec §4): the same document in the same
@@ -62,30 +63,37 @@ pub struct Applied {
     pub layouts: Vec<EditLayout>,
 }
 
-/// The seam NEW-51 fills: replay `edits` from `source` in array order (each edit's rects are
-/// evaluated on the state after the previous ones) and return the new working copy, or one
-/// rejection per edit that cannot apply. Called only with a non-empty list whose edits passed
-/// structural validation. It must not keep state: a rejection or a later failure discards
-/// whatever it produced.
+/// What an applier reads from the engine besides the document.
+pub struct EditContext<'a> {
+    pub limits: &'a Limits,
+    pub fonts: &'a Registry,
+    pub font_match: &'a [FontMatchRule],
+}
+
+/// The seam [`crate::edit::ParagraphApplier`] fills: replay `edits` from `source` in array order
+/// (each edit's rects are evaluated on the state after the previous ones) and return the new
+/// working copy, or the rejection of the edit that cannot apply. Called only with a non-empty
+/// list whose edits passed structural validation. It must not keep state: a rejection or a
+/// later failure discards whatever it produced.
 pub trait EditApplier {
     fn apply(
         &self,
-        source: &[u8],
+        source: &Document,
         edits: &[TextEdit],
-        limits: &Limits,
+        ctx: &EditContext<'_>,
     ) -> Result<Applied, Vec<RejectedChange>>;
 }
 
-/// Text edits are not built yet: every edit is rejected `INVALID_ARGUMENT` with
-/// `details.feature = "textEdits"` (the convention of the other unbuilt ops).
+/// An engine without text edits: every edit is rejected `INVALID_ARGUMENT` with
+/// `details.feature = "textEdits"` (the convention of an op this build does not do).
 pub struct NotBuilt;
 
 impl EditApplier for NotBuilt {
     fn apply(
         &self,
-        _: &[u8],
+        _: &Document,
         edits: &[TextEdit],
-        _: &Limits,
+        _: &EditContext<'_>,
     ) -> Result<Applied, Vec<RejectedChange>> {
         Err(edits
             .iter()
@@ -122,6 +130,8 @@ pub(crate) struct Session {
     pub(crate) info: DocumentInfo,
     pub(crate) revision: u32,
     pub(crate) committed: Committed,
+    /// Committed edits whose layout used a font other than the source's (`edits.approximate`).
+    pub(crate) approximate: u32,
     /// Lazily built page layouts, byte-bounded and bound to `revision` (spec §4).
     pub(crate) index: TextIndex,
 }
@@ -142,6 +152,7 @@ impl Session {
             info,
             revision: 0,
             committed: Committed::default(),
+            approximate: 0,
         }
     }
 
@@ -235,7 +246,7 @@ impl Session {
     pub(crate) fn apply(
         &mut self,
         cs: ChangeSet,
-        limits: &Limits,
+        ctx: &EditContext<'_>,
         applier: &dyn EditApplier,
     ) -> Result<ChangeResult, PdfError> {
         if cs.base_revision != self.revision {
@@ -283,9 +294,9 @@ impl Session {
         if let Some(list) = edits.as_ref().filter(|l| !l.is_empty())
             && rejected.is_empty()
         {
-            match applier.apply(&self.source_bytes, list, limits) {
+            match applier.apply(&self.source, list, ctx) {
                 Ok(a) => {
-                    let doc = Document::open_with_limits(a.bytes, None, false, limits.clone())?
+                    let doc = Document::open_with_limits(a.bytes, None, false, ctx.limits.clone())?
                         .with_cancel(self.source.cancel_handle());
                     if doc.page_count() != self.source.page_count() {
                         return Err(PdfError::new(ErrorCode::Internal));
@@ -295,6 +306,17 @@ impl Session {
                 }
                 Err(rs) => rejected.extend(rs),
             }
+        }
+        // A new working copy renumbers objects, so every stored must-remove id must be found
+        // again in it (spec §4); one that cannot be is refused, never dropped.
+        if replaced && rejected.is_empty() && (self.working.is_some() || working.is_some()) {
+            let mut list = redactions
+                .take()
+                .unwrap_or_else(|| self.committed.redactions.clone());
+            let old = self.working.as_ref().unwrap_or(&self.source);
+            let new = working.as_ref().unwrap_or(&self.source);
+            rejected.extend(reresolve(&mut self.index, old, new, &mut list));
+            redactions = Some(list);
         }
         if !rejected.is_empty() {
             return Ok(ChangeResult {
@@ -314,16 +336,25 @@ impl Session {
             edits: edits.unwrap_or_else(|| self.committed.edits.clone()),
             redactions: redactions.unwrap_or_else(|| self.committed.redactions.clone()),
         };
+        // Re-resolved ids differ after any edit; what the user changed is the intent.
+        let intent = |l: &[StoredRedaction]| -> Vec<_> {
+            l.iter()
+                .map(|r| (r.page_index, r.id.clone(), r.regions.clone(), r.fill))
+                .collect()
+        };
         let mut changed = differing_pages(&self.committed.edits, &next.edits, |e| e.page_index);
         changed.extend(differing_pages(
-            &self.committed.redactions,
-            &next.redactions,
-            |r| r.page_index,
+            &intent(&self.committed.redactions),
+            &intent(&next.redactions),
+            |r| r.0,
         ));
         if next.edits.is_empty() {
             self.working = None;
         } else if working.is_some() {
             self.working = working;
+        }
+        if replaced {
+            self.approximate = layouts.iter().filter(|l| l.approximate).count() as u32;
         }
         self.committed = next;
         self.revision = revision;
@@ -337,6 +368,89 @@ impl Session {
             layouts,
         })
     }
+}
+
+/// Each cluster of a page as (text, display bounds), in cluster order.
+fn glyphs(l: &TextLayout) -> Vec<(String, [f64; 4])> {
+    let units: Vec<u16> = l.page.text.encode_utf16().collect();
+    l.page
+        .clusters
+        .iter()
+        .flatten()
+        .map(|c| {
+            let text = String::from_utf16_lossy(&units[c.start as usize..c.end as usize]);
+            let b = c.quad.bounds();
+            (text, [b.x, b.y, b.width, b.height])
+        })
+        .collect()
+}
+
+/// The must-remove clusters of `r`, named in `old` (the working copy they were resolved on),
+/// found again in `new` by text and geometry (0.05 pt), one cluster each.
+fn remap(
+    index: &mut TextIndex,
+    old: &Document,
+    new: &Document,
+    r: &StoredRedaction,
+) -> Result<Vec<ClusterId>, PdfError> {
+    let internal = || PdfError::new(ErrorCode::Internal);
+    let before = index.layout(old, r.page_index, false)?;
+    let all = glyphs(before);
+    let wanted: Vec<&(String, [f64; 4])> = r
+        .must_remove
+        .iter()
+        .map(|id| {
+            before
+                .meta
+                .iter()
+                .position(|m| &m.id == id)
+                .map(|i| &all[i])
+        })
+        .collect::<Option<_>>()
+        .ok_or_else(internal)?;
+    let after = new.text_layout(r.page_index as usize, false)?;
+    let have = glyphs(&after);
+    let mut taken = vec![false; have.len()];
+    wanted
+        .iter()
+        .map(|(text, b)| {
+            let j = (0..have.len()).find(|&j| {
+                !taken[j]
+                    && have[j].0 == *text
+                    && have[j].1.iter().zip(b).all(|(x, y)| (x - y).abs() < 0.05)
+            })?;
+            taken[j] = true;
+            Some(after.meta[j].id.clone())
+        })
+        .collect::<Option<_>>()
+        .ok_or_else(|| {
+            PdfError::with(
+                ErrorCode::InvalidArgument,
+                ErrorDetails {
+                    feature: Some("redactionTargetEdited".into()),
+                    pages: Some(vec![r.page_index]),
+                    ..Default::default()
+                },
+            )
+        })
+}
+
+/// Re-resolve every text redaction of `list` against `new`; one rejection per redaction whose
+/// clusters are not all there (an edit removed or moved the text it targets).
+fn reresolve(
+    index: &mut TextIndex,
+    old: &Document,
+    new: &Document,
+    list: &mut [StoredRedaction],
+) -> Vec<RejectedChange> {
+    let mut rejected = Vec::new();
+    for r in list.iter_mut().filter(|r| !r.must_remove.is_empty()) {
+        match remap(index, old, new, r) {
+            Ok(ids) => r.must_remove = ids,
+            Err(e) => rejected.push(reject(&r.id, e)),
+        }
+    }
+    rejected
 }
 
 /// Pages whose items differ, comparing each page's items in list order.

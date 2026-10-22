@@ -5,8 +5,8 @@
 //! yield and check cancellation between steps.
 use foliark_engine::{RenderOptions, RenderedPage, Step};
 use foliark_model::{
-    ChangeSet, ExportMode, ExportPolicy, ExtractOptions, FoliarkError, FontSource, FontStyle,
-    Limits, PdfError, Point, Rect, SearchOptions,
+    ChangeSet, ExportMode, ExportPolicy, ExtractOptions, FoliarkError, FontMatchRule, FontSource,
+    FontStyle, Limits, PdfError, Point, Rect, SearchOptions,
 };
 use js_sys::{Object, Reflect, Uint8Array};
 use serde::de::DeserializeOwned;
@@ -82,12 +82,18 @@ pub struct Engine {
 
 #[wasm_bindgen]
 impl Engine {
-    /// `limits`: a `Partial<Limits>` (or undefined); `generation`: the worker generation.
+    /// `limits`: a `Partial<Limits>` (or undefined); `generation`: the worker generation;
+    /// `font_match`: `FontMatchRule[]` replacing the default table (or undefined).
     #[wasm_bindgen(constructor)]
-    pub fn new(limits: JsValue, generation: u32) -> Result<Engine, JsValue> {
+    pub fn new(limits: JsValue, generation: u32, font_match: JsValue) -> Result<Engine, JsValue> {
         let limits: Limits = from_js(limits)?;
+        let rules: Option<Vec<FontMatchRule>> = from_js(font_match)?;
+        let mut inner = foliark_engine::Engine::new(limits).with_generation(generation);
+        if let Some(rules) = rules {
+            inner = inner.with_font_match(rules);
+        }
         Ok(Engine {
-            inner: foliark_engine::Engine::new(limits).with_generation(generation),
+            inner,
             ops: Operations::default(),
         })
     }
@@ -259,7 +265,17 @@ impl Engine {
             .inner
             .prepare_paragraph(doc, page, rects, font, editor_face.unwrap_or(false))
             .map_err(err)?;
-        to_js(&p)
+        let out = to_js(&p)?;
+        if let Some(face) = &p.editor_face {
+            // `bytes` is typed `Uint8Array` (and transferred), not the number array serde makes.
+            let f = Reflect::get(&out, &"editorFace".into())?;
+            set(
+                f.unchecked_ref(),
+                "bytes",
+                Uint8Array::from(&face.bytes[..]).into(),
+            )?;
+        }
+        Ok(out)
     }
 
     /// The export bytes as an owned copy; frees the plan.

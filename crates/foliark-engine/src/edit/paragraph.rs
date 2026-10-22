@@ -2,8 +2,8 @@
 //! fixed budget around them (wrap width, line count, height) and the font it will use.
 //! Everything is in display space and computed from the page as it is, never from the edit.
 use crate::Document;
-use crate::interpret::ItemKind;
-use crate::text::{SourceFontFace, TextLayout};
+use crate::interpret::{GlyphItem, ItemKind};
+use crate::text::{ClusterId, SourceFontFace, TextLayout};
 use foliark_model::{
     Cluster, EditorFace, ErrorCode, ErrorDetails, FontMatchRule, FontResolution, FontRule,
     GROUPING, ObjectId, ParagraphInfo, PdfError, Quad, Rect, StyleRun,
@@ -180,6 +180,22 @@ fn same_style(a: &StyleRun, b: &StyleRun) -> bool {
         && a.flags == b.flags
 }
 
+/// What `prepare_paragraph` worked out, with what applying an edit needs on top of the wire
+/// record: the selected clusters, the source face and the style inputs of the font ladder.
+pub struct Prepared {
+    pub info: ParagraphInfo,
+    /// The selected clusters, in text order.
+    pub ids: Vec<ClusterId>,
+    /// The first selected cluster's font as a ladder rung 2, when it can be reused.
+    pub source: Option<SourceFontFace>,
+    /// That font's object (the same font as `source`), whether or not it can be reused.
+    pub font_obj: Option<ObjectId>,
+    pub source_name: String,
+    pub flags: StyleFlags,
+    /// Every glyph of `font_obj` on the page: the evidence `source` was built from.
+    pub glyphs: Vec<GlyphItem>,
+}
+
 impl Document {
     /// Everything an editor needs for the paragraph the `rects` select (spec §6.1, §6.2, §6.4).
     /// `font` is a registered font id (`TextEdit.font`). `doc_id` is empty and `revision` is 0:
@@ -193,6 +209,21 @@ impl Document {
         registry: &Registry,
         font_match: &[FontMatchRule],
     ) -> Result<ParagraphInfo, PdfError> {
+        Ok(self
+            .prepare(page, rects, font, editor_face, registry, font_match)?
+            .info)
+    }
+
+    /// [`Document::prepare_paragraph`] plus what applying the edit needs.
+    pub fn prepare(
+        &self,
+        page: usize,
+        rects: &[Rect],
+        font: Option<&str>,
+        editor_face: bool,
+        registry: &Registry,
+        font_match: &[FontMatchRule],
+    ) -> Result<Prepared, PdfError> {
         let model = self.page_model(page)?;
         let layout = TextLayout::build(&model, false)?;
         let clusters = layout.page.clusters.as_deref().unwrap_or_default();
@@ -312,31 +343,39 @@ impl Document {
 
         // Font (§6.4): the ladder's first choice names the paragraph's font; every candidate
         // reserves descent, so the budget holds whichever one a cluster ends up using.
+        let mut font_obj = None;
+        let mut evidence: Vec<GlyphItem> = Vec::new();
         let source = match style.font_ref.split_once(' ') {
             Some((n, g)) if style.font_ref != "0 0" => {
                 let id = ObjectId {
                     num: n.parse().unwrap_or(0),
                     generation: g.parse().unwrap_or(0),
                 };
-                let glyphs = model.items.iter().filter_map(|it| match &it.kind {
-                    ItemKind::Glyph(g) => Some(g),
-                    _ => None,
-                });
-                SourceFontFace::new(self, id, glyphs)?
+                font_obj = Some(id);
+                evidence = model
+                    .items
+                    .iter()
+                    .filter_map(|it| match &it.kind {
+                        ItemKind::Glyph(g) if g.font == Some(id) => Some(g.clone()),
+                        _ => None,
+                    })
+                    .collect();
+                SourceFontFace::new(self, id, &evidence)?
             }
             _ => None,
+        };
+        let flags = StyleFlags {
+            mono: style.flags.mono,
+            serif: style.flags.serif,
+            bold: style.flags.bold,
+            italic: style.flags.italic,
         };
         let ladder = Ladder {
             registry,
             caller: font,
             source: source.as_ref().map(|s| s as &dyn FontFace),
             source_name: &style.font_name,
-            flags: StyleFlags {
-                mono: style.flags.mono,
-                serif: style.flags.serif,
-                bold: style.flags.bold,
-                italic: style.flags.italic,
-            },
+            flags,
             font_match,
         };
         let candidates = ladder.candidates()?;
@@ -390,7 +429,7 @@ impl Document {
                 .collect();
             original_text(&parts, space)
         });
-        Ok(ParagraphInfo {
+        let info = ParagraphInfo {
             doc_id: String::new(),
             revision: 0,
             page_index: page as u32,
@@ -415,6 +454,15 @@ impl Document {
             original_text: original,
             font: resolution,
             editor_face: face,
+        };
+        Ok(Prepared {
+            info,
+            ids: sel.iter().map(|&i| layout.meta[i].id.clone()).collect(),
+            source,
+            font_obj,
+            source_name: style.font_name.clone(),
+            flags,
+            glyphs: evidence,
         })
     }
 }

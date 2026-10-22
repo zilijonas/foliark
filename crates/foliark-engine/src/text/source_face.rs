@@ -169,6 +169,15 @@ impl SourceFontFace {
         self.approx
     }
 
+    /// Bytes per character code in a content string: 2 for Type0 (Identity-H), else 1.
+    pub fn code_width(&self) -> usize {
+        if self.info.kind == FontKind::Type0 {
+            2
+        } else {
+            1
+        }
+    }
+
     /// The font's name without the subset tag, for `FontResolution::Embedded.name`.
     pub fn name(&self) -> &str {
         &self.info.name
