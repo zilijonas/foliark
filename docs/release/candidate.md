@@ -1,29 +1,47 @@
-# Release candidate: @zilijonas/foliark 0.1.1 (docs and metadata only)
+# Release candidate: @zilijonas/foliark 0.1.1 (NEW-94: HDDN public-corpus engine fixes + npm page)
 
-Rebuilt on 2026-10-22 on the same Mac mini and toolchain as 0.1.0. Changes the npm package page (`README.md`) and `package.json` (`description`, `keywords`, version) only. No source,
-engine, SDK or CMap change. Not published by an agent: the owner publishes this exact tarball (`npm publish`, local, no provenance, as for 0.1.0). Source correspondence: tag `v0.1.1`
-on the commit that carries this record (it differs from the built commit only by this record). `tools/release/dry-run.sh` reads the first recorded sha256 in this file, so the 0.1.1 hash stays
-in this section, above the 0.1.0 record.
+Qualified on 2026-10-22 on the owner's Mac mini (same toolchain as 0.1.0). Engine changes versus 0.1.0 (`CHANGELOG.md`, ADR 0010, hayro patches P20 and P21): an image stream is bounded by its declared
+size (an 81 MP scan imports), the budget scan counts Flate images instead of holding them, the first draw of such a scan peaks at +230 MB instead of +510 MB, NoRotate annotations flatten and rasterize
+upright on rotated pages, and flattened appearances stay separate objects in the staged copy of an export. The npm page and `package.json` metadata are the earlier 0.1.1 edits. Not published by an agent:
+the owner publishes this exact tarball (`npm publish`, local, no provenance, as for 0.1.0). Source correspondence: tag `v0.1.1` on the commit that carries this record (it differs from the built commit only by this record).
+`tools/release/dry-run.sh` reads the first recorded sha256 in this file, so the 0.1.1 hash stays in this section, above the 0.1.0 record. The earlier docs-only 0.1.1 tarball (sha256 `49429ab4...`) is superseded and must not be published.
 
 | | |
 |---|---|
 | file | `dist-pkg/zilijonas-foliark-0.1.1.tgz` (gitignored) |
-| sha256 | `49429ab42afbb32511d7e2e5c9efa66676d32e0a9bbd5c83a972b606ec57d424` |
-| size | 3,431,662 B, 276 entries (same entry list as 0.1.0) |
-| built from | foliark `f7a0486` plus the uncommitted 0.1.1 docs changes (the commit adds only those); `scripts/build-wasm.sh && pnpm build:sdk && tests/package-consumers/pack.sh dist-pkg`; packing twice gave the same sha256 |
-| wasm | `wasm/foliark_wasm_bg.wasm` sha256 `0ecce6f8db9d0a1d0f02543ef326a62c3cf70ea20810c243ba54f6fa72f132d2`, identical to 0.1.0 (a fresh rebuild reproduced it on the same machine) |
-| diff vs 0.1.0 | the registry tarball (`npm pack @zilijonas/foliark@0.1.0`, sha256 `7f66ad82...dbcd6`, equal to the recorded candidate) unpacked and compared with `diff -rq`: only `package/README.md` and `package/package.json` differ; `dist/`, `wasm/`, `cmaps/`, licences and notices are byte-identical |
-| package page | the logo is `https://raw.githubusercontent.com/zilijonas/foliark/main/logo.png` (PNG: renders everywhere; the SVG is not used on npm), the comparison table is the one in `docs/performance/comparison.md`, with its caveats and the progressive-JPEG exception named |
+| sha256 | `612a09a290917ca4cc255c09dcf2bd3a54fd88cbc4e0bfacc9944be700eb8e92` |
+| size | 3,433,581 B, 276 entries (same entry list as 0.1.0) |
+| built from | foliark `26e5d0bc51807de48bc6ce83617a9ae1fe0599e1`, clean tree; `scripts/build-wasm.sh && pnpm build:sdk && tests/package-consumers/pack.sh dist-pkg`; packing twice gave the same sha256 |
+| wasm | `wasm/foliark_wasm_bg.wasm` sha256 `4da12fce42c395292840c2ee582218b3b1c9e7f88fd7df7854f8382611e795af` (0.1.0: `0ecce6f8...`, changed by the engine fixes) |
+| HDDN evidence | `pnpm run test:pdf:isolated` with this build in the 1.5 GiB container, synthetic and public corpus (33 cases): 32 clean; open item `public-cropped-rotated` image-only page 3 (see Limits). The 81 MP scan (`public-mixed-multipage`) loads all 6 pages; the form (`public-form-libreoffice`) is a typed refusal with a passing image-only export |
 
-Checks (clean checkout apart from the 0.1.1 edits):
+Checks on `26e5d0b` (one 4 GB queue reservation each; fuzz smoke self-queued, run unwrapped):
 
 | Check | Command | Exit | Result |
 |---|---|---|---|
-| wasm and SDK build | `scripts/build-wasm.sh && pnpm build:sdk` | 0 | wasm sha256 equals 0.1.0 |
+| wasm and SDK build | `scripts/build-wasm.sh && pnpm build:sdk` | 0 | sha256 above |
 | pack twice | `tests/package-consumers/pack.sh dist-pkg` x2 | 0, 0 | identical sha256 |
-| release dry run | `tools/release/dry-run.sh` | 0 | tarball bytes equal the recorded sha256, 276 entries, manifest 0.1.1, notices, SBOM (102 components), package README names tag `v0.1.1`, `npm publish --dry-run` against an unreachable registry |
-| npm dry run | `npm publish "$PWD/dist-pkg/zilijonas-foliark-0.1.1.tgz" --dry-run --access public` | 0 | `@zilijonas/foliark@0.1.1`, 276 files, 3.4 MB, shasum `a0086c3cff099d0e63212f178acd2e1b69ea9df1`; nothing published |
-| package consumers | `tests/package-consumers/run.sh` | 0 | 6 builds ok (vanilla, Vite, esbuild at `/` and `/app/`), tarball installed, 0 external requests |
+| notices | `node scripts/gen-notices.mjs --check` | 0 | up to date |
+| format, lint | `cargo fmt --check`; `cargo clippy --workspace --all-targets --locked -- -D warnings` | 0, 0 | |
+| Rust tests | `cargo test --workspace --locked --no-fail-fast` | 0 | 412 passed, 0 failed, 3 ignored over 56 targets, including `strict_native` |
+| TS parity | `scripts/check-ts-parity.sh` | 0 | in sync |
+| licences | `cargo deny check licenses bans sources` | 0 | ok (no RustSec advisory check run) |
+| SDK tests | `pnpm --filter @zilijonas/foliark test` | 0 | passed |
+| smoke | `pnpm smoke chromium`, `pnpm smoke webkit` | 0, 0 | |
+| package consumers | `tests/package-consumers/run.sh` | 0 | 6 builds ok, 0 external requests |
+| browser specs | `tests/browser/run.sh` | 0 | 33 passed |
+| oracle controls | `tests/oracles/.venv/bin/python tests/oracles/controls.py` | 0 | leaky controls caught, safe passed |
+| acceptance | `SKIP_BUILD=1 tests/integration/acceptance/run.sh` | 0 | 81 cases, 486 results: SAFE 391, EXPLAINED 35, REFUSED 60; negative controls 111, missed 0; cancellation 27 attempts, 0 findings |
+| fuzz smoke | `FUZZ_SECS=30 tools/fuzz-smoke/run.sh` | 0 | 7 targets x 30 s, all clean |
+| budgets | `node --test tools/bench/check-budgets.test.mjs`; fresh `sdk.mjs --extended` + `scans-sdk.mjs` (chromium) through `check-budgets.mjs` | 0, 0 | 40 chromium budgets ok, 38 webkit skipped, 0 failing |
+| export size | `cargo build --release -p foliark-engine --example export_size`; `tools/bench/export-size.py --check` | 0, 0 | Foliark <= PyMuPDF on every exportable fixture |
+
+| release dry run | `tools/release/dry-run.sh` | 0 | tarball bytes equal the recorded sha256, 276 entries, manifest 0.1.1, notices, SBOM (102 components), `SHA256SUMS`, package README names tag `v0.1.1`, `npm publish --dry-run` against an unreachable registry |
+| npm dry run | `npm publish "$PWD/dist-pkg/zilijonas-foliark-0.1.1.tgz" --dry-run --access public` | 0 | `@zilijonas/foliark@0.1.1`, 276 files, shasum `baffd7b9b1c81fac7dafaea56cfba9a695413315`; nothing published |
+
+Limits of this candidate: HDDN's pixel check of the image-only export of `public-cropped-rotated` page 3 reports 0.86 percent changed (budget 0.5). The remaining difference is horizontal 1 pt label borders:
+Poppler draws them pixel-snapped, Foliark's rasterizer anti-aliases them over two rows, and the 2x raster downsampled by Poppler does not match on that page's half-pixel alignment (pages 1, 2 and 4 pass at 0.26 to 0.42
+percent). It is not an engine content loss: with annotations removed the page differs by the same 0.75 percent. Owner decision needed for the HDDN gate (comparator or allowance).
 
 Owner publish command, from the repository root:
 `npm publish ./dist-pkg/zilijonas-foliark-0.1.1.tgz --access public`
