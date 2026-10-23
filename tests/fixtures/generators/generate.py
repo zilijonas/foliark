@@ -230,8 +230,8 @@ def _cmap4(mapping):
     return struct.pack(">HHHHI", 0, 1, 3, 1, 12) + sub
 
 
-def _box_ttf(n, cmap=None, blank=()):
-    """TrueType with .notdef plus n-1 box glyphs (advance 1000, 50..950 x 0..800), tables head hhea maxp hmtx loca glyf;
+def _box_ttf(n, cmap=None, blank=(), adv=1000):
+    """TrueType with .notdef plus n-1 box glyphs (advance `adv`, 50..950 x 0..800), tables head hhea maxp hmtx loca glyf;
     with `cmap` ({character: glyph id}) also a Unicode cmap; glyph ids in `blank` have no outline (a space)."""
     box = struct.pack(">hhhhh", 1, 50, 0, 950, 800) + struct.pack(">H", 3) + struct.pack(">H", 0) + bytes([1] * 4)
     box += struct.pack(">4h", 50, 0, 900, 0) + struct.pack(">4h", 0, 800, 0, -800)
@@ -241,7 +241,7 @@ def _box_ttf(n, cmap=None, blank=()):
     head = struct.pack(">IIIIHHqqhhhhHHhhh", 0x10000, 0x10000, 0, 0x5F0F3CF5, 0, 1000, 0, 0, 50, 0, 950, 800, 0, 8, 2, 0, 0)
     hhea = struct.pack(">IhhhHhhhhhhhhhhhH", 0x10000, 800, -200, 0, 1000, 50, 50, 950, 1, 0, 0, 0, 0, 0, 0, 0, n)
     maxp = struct.pack(">IH", 0x10000, n) + struct.pack(">13H", 4, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0)
-    hmtx = struct.pack(">hh", 1000, 50) * n
+    hmtx = struct.pack(">hh", adv, 50) * n
     tables = {"head": head, "hhea": hhea, "maxp": maxp, "hmtx": hmtx, "loca": loca, "glyf": glyf}
     if cmap:
         tables["cmap"] = _cmap4(cmap)
@@ -359,6 +359,44 @@ def quartz_type0_combining_marks():
     }
     content = (text(20, 360, "KEEP_PUBLIC_MARKS") +
                ("BT /FQ 10 Tf 20 300 Td %s ET\nBT /FQ 10 Tf 20 270 Td %s ET\n" % (tj(MARKS_SECRET), tj(MARKS_KEEP))).encode())
+    return simple(content, ex, fonts="/F1 5 0 R /FQ 6 0 R")
+
+
+# iOS Quartz once more (NEW-104): /W rounds each advance up to 1000 while the program's is 999, and the content stream draws
+# the program's advance through a TJ number of 1 between glyphs, so every line is narrower on the page than its /W widths
+# add up to. A paragraph of three lines that each fill the box (the next word never fits), the KEEP line close below it,
+# a word beside both boxes (a second column), a one-word box, and an ogonek drawn as Quartz draws it: a zero-advance mark right after its base,
+# no kern. The subset has no precomposed letter.
+TIGHT_ROWS = ["ALPHA BRAVO", "DELTA ECHOS", "GOLFS HOTEL"]
+TIGHT_WORD, TIGHT_BESIDE, TIGHT_OGONEK, TIGHT_KEEP = "KILO", "LIMA", "ZA\u0328SIS", "KEEP_TIGHT_LINE"
+
+
+def quartz_type0_tight_widths():
+    chars = "".join(sorted(set("".join(TIGHT_ROWS) + TIGHT_WORD + TIGHT_BESIDE + TIGHT_OGONEK + TIGHT_KEEP + " ")))
+    cmap = {c: k + 1 for k, c in enumerate(chars)}
+    ttf = _box_ttf(len(chars) + 1, cmap=cmap, blank={cmap[" "]}, adv=999)
+    tu = (b"/CIDInit /ProcSet findresource begin 12 dict begin begincmap /CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) "
+          b"/Supplement 0 >> def /CMapName /Adobe-Identity-UCS def /CMapType 2 def\n1 begincodespacerange\n<0000><FFFF>\n"
+          b"endcodespacerange\nendcmap CMapName currentdict /CMap defineresource pop end end\n")
+    widths = " ".join("0" if c == OGONEK else "1000" for c in chars)
+
+    def tj(x, y, word):  # 1/1000 em back before every glyph that is not a mark: the drawn advance is the program's 999
+        body = "".join(("" if i == 0 or c == OGONEK else "1 ") + "<%04X> " % (chars.index(c) + 1) for i, c in enumerate(word))
+        return "BT /FQ 10 Tf %d %d Td [%s] TJ ET\n" % (x, y, body)
+
+    ex = {
+        6: "<< /Type /Font /Subtype /Type0 /BaseFont /AAAAAF+FoliarkBox /Encoding /Identity-H /DescendantFonts [7 0 R] /ToUnicode 9 0 R >>",
+        7: ("<< /Type /Font /Subtype /CIDFontType2 /BaseFont /AAAAAF+FoliarkBox /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) "
+            "/Supplement 0 >> /W [1 [%s]] /DW 1000 /FontDescriptor 8 0 R >>" % widths),
+        8: ("<< /Type /FontDescriptor /FontName /AAAAAF+FoliarkBox /Flags 4 /FontBBox [50 0 950 800] /ItalicAngle 0 /Ascent 800 "
+            "/Descent -200 /CapHeight 800 /StemV 80 /FontFile2 10 0 R >>"),
+        9: stream("", tu, flate=True),
+        10: stream("/Length1 %d" % len(ttf), ttf, flate=True),
+    }
+    rows = "".join(tj(20, 300 - 14 * i, r) for i, r in enumerate(TIGHT_ROWS))
+    beside = tj(200, 300, TIGHT_BESIDE) + tj(200, 200, TIGHT_BESIDE)  # each box ends where its own text ends
+    content = (text(20, 360, "KEEP_PUBLIC_TIGHT") + (rows + beside + tj(20, 252, TIGHT_KEEP) + tj(20, 200, TIGHT_WORD)
+                                                     + tj(20, 170, TIGHT_OGONEK)).encode())
     return simple(content, ex, fonts="/F1 5 0 R /FQ 6 0 R")
 
 
@@ -482,6 +520,11 @@ FIXTURES = {
                                       "mustRemove": [MARKS_SECRET], "mustKeepText": ["KEEP_PUBLIC_MARKS", MARKS_KEEP],
                                       "regions": [{"kind": "sensitive", "page": 0, "rectTopLeft": [19, 90, 135, 104], "text": MARKS_SECRET},
                                                   R(20, 360, "KEEP_PUBLIC_MARKS", kind="public")]}, {}),
+    "quartz-type0-tight-widths": (quartz_type0_tight_widths, ["embedded-font", "identity-h", "empty-tounicode", "combining-marks", "tight-widths"],
+                                  {"behavior": "iOS Quartz shape whose /W widths are 1/1000 em wider than the advances the content stream draws (TJ corrections), with an ogonek as a zero-advance mark and no precomposed glyph; unchanged paragraphs fit their edit box with their own line breaks, and the word redacts natively",
+                                   "mustRemove": [TIGHT_WORD], "mustKeepText": ["KEEP_PUBLIC_TIGHT", TIGHT_KEEP, TIGHT_BESIDE],
+                                   "regions": [{"kind": "sensitive", "page": 0, "rectTopLeft": [19, 191, 61, 203], "text": TIGHT_WORD},
+                                               R(20, 360, "KEEP_PUBLIC_TIGHT", kind="public")]}, {}),
     "word-winansi-type0-twins": (word_winansi_type0_twins, ["embedded-font", "identity-h", "font-twins"],
                                  {"behavior": "Word shape: a TrueType WinAnsi subset plus a Type0 Identity-H twin (bfchar + array bfrange ToUnicode) for the non-WinAnsi letters, switching mid-word; words and dates read across the switch",
                                   "mustRemove": [_joined(TWIN_SECRET)], "mustKeepText": ["KEEP_PUBLIC_TWINS", _joined(TWIN_DATE).split()[2]],

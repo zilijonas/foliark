@@ -7,9 +7,9 @@
   "python": "3.9"
  },
  "counts": {
-  "total": 43,
+  "total": 44,
   "hddn": 20,
-  "generated": 23,
+  "generated": 24,
   "byFeature": {
    "actualtext": 1,
    "additional-actions": 1,
@@ -18,15 +18,15 @@
    "annotation": 2,
    "appearance-stream": 2,
    "cjk": 1,
-   "combining-marks": 1,
+   "combining-marks": 2,
    "corrupt-flate": 1,
    "cyclic-form": 1,
    "decode-ratio": 1,
    "deep-form": 1,
    "dimension-bomb": 1,
    "embedded-file": 2,
-   "embedded-font": 6,
-   "empty-tounicode": 2,
+   "embedded-font": 7,
+   "empty-tounicode": 3,
    "encrypted": 5,
    "flate-bomb": 1,
    "font-payload": 1,
@@ -35,7 +35,7 @@
    "form-xobject": 4,
    "hidden-ocg-text": 1,
    "icc-profile": 1,
-   "identity-h": 3,
+   "identity-h": 4,
    "image": 6,
    "image-payload": 1,
    "incremental-update": 2,
@@ -67,6 +67,7 @@
    "structure-alt": 1,
    "text": 1,
    "thumbnail": 1,
+   "tight-widths": 1,
    "truncated": 1,
    "uri-action": 1,
    "vector": 2,
@@ -2222,6 +2223,58 @@
        43.5
       ],
       "text": "KEEP_PUBLIC_MARKS"
+     }
+    ]
+   }
+  },
+  {
+   "id": "quartz-type0-tight-widths",
+   "path": "generated/quartz-type0-tight-widths.pdf",
+   "sha256": "f62acbe20961b89a5080fdedde8aa54dd7554456b036a1b067791a1359e365ed",
+   "bytes": 2273,
+   "pages": 1,
+   "features": [
+    "embedded-font",
+    "identity-h",
+    "empty-tounicode",
+    "combining-marks",
+    "tight-widths"
+   ],
+   "origin": "tests/fixtures/generators/generate.py",
+   "license": "synthetic, generated (original)",
+   "deterministic": true,
+   "expected": {
+    "behavior": "iOS Quartz shape whose /W widths are 1/1000 em wider than the advances the content stream draws (TJ corrections), with an ogonek as a zero-advance mark and no precomposed glyph; unchanged paragraphs fit their edit box with their own line breaks, and the word redacts natively",
+    "mustRemove": [
+     "KILO"
+    ],
+    "mustKeepText": [
+     "KEEP_PUBLIC_TIGHT",
+     "KEEP_TIGHT_LINE",
+     "LIMA"
+    ],
+    "regions": [
+     {
+      "kind": "sensitive",
+      "page": 0,
+      "rectTopLeft": [
+       19,
+       191,
+       61,
+       203
+      ],
+      "text": "KILO"
+     },
+     {
+      "kind": "public",
+      "page": 0,
+      "rectTopLeft": [
+       20,
+       28.8,
+       150.9,
+       43.5
+      ],
+      "text": "KEEP_PUBLIC_TIGHT"
      }
     ]
    }

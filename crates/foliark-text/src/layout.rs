@@ -254,6 +254,8 @@ struct Cluster {
     bytes: Range<usize>,
     start16: u32,
     cand: usize,
+    /// Drawn as its canonical decomposition: the font has the base and marks, not the letter.
+    nfd: bool,
 }
 
 struct Piece {
@@ -283,14 +285,21 @@ struct Shaper<'a> {
 }
 
 impl Shaper<'_> {
-    /// Shapes consecutive same-font clusters as one run each.
+    /// Shapes consecutive same-font clusters as one run each; a decomposed cluster is a run of
+    /// its own whose glyphs all stand for the whole cluster.
     fn pieces(&self, cl: &[Cluster]) -> Result<Vec<Piece>, PdfError> {
         let mut out = Vec::new();
-        for run in cl.chunk_by(|a, b| a.cand == b.cand) {
+        for run in cl.chunk_by(|a, b| a.cand == b.cand && !a.nfd && !b.nfd) {
             let (a, b) = (run[0].bytes.start, run[run.len() - 1].bytes.end);
-            let mut glyphs = self.cands[run[0].cand]
-                .face
-                .shape(&self.text[a..b], self.size)?;
+            let (face, t) = (self.cands[run[0].cand].face, &self.text[a..b]);
+            let mut glyphs = if run[0].nfd {
+                let mut g = face.shape(&t.nfd().collect::<String>(), self.size)?;
+                let n16 = t.encode_utf16().count() as u32;
+                g.iter_mut().for_each(|g| g.cluster = 0..n16);
+                g
+            } else {
+                face.shape(t, self.size)?
+            };
             for g in &mut glyphs {
                 g.cluster = g.cluster.start + run[0].start16..g.cluster.end + run[0].start16;
             }
@@ -408,6 +417,7 @@ pub fn layout_unbounded(text: &str, p: &LayoutParams, ladder: &Ladder) -> Result
                     bytes: i..i + c.len_utf8(),
                     start16: 0,
                     cand: 0,
+                    nfd: false,
                 });
             }
         }
@@ -416,9 +426,18 @@ pub fn layout_unbounded(text: &str, p: &LayoutParams, ladder: &Ladder) -> Result
             let t = &line[c.bytes.clone()];
             c.start16 = at16;
             at16 += t.encode_utf16().count() as u32;
-            match cands.iter().position(|k| k.face.covers(t)) {
-                Some(k) => {
-                    c.cand = k;
+            // NFC first, then the decomposition (a subset may hold `a` and U+0328 but not `ą`).
+            let nfd: String = t.nfd().collect();
+            let found = cands.iter().enumerate().find_map(|(k, x)| {
+                if x.face.covers(t) {
+                    Some((k, false))
+                } else {
+                    (nfd != t && x.face.covers(&nfd)).then_some((k, true))
+                }
+            });
+            match found {
+                Some((k, nfd)) => {
+                    (c.cand, c.nfd) = (k, nfd);
                     approximate |= cands[k].rule.is_some();
                 }
                 None if !missing.contains(t) => missing.push_str(t),
