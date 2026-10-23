@@ -201,14 +201,15 @@ def judge_one(args):
             return entry
         tmp = tempfile.mkdtemp()
         inp = sn.plain_copy(case["path"], case["password"], tmp)
-        doc = fitz.open(inp)
+        ref = objects.named_copy(inp, os.path.join(tmp, "named.pdf"))  # outputs are judged against the input as its glyphs read (check.py)
+        doc = fitz.open(ref)
         visible = sn.page_text(doc)
         # the input control: every secret must be visible to the oracle in the input, else a clean output proves nothing
         ctrl = []
         if case["secrets"] and scen in ("sanitize", "region"):
             found = objects.check_isolated(inp, {"forbidden": case["secrets"], "allow": ALL_ALLOW})
             ctrl = ["INPUT_CONTROL: %r not found in the input by objects.py" % s for s in case["secrets"] if not any(repr(s) in x for x in found)]
-        f = ctrl + judge_file(case, scen, o, pdfp, inp, doc, visible)
+        f = ctrl + judge_file(case, scen, o, pdfp, ref, doc, visible)
         entry.update(bucket="FAIL" if f else "SAFE", detail="; ".join(f)[:600])
         if sha(open(pdfp, "rb").read()) != o["sha256"]:
             entry.update(bucket="FAIL", detail="output file hash differs from the driver record")
@@ -243,7 +244,7 @@ def negative_controls(root, cases, res):
             continue
         san = r["scenarios"].get("sanitize", {})
         tmp = tempfile.mkdtemp()
-        inp = sn.plain_copy(c["path"], c["password"], tmp)
+        inp = objects.named_copy(sn.plain_copy(c["path"], c["password"], tmp), os.path.join(tmp, "named.pdf"))
         doc = fitz.open(inp)
         visible = sn.page_text(doc)
         seen = [x for x in c["secrets"] if flat(x) in flat(visible) and x not in c["survivors"]]

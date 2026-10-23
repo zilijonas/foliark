@@ -18,6 +18,18 @@ Inputs: all 39 entries of `tests/fixtures/manifest.json` = the 35 manifest input
 - Negative controls in the same run: R replaced by the S bytes for mixed-regions, ocr-over-image, jpeg-payload-secret must be caught
   (IMAGE_REGION, VECTOR_REGION, STREAM, TEXT_FITZ as applicable). Refused: both runs must fail with the exact code and the engine holds 0 plan bytes.
 
+## NEW-100 addendum (2026-10-23): 42 cases = 34 supported + 8 refused, 0 skipped
+Two font-shape fixtures from real documents joined the manifest (`cjk-predefined-cmaps` had joined in NEW-88):
+`quartz-type0-empty-tounicode` (iOS Quartz Type0 Identity-H, ToUnicode with no mapping) and `word-winansi-type0-twins` (Word's
+WinAnsi TrueType plus Identity-H twin). Both extractors read the Quartz glyphs as junk, so objects.py gained TEXT_GLYPH (glyphs named
+by their font program's own cmap; leaky and safe controls in `controls.py`) and check.py judges outputs against `objects.named_copy`
+of the input (ToUnicode filled from that cmap, nothing drawn changes); the input control still runs on the unmodified input.
+
+| fixture | outcome | checks | hashes |
+|---|---|---|---|
+| quartz-type0-empty-tounicode | supported | R+S | d6985a96803a / cc269192cc7d / 65cac66df2b4 |
+| word-winansi-type0-twins | supported | R+S | 3e007021c9c1 / 90386d293391 / 5e7ccd870465 |
+
 ## Result: 39 cases = 31 supported + 8 refused (typed, no bytes), 0 skipped
 Refused: REPAIRED_PDF x2 (malformed-truncated, malformed-xref), LIMIT_EXCEEDED x4 (oversized-image, compressed-stream, forms-deep-40,
 many-pages-1001), DECODE_FAILED x1 (corrupt-flate), MALFORMED_PDF x1 (forms-cyclic). Table: sha256[:12] input / R / S.

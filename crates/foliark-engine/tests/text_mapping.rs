@@ -130,6 +130,28 @@ fn words_match_pymupdf_on_native_fixtures() {
     println!("{}", report.join("\n"));
 }
 
+/// iOS Quartz shape (NEW-100): Type0 Identity-H whose ToUnicode maps nothing; the text is the
+/// embedded TrueType's own Unicode cmap read backwards. PyMuPDF reports the glyph ids themselves
+/// as code points there (control characters), so the expectation is the generator's text.
+#[test]
+fn identity_h_font_with_an_empty_to_unicode_reads_the_embedded_cmap() {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/fixtures/generated/quartz-type0-empty-tounicode.pdf");
+    let doc = Document::open(std::fs::read(path).unwrap(), None).unwrap();
+    let page = doc.extract_text(0, &ExtractOptions::default()).unwrap();
+    assert_eq!(
+        texts(&page),
+        [
+            "KEEP_PUBLIC_QUARTZ",
+            "SECRET_QUARTZ",
+            "2026-10-23",
+            "KEEP_QUARTZ_LINE"
+        ]
+    );
+    // The soft hyphen and NBSP share the hyphen and space glyphs: the lowest code point wins.
+    assert_eq!(page.stats.unmapped_glyphs, 0);
+}
+
 // ---- offsets, clusters, grouping -----------------------------------------------------------------
 
 #[test]

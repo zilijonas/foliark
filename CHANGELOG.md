@@ -4,6 +4,9 @@ All notable changes to `@zilijonas/foliark` (named `@foliark/sdk` before 0.1.0 w
 
 ## [Unreleased]
 
+### Fixed
+- Text of a font whose ToUnicode maps nothing (iOS/macOS Quartz writes Type0 Identity-H fonts whose ToUnicode declares only a codespace) is read from the embedded TrueType/OpenType program's own Unicode cmap, glyph id back to code point; it was all U+FFFD, so the page had no findings, a paragraph edit showed replacement characters and its commit was refused (`EDIT_UNSUPPORTED_SCRIPT`). The same fallback covers a code a partial ToUnicode or the encoding leaves unmapped; a symbol cmap is never read as text. Fixtures `generated/quartz-type0-empty-tounicode.pdf` and `generated/word-winansi-type0-twins.pdf` (Word's WinAnsi TrueType plus Identity-H twin, switching mid-word) (NEW-100).
+
 ## [0.1.1] - 2026-10-22
 
 Engine fixes from HDDN's public-corpus gate (NEW-94) and the npm page polish. Source: tag `v0.1.1`. Tarball and hashes: `docs/release/candidate.md`.

@@ -336,6 +336,8 @@ CASES = [
     ("leaky: secret only in unused Form XObject", leak_unused_form, {"forbidden": ["SECRET_UNUSED_FORM"]}, {"STREAM"}, {"TEXT_PYPDF", "TEXT_FITZ"}),
     ("leaky: secret in hidden OCG", gen.ocg_hidden, {"forbidden": ["SECRET_HIDDEN_OCG"]}, {"STREAM", "FEATURE"}, set()),
     ("leaky: image pixels under overlay", leak_image_under_overlay, IMG, {"IMAGE_REGION"}, set()),
+    # NEW-100: glyphs only their font program's cmap names (iOS Quartz Type0, ToUnicode maps nothing); both extractors miss them.
+    ("leaky: secret in a font whose ToUnicode maps nothing", gen.quartz_type0_empty_tounicode, {"forbidden": [gen.QUARTZ_SECRET]}, {"TEXT_GLYPH"}, {"TEXT_FITZ"}),
     ("leaky: ActualText / Alt", leak_actualtext, {"forbidden": ["SECRET_ACTUALTEXT", "SECRET_ALT_TEXT"]}, {"STREAM"}, set()),
     ("leaky: JS OpenAction + metadata + attachment", gen.leaks_metadata_attachment_js, {"forbidden": ["SECRET_OPENACTION_JS", "SECRET_ATTACHMENT_BODY"]}, {"FEATURE", "STRING", "STREAM"}, set()),
     ("leaky: encrypted output", lambda: gen._encrypted("AES_128"), {"password": gen.ENC_USER}, {"FEATURE"}, set()),
@@ -344,6 +346,7 @@ CASES = [
     ("never silent: unsupported filter", leak_bogus_filter, {}, {"UNSUPPORTED"}, set()),
     ("never silent: decode cap", leak_bomb, {"cap": 1_000_000}, {"CAP"}, set()),
     ("safe: public-only page", safe_clean, S, None, set()),
+    ("safe: Quartz font page, secret not shown", gen.quartz_type0_empty_tounicode, {"forbidden": ["SECRET_NOT_SHOWN"]}, None, set()),
     ("safe: apply_redactions on text", safe_redact_text, S, None, set()),
     ("safe: apply_redactions image pixels", safe_redact_image, IMG, None, set()),
     ("safe: untouched public image, no region", safe_untouched_image, S, None, set()),

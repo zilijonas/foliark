@@ -30,6 +30,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 mod fonts;
+use fonts::program_unicode;
 pub use fonts::{FontInfo, FontKind, MetricsSource};
 pub use hayro::hayro_interpret::{FillRule, StrokeProps};
 
@@ -95,7 +96,8 @@ pub struct GlyphItem {
     pub gid: Option<u32>,
     /// `None` when the font dictionary is a direct object (diagnostic `DirectFontDict`).
     pub font: Option<ObjectId>,
-    /// ToUnicode, then encoding / glyph name (multiple code points allowed); `None` = unmapped.
+    /// ToUnicode, then encoding / glyph name (multiple code points allowed), then the embedded
+    /// program's Unicode cmap for the glyph id; `None` = unmapped.
     pub unicode: Option<String>,
     /// `Tr` 0 to 7. Modes 3 and 7 are reported too.
     pub render_mode: u8,
@@ -200,6 +202,8 @@ struct Builder<'x> {
     /// Fonts that already have a `Type3NotDescended` (`NO_OBJECT` = direct dictionary).
     type3: HashSet<ObjectId>,
     direct_font_reported: bool,
+    /// `program_unicode` of each font that showed a glyph with no other Unicode, read once.
+    program_unicode: HashMap<ObjectId, Option<HashMap<u32, char>>>,
     error: Option<PdfError>,
     /// Every Form that was entered, to tell a cycle from a damaged object.
     entered: HashSet<ObjectId>,
@@ -346,6 +350,25 @@ impl Builder<'_> {
                 (0.0, descent),
             ]
         };
+        let unicode = g
+            .as_unicode()
+            .map(|u| match u {
+                BfString::Char(c) => c.to_string(),
+                BfString::String(s) => s,
+            })
+            .or_else(|| {
+                let (id, gid) = (font?, gid?);
+                let xref = self.xref;
+                self.program_unicode
+                    .entry(id)
+                    .or_insert_with(|| {
+                        let dict = xref.get::<Dict<'_>>(id_to_ref(id).into())?;
+                        program_unicode(&dict)
+                    })
+                    .as_ref()?
+                    .get(&gid)
+                    .map(char::to_string)
+            });
         let trm = ctm * g.transform() * Affine::scale(1000.0);
         let m = Matrix(trm.as_coeffs());
         let quad_user = Quad(local.map(|(x, y)| m.apply(Point { x, y })));
@@ -353,10 +376,7 @@ impl Builder<'_> {
             char_code: g.char_code(),
             gid,
             font,
-            unicode: g.as_unicode().map(|u| match u {
-                BfString::Char(c) => c.to_string(),
-                BfString::String(s) => s,
-            }),
+            unicode,
             render_mode: mode,
             trm: m,
             advance_em: if vertical { adv_y } else { adv_x },
@@ -644,6 +664,7 @@ impl Document {
             diagnostics: Vec::new(),
             type3: HashSet::new(),
             direct_font_reported: false,
+            program_unicode: HashMap::new(),
             error: None,
             entered: HashSet::new(),
             tripped,
