@@ -49,6 +49,7 @@ Documents:
   - [0006](docs/adr/0006-content-hidden-data.md) content streams carry no hidden data (unknown operators, marked-content dicts)
   - [0007](docs/adr/0007-unused-resources.md) export keeps only resources surviving content uses
   - [0010](docs/adr/0010-image-decode-bound-and-no-rotate.md) image streams bounded by their declared size; NoRotate annotations flatten upright
+  - [0011](docs/adr/0011-unchanged-text-fits.md) unchanged text fits its edit box (budget measured by the layout); decomposed-cluster fallback
 
 ## 3. Commands
 
