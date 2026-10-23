@@ -7,9 +7,9 @@
   "python": "3.9"
  },
  "counts": {
-  "total": 42,
+  "total": 43,
   "hddn": 20,
-  "generated": 22,
+  "generated": 23,
   "byFeature": {
    "actualtext": 1,
    "additional-actions": 1,
@@ -18,14 +18,15 @@
    "annotation": 2,
    "appearance-stream": 2,
    "cjk": 1,
+   "combining-marks": 1,
    "corrupt-flate": 1,
    "cyclic-form": 1,
    "decode-ratio": 1,
    "deep-form": 1,
    "dimension-bomb": 1,
    "embedded-file": 2,
-   "embedded-font": 5,
-   "empty-tounicode": 1,
+   "embedded-font": 6,
+   "empty-tounicode": 2,
    "encrypted": 5,
    "flate-bomb": 1,
    "font-payload": 1,
@@ -34,7 +35,7 @@
    "form-xobject": 4,
    "hidden-ocg-text": 1,
    "icc-profile": 1,
-   "identity-h": 2,
+   "identity-h": 3,
    "image": 6,
    "image-payload": 1,
    "incremental-update": 2,
@@ -2171,6 +2172,56 @@
        43.5
       ],
       "text": "KEEP_PUBLIC_QUARTZ"
+     }
+    ]
+   }
+  },
+  {
+   "id": "quartz-type0-combining-marks",
+   "path": "generated/quartz-type0-combining-marks.pdf",
+   "sha256": "b8b831ac1a20c8321380322cd35db75b5fd53ccd2716cacf045113bfe6b0ea00",
+   "bytes": 2099,
+   "pages": 1,
+   "features": [
+    "embedded-font",
+    "identity-h",
+    "empty-tounicode",
+    "combining-marks"
+   ],
+   "origin": "tests/fixtures/generators/generate.py",
+   "license": "synthetic, generated (original)",
+   "deterministic": true,
+   "expected": {
+    "behavior": "iOS Quartz shape with decomposed accents: ogonek and acute are zero-advance glyphs drawn over their base; a mark belongs to its base glyph, so redacting the base removes the mark and a page with marks still redacts natively",
+    "mustRemove": [
+     "SECRET_A\u0328_E\u0301X"
+    ],
+    "mustKeepText": [
+     "KEEP_PUBLIC_MARKS",
+     "KEEP_E\u0301_MARK"
+    ],
+    "regions": [
+     {
+      "kind": "sensitive",
+      "page": 0,
+      "rectTopLeft": [
+       19,
+       90,
+       135,
+       104
+      ],
+      "text": "SECRET_A\u0328_E\u0301X"
+     },
+     {
+      "kind": "public",
+      "page": 0,
+      "rectTopLeft": [
+       20,
+       28.8,
+       150.9,
+       43.5
+      ],
+      "text": "KEEP_PUBLIC_MARKS"
      }
     ]
    }

@@ -9,6 +9,7 @@
 //! operators the interpreter does not know.
 use crate::limits::{self, Budget};
 use crate::reader::{Document, object_id};
+use crate::sanitize::text_semantics::placed;
 use foliark_model::{
     InstancePath, InstanceStep, Limits, Matrix, ObjectId, PageGeometry, PdfError, Point, Quad,
     SourceLoc,
@@ -371,7 +372,21 @@ impl Builder<'_> {
             });
         let trm = ctm * g.transform() * Affine::scale(1000.0);
         let m = Matrix(trm.as_coeffs());
-        let quad_user = Quad(local.map(|(x, y)| m.apply(Point { x, y })));
+        let mut quad_user = Quad(local.map(|(x, y)| m.apply(Point { x, y })));
+        // A zero-advance glyph (a combining mark) has no width, so no box: it sits where the glyph
+        // before it in the same show sits, and a region over the base takes the mark too.
+        if !vertical
+            && adv_x == 0.0
+            && let Some(Item {
+                loc,
+                kind: ItemKind::Glyph(base),
+                ..
+            }) = self.items.last()
+            && *loc == self.loc
+            && placed(&base.quad_user)
+        {
+            quad_user = base.quad_user;
+        }
         self.push(ItemKind::Glyph(GlyphItem {
             char_code: g.char_code(),
             gid,

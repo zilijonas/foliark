@@ -330,6 +330,38 @@ def quartz_type0_empty_tounicode():
     return simple(content, ex, fonts="/F1 5 0 R /FQ 6 0 R")
 
 
+# iOS Quartz again, with decomposed accents: a combining mark is its own glyph of advance 0 (/W 0), drawn over its base through a
+# TJ kern back and forth, as Quartz writes "ą" (NEW-102). It has no width, so no box of its own: it belongs to its base.
+MARKS_SECRET, MARKS_KEEP = "SECRET_A\u0328_E\u0301X", "KEEP_E\u0301_MARK"
+OGONEK, ACUTE = "\u0328", "\u0301"
+
+
+def quartz_type0_combining_marks():
+    chars = "".join(sorted(set(MARKS_SECRET + MARKS_KEEP)))
+    cmap = {c: k + 1 for k, c in enumerate(chars)}
+    ttf = _box_ttf(len(chars) + 1, cmap=cmap)
+    tu = (b"/CIDInit /ProcSet findresource begin 12 dict begin begincmap /CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) "
+          b"/Supplement 0 >> def /CMapName /Adobe-Identity-UCS def /CMapType 2 def\n1 begincodespacerange\n<0000><FFFF>\n"
+          b"endcodespacerange\nendcmap CMapName currentdict /CMap defineresource pop end end\n")
+    widths = " ".join("0" if c in (OGONEK, ACUTE) else "1000" for c in chars)
+
+    def tj(word):  # a mark follows its base: back one em, the mark (advance 0), forward one em
+        return "[" + "".join(("1000 <%04X> -1000 " if c in (OGONEK, ACUTE) else "<%04X> ") % (chars.index(c) + 1) for c in word) + "] TJ"
+
+    ex = {
+        6: "<< /Type /Font /Subtype /Type0 /BaseFont /AAAAAE+FoliarkBox /Encoding /Identity-H /DescendantFonts [7 0 R] /ToUnicode 9 0 R >>",
+        7: ("<< /Type /Font /Subtype /CIDFontType2 /BaseFont /AAAAAE+FoliarkBox /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) "
+            "/Supplement 0 >> /W [1 [%s]] /DW 1000 /FontDescriptor 8 0 R >>" % widths),
+        8: ("<< /Type /FontDescriptor /FontName /AAAAAE+FoliarkBox /Flags 4 /FontBBox [50 0 950 800] /ItalicAngle 0 /Ascent 800 "
+            "/Descent -200 /CapHeight 800 /StemV 80 /FontFile2 10 0 R >>"),
+        9: stream("", tu, flate=True),
+        10: stream("/Length1 %d" % len(ttf), ttf, flate=True),
+    }
+    content = (text(20, 360, "KEEP_PUBLIC_MARKS") +
+               ("BT /FQ 10 Tf 20 300 Td %s ET\nBT /FQ 10 Tf 20 270 Td %s ET\n" % (tj(MARKS_SECRET), tj(MARKS_KEEP))).encode())
+    return simple(content, ex, fonts="/F1 5 0 R /FQ 6 0 R")
+
+
 # Word: each face twice, a TrueType WinAnsi subset for what WinAnsi can encode and a Type0 /Identity-H twin (ToUnicode with
 # bfchar and an array-form bfrange) for the rest; a word switches fonts mid-word, one positioned run per font switch.
 TWIN_DATE = [("T", "2002 m. bir"), ("U", "\u017e"), ("T", "elio 20 d.")]
@@ -445,6 +477,11 @@ FIXTURES = {
                                       "mustRemove": [QUARTZ_SECRET], "mustKeepText": ["KEEP_PUBLIC_QUARTZ", QUARTZ_DATE, QUARTZ_KEEP],
                                       "regions": [{"kind": "sensitive", "page": 0, "rectTopLeft": [19, 90, 151, 104], "text": QUARTZ_SECRET},
                                                   R(20, 360, "KEEP_PUBLIC_QUARTZ", kind="public")]}, {}),
+    "quartz-type0-combining-marks": (quartz_type0_combining_marks, ["embedded-font", "identity-h", "empty-tounicode", "combining-marks"],
+                                     {"behavior": "iOS Quartz shape with decomposed accents: ogonek and acute are zero-advance glyphs drawn over their base; a mark belongs to its base glyph, so redacting the base removes the mark and a page with marks still redacts natively",
+                                      "mustRemove": [MARKS_SECRET], "mustKeepText": ["KEEP_PUBLIC_MARKS", MARKS_KEEP],
+                                      "regions": [{"kind": "sensitive", "page": 0, "rectTopLeft": [19, 90, 135, 104], "text": MARKS_SECRET},
+                                                  R(20, 360, "KEEP_PUBLIC_MARKS", kind="public")]}, {}),
     "word-winansi-type0-twins": (word_winansi_type0_twins, ["embedded-font", "identity-h", "font-twins"],
                                  {"behavior": "Word shape: a TrueType WinAnsi subset plus a Type0 Identity-H twin (bfchar + array bfrange ToUnicode) for the non-WinAnsi letters, switching mid-word; words and dates read across the switch",
                                   "mustRemove": [_joined(TWIN_SECRET)], "mustKeepText": ["KEEP_PUBLIC_TWINS", _joined(TWIN_DATE).split()[2]],

@@ -269,6 +269,36 @@ fn text_that_cannot_be_placed_refuses_native_when_regions_exist() {
 }
 
 #[test]
+fn a_zero_width_combining_mark_belongs_to_its_base_and_never_blocks_a_region() {
+    // iOS Quartz writes "a" + U+0328 as two glyphs, the mark with advance 0: its box has no area, which
+    // used to refuse every region on the page (textPositionUnknown, NEW-102). The mark sits where its
+    // base sits, so redacting the base takes the mark, and an untouched word keeps its own.
+    let input = common::fixture("generated/quartz-type0-combining-marks.pdf");
+    let (secret, keep) = ("SECRET_A\u{328}_E\u{301}X", "KEEP_E\u{301}_MARK");
+    let doc = Document::open(input.clone(), None).unwrap();
+    let before = doc.extract_text(0, &ExtractOptions::default()).unwrap();
+    assert!(
+        before.text.contains(secret) && before.text.contains(keep),
+        "{:?}",
+        before.text
+    );
+    let (_, out) = export_with(
+        &input,
+        ExportPolicy::default(),
+        vec![region("r", (19.0, 90.0, 135.0, 104.0))],
+    )
+    .unwrap();
+    let t = words(&out);
+    assert!(t.contains("KEEP_PUBLIC_MARKS") && t.contains(keep), "{t}");
+    assert!(!t.contains("SECRET") && !t.contains('\u{328}'), "{t}");
+    assert_eq!(t.matches('\u{301}').count(), 1, "{t}");
+    let (ok, log) = objects_oracle("sanitize-semantics", "marks.pdf", &out, &[secret]);
+    assert!(ok, "marks: objects.py: {log}");
+    let (ok, _) = objects_oracle("sanitize-semantics", "marks.in.pdf", &input, &[secret]);
+    assert!(!ok, "marks: negative control, the secret is in the input");
+}
+
+#[test]
 fn nested_actualtext_alt_and_e_are_stripped_and_counted() {
     // Inline: nested in an array and a dictionary. Resource: a /Properties entry, one level down.
     let content = "/Span << /MCID 0 /K [<< /ActualText (SECRET_ACTUAL) /Keep 1 >>] \
