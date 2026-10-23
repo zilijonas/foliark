@@ -1,5 +1,19 @@
 # HDDN replacement and rollback acceptance (NEW-76)
 
+## Production (0.1.1, NEW-93)
+
+HDDN (github.com/zilijonas/docs-reader) runs `@zilijonas/foliark` 0.1.1 from npm in production since 2026-10-23.
+
+| | |
+|---|---|
+| package | npm `@zilijonas/foliark@0.1.1`, tarball sha256 `612a09a290917ca4cc255c09dcf2bd3a54fd88cbc4e0bfacc9944be700eb8e92` (byte-identical to `docs/release/candidate.md`), lockfile integrity `sha512-3Cidz/FHGbwkLgSq8tUOl8YLwp6hGpPkk+qAdSlvlCrWCBBCJ/c5trmbkA+rhf5cHQuDwfslHCG02LJGaGrXZg==`, wasm sha256 `4da12fce42c395292840c2ee582218b3b1c9e7f88fd7df7854f8382611e795af` |
+| deploy | docs-reader PR #18, `main` `f1248ff`, workflow run 39870878070 (validate, audit, unwaived PDF worker safety 33/33, release gates, deploy) |
+| rollback ref | previous production build from `7754031` (Pyodide + PyMuPDF) |
+| live check | hddn.app serves the release identity of `f1248ff` (non-HTML files byte-identical; HTML differs only by Cloudflare edge rewrites), the expected wasm and `foliark-cmaps/v0.1.1`, no Pyodide or third-party requests. Native redact, edit + redact, image-only consent, OCR scan export, mixed and CJK flows pass on Chromium, Firefox and WebKit; saved files pass the independent oracles |
+| open | Prepared-offline failed live because the edge rewrites HTML and the offline worker pinned editor pages by bytes; fixed in docs-reader PR #19 (`341e870`, NEW-95), deployment pending. Real phones and tablets: NEW-64 |
+
+The sections below are the pre-release local acceptance on rc2.
+
 Proof that HDDN runs on the pinned private Foliark candidate **rc2** and no longer has a Python path, and that the pre-Foliark build can be restored. rc2 replaces `b47dafd9` (NEW-82 and NEW-83 fixes); every number below was re-measured on rc2.
 Local only: nothing was pushed, deployed or published. HDDN worktree `~/ai/repos/hddn-foliark`, branch `foliark/integration`. The `~/ai/repos/hddn` checkout was not touched.
 

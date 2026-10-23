@@ -93,7 +93,10 @@ const reasons = (f: Foliark) => {
 const noop = (base: number) => ({ baseRevision: base, redactions: [] });
 
 describe("hang watchdog", () => {
-  const HANG = 80;
+  // The watchdog also judges every real op of the in-process worker (wasm init, registerFonts, open, extractText), on the
+  // main thread's own timers: a loaded runner stretches those past a tight budget and resets a healthy worker. So the
+  // budget is large against real work, and only the deliberately silent op ever outlives it.
+  const HANG = 500;
   /** The first `op` request hangs its worker; the replacement worker is healthy. */
   const once = (test: (m: Req) => boolean) => {
     let fired = false;
