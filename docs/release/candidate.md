@@ -1,3 +1,45 @@
+# Release candidate: @zilijonas/foliark 0.1.2 (NEW-100/102/104: real iOS and Word PDFs)
+
+Qualified on 2026-10-24 on the owner's Mac mini (same toolchain as 0.1.0). Engine changes versus 0.1.1 (`CHANGELOG.md`, ADR 0011): text of fonts whose ToUnicode maps nothing (iOS Quartz) is read from the embedded font's own cmap
+(NEW-100), zero-width combining marks take the box of their base glyph so native redaction no longer refuses those pages (NEW-102), and an unchanged paragraph fits its edit box, with a decomposed fallback for a missing precomposed letter
+(NEW-104). Not published by an agent: the owner publishes this exact tarball (`npm publish`, local). Source correspondence: tag `v0.1.2` on the commit that carries this record; the tarball was built from the source commit
+below, and the record commit differs from it only by documentation. `tools/release/dry-run.sh` reads the first recorded sha256 in this file, so the 0.1.2 hash stays in this section, above the 0.1.1 record.
+
+| | |
+|---|---|
+| file | `dist-pkg/zilijonas-foliark-0.1.2.tgz` (gitignored) |
+| sha256 | `328a6c9ed85f62f58c9fdd06b7fb5f360bc89c4bcabafab618a6b3ede63a0e16` |
+| size | 3,435,939 B, 276 entries (same entry list as 0.1.0) |
+| built from | foliark `2f68ff3` (`chore(release): bump ... 0.1.2`, clean tree before and after); `scripts/build-wasm.sh && pnpm build:sdk && tests/package-consumers/pack.sh dist-pkg`; packing twice gave the same sha256 |
+| wasm | `wasm/foliark_wasm_bg.wasm` sha256 `90820663e259f4dfb22996577140097cfcc968976ffc2c757ec89bc4bf3b1c8d`, 5,835,122 B raw (0.1.1: `4da12fce...`) |
+
+Checks on `2f68ff3` (one reservation each through `~/ai/bin/memory-queue`; fuzz smoke self-queued, run unwrapped):
+
+| Check | Command | Exit | Result |
+|---|---|---|---|
+| format, lint | `cargo fmt --check`; `cargo clippy --workspace --all-targets --locked -- -D warnings` | 0, 0 | |
+| Rust tests | `cargo test --workspace --locked --no-fail-fast` | 0 | 417 passed, 0 failed, 3 ignored over 57 targets, including `strict_native` |
+| wasm and SDK build | `scripts/build-wasm.sh && pnpm build:sdk` | 0 | sha256 above |
+| TS parity | `scripts/check-ts-parity.sh` | 0 | in sync |
+| SDK tests | `pnpm --filter @zilijonas/foliark test` | 0 | 87 passed |
+| smoke | `pnpm smoke chromium`, `pnpm smoke webkit` | 0, 0 | |
+| browser specs | `tests/browser/run.sh` | 0 | 33 passed (chromium, firefox, webkit) |
+| pack twice | `tests/package-consumers/pack.sh dist-pkg` x2 | 0, 0 | identical sha256 |
+| package consumers | `tests/package-consumers/run.sh` | 0 | 6 builds ok, 0 external requests |
+| oracle controls | `tests/oracles/.venv/bin/python tests/oracles/controls.py` | 0 | leaky caught 28/28, safe passed 12/12; fidelity fail cases caught 5/5, pass 2/2 |
+| acceptance | `SKIP_BUILD=1 tests/integration/acceptance/run.sh` | 0 | 85 cases, 510 results: SAFE 415, EXPLAINED 35, REFUSED 60; negative controls 119, missed 0; cancellation 27 attempts, 0 findings |
+| fuzz smoke | `FUZZ_SECS=30 tools/fuzz-smoke/run.sh` | 0 | 7 targets x 30 s, all clean |
+| budgets | `node --test tools/bench/check-budgets.test.mjs`; fresh `sdk.mjs --extended` + `scans-sdk.mjs` (chromium) through `check-budgets.mjs` | 0, 0 | 40 ok, 38 webkit skipped, 0 failing |
+| notices | `node scripts/gen-notices.mjs --check` | 0 | up to date |
+| licences | `cargo deny check licenses bans sources` | 0 | ok (no RustSec advisory check run) |
+| export size | `cargo build --release -p foliark-engine --example export_size`; `tools/bench/export-size.py --check` | 0, 0 | Foliark <= PyMuPDF on every exportable fixture |
+| release dry run | `tools/release/dry-run.sh` | 0 | tarball bytes equal the recorded sha256, manifest 0.1.2, notices, SBOM, `SHA256SUMS`, package README names tag `v0.1.2`, `npm publish --dry-run` against an unreachable registry |
+
+Owner publish command, from the repository root (after the `v0.1.2` tag exists on the record commit; rebuild with the commands above if the tarball is gone and compare the sha256):
+`npm publish ./dist-pkg/zilijonas-foliark-0.1.2.tgz --access public`
+
+---
+
 # Release candidate: @zilijonas/foliark 0.1.1 (NEW-94: HDDN public-corpus engine fixes + npm page)
 
 Qualified on 2026-10-22 on the owner's Mac mini (same toolchain as 0.1.0). Engine changes versus 0.1.0 (`CHANGELOG.md`, ADR 0010, hayro patches P20 and P21): an image stream is bounded by its declared
