@@ -341,11 +341,30 @@ fn dict<'a>(w: &Writer<'a>, id: ObjectId) -> Option<Object<'a>> {
     ))
 }
 
+/// The embedded program (FontFile, FontFile2 or FontFile3 stream) font dictionary `font` draws from.
+pub fn program_of(font: &Dict<'_>) -> Option<ObjectId> {
+    let owner = if font.get::<Name<'_>>("Subtype")?.as_str() == "Type0" {
+        font.get::<Array<'_>>("DescendantFonts")?
+            .iter::<Dict<'_>>()
+            .next()?
+    } else {
+        font.clone()
+    };
+    let d = owner.get::<Dict<'_>>("FontDescriptor")?;
+    ["FontFile2", "FontFile3", "FontFile"]
+        .into_iter()
+        .find_map(|k| match d.get_raw::<Object<'_>>(k)? {
+            MaybeRef::Ref(r) => Some(object_id(r)),
+            MaybeRef::NotRef(_) => None,
+        })
+}
+
 /// Source font `font` after content removal. `survivors` are the glyphs that remain drawn
-/// (from the semantic model; those of other fonts are ignored): the font's ToUnicode becomes
-/// a map of their codes and a TrueType program loses every other outline. If several fonts
-/// share one program, pass the survivors of all of them to each call. Type0 fonts other than
-/// Identity-H/V and `Uni*-UCS2-*` are refused (`FONT_UNSUPPORTED`), their code width is not known.
+/// (from the semantic model): the font's ToUnicode becomes a map of its own survivors' codes and
+/// a TrueType program loses every outline no survivor draws. If several fonts share one program,
+/// pass the survivors of all of them to each call, so the glyphs of the others keep their
+/// outlines. Type0 fonts other than Identity-H/V and `Uni*-UCS2-*` are refused
+/// (`FONT_UNSUPPORTED`), their code width is not known.
 pub fn touch_font<'g>(
     w: &mut Writer<'_>,
     font: ObjectId,
@@ -359,10 +378,7 @@ pub fn touch_font<'g>(
             font,
         ));
     };
-    let survivors: Vec<&GlyphItem> = survivors
-        .into_iter()
-        .filter(|g| g.font == Some(font))
-        .collect();
+    let survivors: Vec<&GlyphItem> = survivors.into_iter().collect();
     let subtype = fd
         .get::<Name<'_>>("Subtype")
         .ok_or_else(|| refuse("no font subtype"))?;
@@ -388,6 +404,7 @@ pub fn touch_font<'g>(
         code_bytes,
         survivors
             .iter()
+            .filter(|g| g.font == Some(font))
             .filter_map(|g| g.unicode.as_deref().map(|u| (g.char_code, u))),
     )?;
     w.set_to_unicode(font, cmap);

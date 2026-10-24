@@ -441,6 +441,76 @@ def word_winansi_type0_twins():
     return simple(content, ex, fonts="/F1 5 0 R /FT 6 0 R /FU 7 0 R")
 
 
+# Word as it writes the twins (NEW-105): both fonts draw from ONE embedded program (one FontFile2). The TrueType draws by
+# WinAnsi code through the program's Unicode cmap, the Type0 by glyph id. The heading's hyphen and digits come from the
+# TrueType only, its letters from the Type0 only; the body paragraph uses both. `blank`: characters drawn with no outline.
+SHARED_HEAD = [("U", "Nr. XV"), ("T", "-"), ("T", "512")]
+SHARED_BODY = [[("T", "SECRET_bir"), ("U", "ž"), ("T", "elio")], [("T", "second line")]]
+
+
+def word_twins_shared_program(size=10, blank=""):
+    chars = "".join(chr(c) for c in range(32, 127)) + TWIN_U  # glyph k+1 draws chars[k]
+    prog = _box_ttf(len(chars) + 1, cmap={c: k + 1 for k, c in enumerate(chars)}, blank={1} | {chars.index(c) + 1 for c in blank})
+    drawn = sorted({c for runs in [SHARED_HEAD] + SHARED_BODY for f, s in runs if f == "U" for c in s})
+    tu = ("/CIDInit /ProcSet findresource begin 12 dict begin begincmap /CMapName /Adobe-Identity-UCS def /CMapType 2 def\n"
+          "1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n%d beginbfchar\n%s\nendbfchar\n"
+          "endcmap CMapName currentdict /CMap defineresource pop end end\n"
+          % (len(drawn), "\n".join("<%04X> <%04X>" % (chars.index(c) + 1, ord(c)) for c in drawn)))
+    desc = ("<< /Type /FontDescriptor /FontName /%s+FoliarkBox /Flags 32 /FontBBox [50 0 950 800] /ItalicAngle 0 /Ascent 800 "
+            "/Descent -200 /CapHeight 800 /StemV 80 /FontFile2 12 0 R >>")
+    ex = {
+        6: ("<< /Type /Font /Subtype /TrueType /BaseFont /AAAAAE+FoliarkBox /Encoding /WinAnsiEncoding /FirstChar 32 /LastChar 126 "
+            "/Widths [%s] /FontDescriptor 8 0 R >>" % " ".join(["1000"] * 95)),
+        7: "<< /Type /Font /Subtype /Type0 /BaseFont /AAAAAF+FoliarkBox /Encoding /Identity-H /DescendantFonts [9 0 R] /ToUnicode 11 0 R >>",
+        8: desc % "AAAAAE",
+        9: ("<< /Type /Font /Subtype /CIDFontType2 /BaseFont /AAAAAF+FoliarkBox /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) "
+            "/Supplement 0 >> /DW 1000 /CIDToGIDMap /Identity /FontDescriptor 10 0 R >>"),
+        10: desc % "AAAAAF",
+        11: stream("", tu.encode(), flate=True),
+        12: stream("/Length1 %d" % len(prog), prog, flate=True),
+    }
+
+    def line(runs, y):
+        out, x = "", 20
+        for font, s in runs:
+            shown = "(%s)" % s if font == "T" else _cid_hex(s, chars)
+            out += "BT /F%s %d Tf 1 0 0 1 %d %d Tm [%s] TJ ET\n" % (font, size, x, y, shown)
+            x += size * len(s)
+        return out.encode()
+
+    content = text(20, 360, "KEEP_PUBLIC_SHARED") + line(SHARED_HEAD, 330) + line(SHARED_BODY[0], 300) + line(SHARED_BODY[1], 286)
+    return simple(content, ex, fonts="/F1 5 0 R /FT 6 0 R /FU 7 0 R")
+
+
+# Word again (NEW-106): an article heading set bold directly above its regular body paragraph, in one text object, each face a
+# TrueType WinAnsi subset named as Word names Arial (box glyphs; bold 1.2 em, regular 1 em wide, size 5). The body's rows fill
+# the box (the next word never fits) and the heading ends short of it, so one hard break sits where the look changes. A KEEP line
+# below bounds the paragraph; nothing else on the page reaches the body's right edge.
+STYLE_HEAD = "1 ARTICLE. SCOPE"
+STYLE_ROWS = ["alpha bravo charlie delta echo", "foxtrot golf hotels india lima", "mikes oscar papa quebec romeos"]
+STYLE_SECRET, STYLE_KEEP = "charlie", "KEEP_STYLE_LINE"
+
+
+def word_bold_heading_body():
+    ascii_chars = "".join(chr(c) for c in range(32, 127))
+    cmap = {c: k + 1 for k, c in enumerate(ascii_chars)}
+
+    def face(num, name, adv):
+        ttf = _box_ttf(len(ascii_chars) + 1, cmap=cmap, blank={1}, adv=adv)
+        return {
+            num: ("<< /Type /Font /Subtype /TrueType /BaseFont /%s /Encoding /WinAnsiEncoding /FirstChar 32 /LastChar 126 "
+                  "/Widths [%s] /FontDescriptor %d 0 R >>" % (name, " ".join([str(adv)] * 95), num + 1)),
+            num + 1: ("<< /Type /FontDescriptor /FontName /%s /Flags 32 /FontBBox [50 0 950 800] /ItalicAngle 0 /Ascent 800 "
+                      "/Descent -200 /CapHeight 800 /StemV 80 /FontFile2 %d 0 R >>" % (name, num + 2)),
+            num + 2: stream("/Length1 %d" % len(ttf), ttf, flate=True),
+        }
+
+    ex = {**face(6, "AAAAAG+Arial-BoldMT", 1200), **face(9, "AAAAAH+ArialMT", 1000)}
+    rows = "".join("0 -7 Td (%s) Tj\n" % r for r in STYLE_ROWS)
+    content = (text(20, 360, "KEEP_PUBLIC_STYLES", 10) + ("BT /FB 5 Tf 20 300 Td (%s) Tj\n/FR 5 Tf 0 -1 Td\n%sET\n" % (STYLE_HEAD, rows)
+               + "BT /FR 5 Tf 20 262 Td (%s) Tj ET\n" % STYLE_KEEP).encode())
+    return simple(content, ex, fonts="/F1 5 0 R /FB 6 0 R /FR 9 0 R")
+
 def _joined(runs):
     return "".join(s for _, s in runs)
 
@@ -530,6 +600,16 @@ FIXTURES = {
                                   "mustRemove": [_joined(TWIN_SECRET)], "mustKeepText": ["KEEP_PUBLIC_TWINS", _joined(TWIN_DATE).split()[2]],
                                   "regions": [{"kind": "sensitive", "page": 0, "rectTopLeft": [19, 120, 171, 134], "text": _joined(TWIN_SECRET)},
                                               R(20, 360, "KEEP_PUBLIC_TWINS", kind="public")]}, {}),
+    "word-twins-shared-program": (word_twins_shared_program, ["embedded-font", "identity-h", "font-twins", "shared-font-program"],
+                                  {"behavior": "Word shape as written: the WinAnsi TrueType and its Identity-H twin draw from one embedded program; removing text drawn by both fonts must keep every glyph either font still draws (the heading's hyphen and digits come from the TrueType only)",
+                                   "mustRemove": [_joined(SHARED_BODY[0])], "mustKeepText": ["KEEP_PUBLIC_SHARED", "XV-512", "second line"],
+                                   "regions": [{"kind": "sensitive", "page": 0, "rectTopLeft": [19, 90, 171, 104], "text": _joined(SHARED_BODY[0])},
+                                               R(20, 360, "KEEP_PUBLIC_SHARED", kind="public")]}, {}),
+    "word-bold-heading-body": (word_bold_heading_body, ["embedded-font", "mixed-style-paragraph"],
+                               {"behavior": "Word shape: a bold heading line directly above its regular body in one text object; editing the body keeps the heading as it is and the body regular, inside the body's own right edge, and the replaced word is gone",
+                                "mustRemove": [STYLE_SECRET], "mustKeepText": ["KEEP_PUBLIC_STYLES", STYLE_KEEP, STYLE_HEAD.split()[1]],
+                                "regions": [{"kind": "sensitive", "page": 0, "rectTopLeft": [79, 103, 116, 110], "text": STYLE_SECRET},
+                                            R(20, 360, "KEEP_PUBLIC_STYLES", 10, kind="public")]}, {}),
 }
 for _id, _mode, _alg in (("encrypted-rc4-40", "RC4_40", "RC4-40"), ("encrypted-rc4-128", "RC4_128", "RC4-128"),
                          ("encrypted-aes-128", "AES_128", "AES-128"), ("encrypted-aes-256", "AES_256", "AES-256")):

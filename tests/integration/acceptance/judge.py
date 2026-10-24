@@ -136,8 +136,8 @@ def judge_file(case, scen, rec, out_path, inp, doc, visible):
             fid = [x for x in fid if not x.startswith("WORDS_PYPDF")]
         if case["flags"].get("actualtext"):
             fid = [x for x in fid if not x.startswith("WORDS_")]
-        if case["flags"].get("fid_blind"):  # the oracle renderer ignores /VE, so its pixel and word views of the input are wrong for this case
-            fid = [x for x in fid if not x.startswith(("PIXELS", "WORDS_"))]
+        if case["flags"].get("fid_blind"):  # the oracle renderer ignores /VE, so its pixel, glyph and word views of the input are wrong for this case
+            fid = [x for x in fid if not x.startswith(("PIXELS", "GLYPHS", "WORDS_"))]
         if case["flags"].get("pypdf_blind"):  # pypdf misplaces text shown by ' and " (implicit line move); PyMuPDF's word check stays authoritative
             fid = [x for x in fid if not x.startswith("WORDS_PYPDF")]
         if case["flags"].get("offpage") and scen == "sanitize":  # clipped-out / off-CropBox content is removed by design (spec 8.2 offPage)

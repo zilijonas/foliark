@@ -310,9 +310,19 @@ def fout_blank_secret_image_only():
     return out(d)
 
 
+def swap_shown(pdf, old, new):
+    """`pdf` with one shown string of its page content replaced (the font program is untouched)."""
+    d = fitz.open(stream=pdf, filetype="pdf")
+    x = d[0].get_contents()[0]
+    d.update_stream(x, d.xref_stream(x).replace(old, new))
+    return d.tobytes()
+
+
 FIN, REGION = fin()
 FSPEC = {"changed": [{"page": 0, "rect": REGION}], "preserve": ["KEEP_PUBLIC_TEXT", "secondpublicline"]}
 RASTER = {**FSPEC, "raster": True, "preserve": [], "threshold": 64, "max_frac": 0.01}
+TWIN10 = {"changed": [{"page": 0, "rect": [19, 90, 240, 118]}], "preserve": ["Nr. XV-512"]}
+TWIN3 = {"changed": [{"page": 0, "rect": [19, 95, 80, 116]}]}
 FCASES = [
     ("fail: unaffected image dropped", lambda: fout_redacted(image=False), FSPEC, {"PIXELS"}, set()),
     ("fail: unaffected text shifted 5 pt", lambda: fout_redacted(keep_x=25), FSPEC, {"PIXELS", "WORDS_FITZ", "WORDS_PYPDF"}, set()),
@@ -321,6 +331,14 @@ FCASES = [
     ("fail: declared raster still has a text layer", fout_redacted, RASTER, {"RASTER_TEXT"}, set()),
     ("pass: PyMuPDF apply_redactions", fout_redacted, FSPEC, None, set()),
     ("pass: declared raster, no text layer", fout_raster, RASTER, None, set()),
+    # NEW-105, Word twins sharing one program; the body paragraph is the changed region. A 3 pt box glyph left drawn with
+    # an emptied outline keeps its id and its text and stays under the page-level PIXELS tolerance: only GLYPHS sees it.
+    ("fail: untouched glyph's outline emptied (small)", lambda: gen.word_twins_shared_program(3, blank="-"), TWIN3, {"GLYPHS"},
+     {"PIXELS", "WORDS_FITZ", "WORDS_PYPDF"}, lambda: gen.word_twins_shared_program(3)),
+    ("fail: untouched glyph drawn with another glyph id", lambda: swap_shown(gen.word_twins_shared_program(), b"[(-)]", b"[(=)]"),
+     TWIN10, {"GLYPHS"}, {"PIXELS"}, gen.word_twins_shared_program),  # box glyphs look alike: pixels cannot tell
+    ("pass: twins, only the changed paragraph differs", lambda: swap_shown(gen.word_twins_shared_program(), b"(second line)", b"(second lime)"),
+     TWIN10, None, set(), gen.word_twins_shared_program),
 ]
 
 
@@ -341,6 +359,8 @@ CASES = [
     ("leaky: secret word carrying zero-width combining marks", gen.quartz_type0_combining_marks, {"forbidden": [gen.MARKS_SECRET]}, {"TEXT_GLYPH"}, {"TEXT_FITZ"}),
     # NEW-104: /W wider than the drawn advances (TJ corrections), an ogonek as a zero-advance mark.
     ("leaky: word in a font whose /W is wider than it draws", gen.quartz_type0_tight_widths, {"forbidden": [gen.TIGHT_WORD]}, {"TEXT_GLYPH"}, {"TEXT_FITZ"}),
+    # NEW-106: Word's bold heading directly above its regular body; the body word an edit replaces.
+    ("leaky: body word under a bold Word heading", gen.word_bold_heading_body, {"forbidden": [gen.STYLE_SECRET]}, {"TEXT_FITZ", "TEXT_PYPDF"}, set()),
     ("leaky: ActualText / Alt", leak_actualtext, {"forbidden": ["SECRET_ACTUALTEXT", "SECRET_ALT_TEXT"]}, {"STREAM"}, set()),
     ("leaky: JS OpenAction + metadata + attachment", gen.leaks_metadata_attachment_js, {"forbidden": ["SECRET_OPENACTION_JS", "SECRET_ATTACHMENT_BODY"]}, {"FEATURE", "STRING", "STREAM"}, set()),
     ("leaky: encrypted output", lambda: gen._encrypted("AES_128"), {"password": gen.ENC_USER}, {"FEATURE"}, set()),
@@ -352,6 +372,7 @@ CASES = [
     ("safe: Quartz font page, secret not shown", gen.quartz_type0_empty_tounicode, {"forbidden": ["SECRET_NOT_SHOWN"]}, None, set()),
     ("safe: combining-mark page, secret not shown", gen.quartz_type0_combining_marks, {"forbidden": ["SECRET_NOT_SHOWN"]}, None, set()),
     ("safe: tight-width Quartz page, secret not shown", gen.quartz_type0_tight_widths, {"forbidden": ["SECRET_NOT_SHOWN"]}, None, set()),
+    ("safe: bold-heading Word page, secret not shown", gen.word_bold_heading_body, {"forbidden": ["SECRET_NOT_SHOWN"]}, None, set()),
     ("safe: apply_redactions on text", safe_redact_text, S, None, set()),
     ("safe: apply_redactions image pixels", safe_redact_image, IMG, None, set()),
     ("safe: untouched public image, no region", safe_untouched_image, S, None, set()),
@@ -397,10 +418,13 @@ def main():
     print("leaky caught %d/%d, safe passed %d/%d" % (caught, leaky, passed, safe))
     fbad, ffail, fcaught, fpass, fok = 0, 0, 0, 0, 0
     (tmp / "in.pdf").write_bytes(FIN)
-    for i, (name, build, spec, must, mustnot) in enumerate(FCASES):
-        p = tmp / ("f%02d.pdf" % i)
+    for i, (name, build, spec, must, mustnot, *own_input) in enumerate(FCASES):
+        p, src = tmp / ("f%02d.pdf" % i), tmp / "in.pdf"
         p.write_bytes(build())
-        findings, notes = fidelity.check_isolated(tmp / "in.pdf", p, spec)
+        if own_input:
+            src = tmp / ("f%02d.in.pdf" % i)
+            src.write_bytes(own_input[0]())
+        findings, notes = fidelity.check_isolated(src, p, spec)
         codes = {f.split(":")[0] for f in findings}
         if must is None:
             fpass += 1

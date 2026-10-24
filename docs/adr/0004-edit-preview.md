@@ -1,6 +1,6 @@
 # ADR 0004: Edit previews
 
-Status: Accepted, 2026-10-22 (NEW-52). Extends spec §1.5, §6.3 (public API addition; not in the frozen spec). The budget it previews is ADR 0011's.
+Status: Accepted, 2026-10-22 (NEW-52). Extends spec §1.5, §6.3 (public API addition; not in the frozen spec). The budget it previews is ADR 0011's; with style segments (ADR 0012) it previews the changed part.
 
 ## Decisions
 - New op `layoutEdit(page, rects, text, { font?, glyphs? }) -> EditPreview` (wasm `layoutEdit`, `OpName.layoutEdit`, `DocumentHandle.layoutEdit`). It is synchronous, reads the current working copy, commits nothing and never changes the revision, text index or caches.

@@ -6,11 +6,13 @@
 //! out by later tasks. So planning never needs vector subtraction to succeed. A region applies
 //! to its own page occurrence only (spec §5): "all occurrences" is the caller's choice of
 //! submitting one redaction per search hit. All geometry is display space (spec §2).
+use super::text::at;
 use crate::Document;
 use crate::document::{Binding, Committed};
 use crate::engine::Engine;
 use crate::interpret::{DiagnosticKind, GlyphItem, Item, ItemKind, PathItem, SemanticPage};
 use crate::text::ClusterId;
+use crate::writer::fonts::program_of;
 use foliark_model::{
     ErrorCode, InstancePath, InstanceStep, Loss, LossCode, Matrix, ObjectId, PdfError, Point, Quad,
     Rect, RedactionReport, SharedKind, SharedSurvivor, SourceLoc,
@@ -31,7 +33,8 @@ pub struct RedactionPlan {
     pub pages: Vec<PagePlan>,
     /// For each font that loses a glyph: every distinct glyph of it that survives anywhere in
     /// the document (rebuilding ToUnicode and emptying TrueType outlines needs the whole
-    /// document, not the page).
+    /// document, not the page), and those of every font drawing from the same embedded program
+    /// (Word's WinAnsi TrueType and its Identity-H twin), whose outlines must stay too.
     pub font_survivors: BTreeMap<ObjectId, Vec<GlyphItem>>,
     /// Pages that draw each content stream holding a removed cluster. More than one page
     /// means a shared stream, which an in-place rewrite would change on every page.
@@ -208,7 +211,14 @@ impl RedactionPlan {
                 out.extend(page);
             }
         }
-        Ok(scan.finish(binding, out))
+        let xref = doc.reader().pdf().xref();
+        let program: HashMap<ObjectId, ObjectId> = scan
+            .survivors
+            .keys()
+            .chain(&scan.touched_fonts)
+            .filter_map(|&f| Some((f, program_of(&xref.get::<Dict<'_>>(at(f))?)?)))
+            .collect();
+        Ok(scan.finish(binding, out, &program))
     }
 
     /// `STALE_PLAN` unless the document is still at the plan's revision (spec §4).
@@ -442,7 +452,13 @@ impl Scan {
         }
     }
 
-    fn finish(self, binding: Binding, mut pages: Vec<PagePlan>) -> RedactionPlan {
+    /// `program`: the embedded program each font draws from.
+    fn finish(
+        self,
+        binding: Binding,
+        mut pages: Vec<PagePlan>,
+        program: &HashMap<ObjectId, ObjectId>,
+    ) -> RedactionPlan {
         let shared = |form: ObjectId| self.forms.get(&form).is_some_and(|o| o.len() > 1);
         let mut report = RedactionReport {
             regions: 0,
@@ -518,7 +534,7 @@ impl Scan {
                 pages: Some(reencoded.into_iter().collect()),
             });
         }
-        let mut survivors = self.survivors;
+        let survivors = self.survivors;
         let removed_streams: BTreeSet<ObjectId> = pages
             .iter()
             .flat_map(|p| {
@@ -534,8 +550,13 @@ impl Scan {
                 .touched_fonts
                 .iter()
                 .map(|f| {
-                    let kept = survivors.remove(f).unwrap_or_default();
-                    (*f, kept.into_values().collect())
+                    let shared = program.get(f);
+                    let kept = survivors
+                        .iter()
+                        .filter(|(g, _)| *g == f || (shared.is_some() && program.get(g) == shared))
+                        .flat_map(|(_, glyphs)| glyphs.values().cloned())
+                        .collect();
+                    (*f, kept)
                 })
                 .collect(),
             stream_pages: self

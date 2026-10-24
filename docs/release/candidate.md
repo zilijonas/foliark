@@ -1,3 +1,43 @@
+# Release candidate: @zilijonas/foliark 0.1.3 (NEW-105/106: Word edit fixes)
+
+Qualified on 2026-10-24 on the owner's Mac mini (same toolchain as 0.1.0). Engine changes versus 0.1.2 (`CHANGELOG.md`, ADR 0012): removing text no longer empties the glyphs of untouched text drawn by a font twin that shares an embedded program (Word's WinAnsi TrueType plus Identity-H Type0 pair; edits and text redactions, NEW-105), and an edit of a block holding a bold heading over a regular body splits the paragraph into style segments, keeps the heading and body styles and stays inside the margin (NEW-106). Not published by an agent: the owner publishes this exact tarball (`npm publish`, local). Source correspondence: tag `v0.1.3` on the commit that carries this record; the tarball was built from the source commit below, and the record commit differs from it only by documentation. `tools/release/dry-run.sh` reads the first recorded sha256 in this file, so the 0.1.3 hash stays in this section, above the 0.1.2 record. The branches `fix/edit-glyph-loss` and `fix/edit-styles` were merged into `release/0.1.3` (conflicts in `CHANGELOG.md`, `generate.py` and `manifest.json` only, both sides kept; manifest: 46 fixtures, `tests/fixtures/verify.py` 0 errors). The wasm byte budgets were re-based on this build (0.1.2: 5,835,122 B, now 5,850,003 B; the NEW-83 baseline plus 5% was used up), x1.05 rule, no timing budget changed.
+
+| | |
+|---|---|
+| file | `dist-pkg/zilijonas-foliark-0.1.3.tgz` (gitignored) |
+| sha256 | `444054bc0d3bad526de4a7843e21539f089dc67bbdbb9f7d2c3066fd3773b32b` |
+| size | 3,442,484 B, 276 entries (same entry list as 0.1.0) |
+| built from | foliark `6b31d82` (`perf(bench): re-base wasm byte budgets ...`, clean tree before and after); `scripts/build-wasm.sh && pnpm build:sdk && tests/package-consumers/pack.sh dist-pkg`; packing twice gave the same sha256, and a first build from `cccb5c2` (the 0.1.3 bump, identical sources except `tools/bench/budgets.json`) gave the same wasm and tarball sha256 |
+| wasm | `wasm/foliark_wasm_bg.wasm` sha256 `04040131310bd66c78a9fddebbb4be63735105b7dcd104ad8c07887a680c4a0a`, 5,850,003 B raw (0.1.2: `90820663...`) |
+
+Checks on `6b31d82` (one reservation each through `~/ai/bin/memory-queue`; fuzz smoke self-queued, run unwrapped):
+
+| Check | Command | Exit | Result |
+|---|---|---|---|
+| format, lint | `cargo fmt --check`; `cargo clippy --workspace --all-targets --locked -- -D warnings` | 0, 0 | |
+| Rust tests | `cargo test --workspace --locked --no-fail-fast` | 0 | 422 passed, 0 failed, 3 ignored over 58 targets, including `strict_native` |
+| wasm and SDK build | `scripts/build-wasm.sh && pnpm build:sdk` | 0 | sha256 above |
+| TS parity | `scripts/check-ts-parity.sh` | 0 | in sync (89 files) |
+| SDK tests | `pnpm --filter @zilijonas/foliark test` | 0 | 87 passed |
+| smoke | `pnpm smoke chromium`, `pnpm smoke webkit` | 0, 0 | |
+| browser specs | `tests/browser/run.sh` | 0 | chromium, firefox, webkit |
+| pack twice | `tests/package-consumers/pack.sh dist-pkg` x2 | 0, 0 | identical sha256 |
+| package consumers | `tests/package-consumers/run.sh` | 0 | whole matrix passed |
+| oracle controls | `tests/oracles/.venv/bin/python tests/oracles/controls.py` | 0 | leaky caught 29/29, safe passed 13/13; fidelity fail cases caught 7/7, pass 3/3 (GLYPHS and the style fixture included) |
+| acceptance | `SKIP_BUILD=1 tests/integration/acceptance/run.sh` | 0 | 87 cases, 522 results: SAFE 427, EXPLAINED 35, REFUSED 60; negative controls 123, missed 0; cancellation 27 attempts, 0 findings |
+| fuzz smoke | `FUZZ_SECS=30 tools/fuzz-smoke/run.sh` | 0 | 7 targets x 30 s, all clean |
+| budgets | `node --test tools/bench/check-budgets.test.mjs`; fresh `sdk.mjs --extended` x2 + `scans-sdk.mjs` (chromium) through `check-budgets.mjs` | 0, 0 | 40 ok, 38 webkit skipped, 0 failing (first run with the old wasm caps: 2 failing, rawBytes and cold download bytes, fixed by the re-base above) |
+| notices | `node scripts/gen-notices.mjs --check` | 0 | up to date |
+| licences | `cargo deny check licenses bans sources` | 0 | ok (no RustSec advisory check run) |
+| export size | `cargo build --release -p foliark-engine --example export_size`; `tools/bench/export-size.py --check` | 0, 0 | Foliark <= PyMuPDF on every exportable fixture |
+| owner files (counts only, files read in place, export deleted) | packed SDK, `airpods 4.pdf`: 38 paragraphs through `prepareParagraph` + `layoutEdit`, with and without a registered font; `IX-966_RedakcijaNr_18 (1).pdf`: edit of the page-1 article 1 body (3 rows, bold heading + regular body), then `fidelity.py` | 0 | airpods 38 of 38: 0 refused, 0 not fitting, 0 re-broken. IX-966: heading spans identical (font, size, box), body font unchanged (regular), right edge 569.40 in, 531.25 out (no overshoot), 2 body spans changed; fidelity 0 findings over 20 pages, GLYPHS 0 |
+| release dry run | `tools/release/dry-run.sh` | 0 | tarball bytes equal the recorded sha256, manifest 0.1.3, 276 entries, notices, SBOM (102 components), `SHA256SUMS`, package README names tag `v0.1.3`, `npm publish --dry-run` against an unreachable registry |
+
+Owner publish command, from the repository root (after the `v0.1.3` tag exists on the record commit; rebuild with the commands above if the tarball is gone and compare the sha256):
+`npm publish ./dist-pkg/zilijonas-foliark-0.1.3.tgz --access public`
+
+---
+
 # Release candidate: @zilijonas/foliark 0.1.2 (NEW-100/102/104: real iOS and Word PDFs)
 
 Qualified on 2026-10-24 on the owner's Mac mini (same toolchain as 0.1.0). Engine changes versus 0.1.1 (`CHANGELOG.md`, ADR 0011): text of fonts whose ToUnicode maps nothing (iOS Quartz) is read from the embedded font's own cmap
