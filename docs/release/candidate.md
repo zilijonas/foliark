@@ -1,3 +1,42 @@
+# Release candidate: @zilijonas/foliark 0.1.4 (NEW-110/113: paragraph style segments, inline run styles)
+
+Qualified on 2026-10-24 on the owner's Mac mini (same toolchain as 0.1.0). Engine and API changes versus 0.1.3 (`CHANGELOG.md`, ADR 0013): `ParagraphInfo.segments`, `looks` and `runs` and `EditPreview.styles` (additive) report a paragraph's styles, and an edit keeps the bold, italic, size and colour of the words it does not touch (new words take their neighbours' style); with a caller font a bold or italic run takes the matching face or the edit refuses `EDIT_NO_FONT` (NEW-110/113). Not published by an agent: the owner publishes this exact tarball (`npm publish`, local). Source correspondence: tag `v0.1.4` on the commit that carries this record; the tarball was built from the source commit below, and the record commit differs from it only by documentation and `tools/bench/budgets.json` (not in the package). `tools/release/dry-run.sh` reads the first recorded sha256 in this file, so the 0.1.4 hash stays in this section, above the 0.1.3 record. `release/0.1.4` is `main` (0.1.3) plus the merge of `feat/edit-inline-runs` (which holds `feat/paragraph-segments`). The wasm gzip budget was re-based on this build (2,232,320 B cap exceeded by 8,482 B, 0.38%: 0.1.4 is 2,240,802 B gzip, new cap 2,352,843 B), x1.05 rule, lead decision, no timing budget changed; raw wasm 5,876,192 B is inside the 0.1.3 raw cap.
+
+| | |
+|---|---|
+| file | `dist-pkg/zilijonas-foliark-0.1.4.tgz` (gitignored) |
+| sha256 | `e88c0c4a58462df8b964227c554edb38eab7152c8c295fa4e5a357d9d0537949` |
+| size | 3,453,390 B, 282 entries (0.1.3: 276; the 6 new entries are the generated `ParagraphSegment`, `StyleSpan` and `TextLook` types) |
+| built from | foliark `1f436d4` (`chore(release): bump ... 0.1.4`, clean tree before and after); `scripts/build-wasm.sh && pnpm build:sdk && tests/package-consumers/pack.sh dist-pkg`; packing three times gave the same sha256, and a repack from `e5d2f39` (the budget re-base, sources otherwise identical) gave the same tarball sha256 |
+| wasm | `wasm/foliark_wasm_bg.wasm` sha256 `26b4f59361f5045dc47165a8cdca84ded41fc1081f9e863e58b27a7c821cf8d7`, 5,876,192 B raw, 2,240,802 B gzip -9 (0.1.3: `04040131...`, 5,850,003 B) |
+
+Checks on `1f436d4` (one supervised chain through `~/ai/bin/memory-queue`, resumed three times after two other chats' yield requests, no step replayed after it passed; fuzz smoke self-queued, run unwrapped):
+
+| Check | Command | Exit | Result |
+|---|---|---|---|
+| format, lint | `cargo fmt --check`; `cargo clippy --workspace --all-targets --locked -- -D warnings` | 0, 0 | |
+| Rust tests | `cargo test --workspace --locked --no-fail-fast` | 0 | 434 passed, 0 failed, 3 ignored over 59 targets, including `strict_native` |
+| wasm and SDK build | `scripts/build-wasm.sh && pnpm build:sdk` | 0 | sha256 above |
+| TS parity | `scripts/check-ts-parity.sh` | 0 | in sync (92 files) |
+| SDK tests | `pnpm --filter @zilijonas/foliark exec vitest run --maxWorkers=1 --no-file-parallelism` | 0 | 88 passed (12 files) |
+| smoke | `pnpm smoke chromium`, `pnpm smoke webkit` | 0, 0 | |
+| browser specs | `tests/browser/run.sh` | 0 | 33 passed (chromium, firefox, webkit) |
+| pack x3 | `tests/package-consumers/pack.sh dist-pkg` | 0, 0, 0 | identical sha256 |
+| package consumers | `tests/package-consumers/run.sh` | 0 | 6 builds ok, 0 external requests |
+| oracle controls | `tests/oracles/.venv/bin/python tests/oracles/controls.py` | 0 | leaky caught 30/30, safe passed 14/14; fidelity fail cases caught 7/7, pass 3/3 |
+| acceptance | `SKIP_BUILD=1 tests/integration/acceptance/run.sh` | 0 | 88 cases, 528 results: SAFE 433, EXPLAINED 35, REFUSED 60; negative controls 125, missed 0; cancellation 27 attempts, 0 findings |
+| fuzz smoke | `FUZZ_SECS=30 tools/fuzz-smoke/run.sh` | 0 | 7 targets x 30 s, all clean |
+| budgets | `node --test tools/bench/check-budgets.test.mjs`; fresh `sdk.mjs --extended` x2 + `scans-sdk.mjs` (chromium) through `check-budgets.mjs` | 0, 0 | before the re-base: 39 ok, 38 webkit skipped, 1 failing (wasm gzip 2,240,802 / max 2,232,320); after the re-base (`e5d2f39`) on the same fresh files: 40 ok, 38 skipped, 0 failing |
+| notices | `node scripts/gen-notices.mjs --check` | 0 | up to date |
+| licences | `cargo deny check licenses bans sources` | 0 | ok (no RustSec advisory check run) |
+| export size | `cargo build --release -p foliark-engine --example export_size`; `tools/bench/export-size.py --check` | 0, 0 | Foliark <= PyMuPDF on every exportable fixture |
+| release dry run | `tools/release/dry-run.sh` | 0 | tarball bytes equal the recorded sha256, manifest 0.1.4, 282 entries, notices, SBOM (102 components), `SHA256SUMS`, package README names tag `v0.1.4`, `npm publish --dry-run` against an unreachable registry |
+
+Owner publish command, from the repository root (after the `v0.1.4` tag exists on the record commit; rebuild with the commands above if the tarball is gone and compare the sha256):
+`npm publish ./dist-pkg/zilijonas-foliark-0.1.4.tgz --access public`
+
+---
+
 # Release candidate: @zilijonas/foliark 0.1.3 (NEW-105/106: Word edit fixes)
 
 Qualified on 2026-10-24 on the owner's Mac mini (same toolchain as 0.1.0). Engine changes versus 0.1.2 (`CHANGELOG.md`, ADR 0012): removing text no longer empties the glyphs of untouched text drawn by a font twin that shares an embedded program (Word's WinAnsi TrueType plus Identity-H Type0 pair; edits and text redactions, NEW-105), and an edit of a block holding a bold heading over a regular body splits the paragraph into style segments, keeps the heading and body styles and stays inside the margin (NEW-106). Not published by an agent: the owner publishes this exact tarball (`npm publish`, local). Source correspondence: tag `v0.1.3` on the commit that carries this record; the tarball was built from the source commit below, and the record commit differs from it only by documentation. `tools/release/dry-run.sh` reads the first recorded sha256 in this file, so the 0.1.3 hash stays in this section, above the 0.1.2 record. The branches `fix/edit-glyph-loss` and `fix/edit-styles` were merged into `release/0.1.3` (conflicts in `CHANGELOG.md`, `generate.py` and `manifest.json` only, both sides kept; manifest: 46 fixtures, `tests/fixtures/verify.py` 0 errors). The wasm byte budgets were re-based on this build (0.1.2: 5,835,122 B, now 5,850,003 B; the NEW-83 baseline plus 5% was used up), x1.05 rule, no timing budget changed.
