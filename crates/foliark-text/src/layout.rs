@@ -65,6 +65,7 @@ pub struct StyleFlags {
 }
 
 /// Everything that decides which font a cluster gets.
+#[derive(Clone, Copy)]
 pub struct Ladder<'a> {
     pub registry: &'a Registry,
     /// `TextEdit.font`: a registered font id (rung 1).
@@ -149,6 +150,16 @@ pub struct LayoutParams {
     pub origin_x: f64,
 }
 
+/// One style run of the text to lay out (ADR 0013): from byte `start` of the normalized text to
+/// the next run's start, drawn with its own ladder, size and colour.
+#[derive(Clone, Copy)]
+pub struct TextRun<'a> {
+    pub start: usize,
+    pub ladder: Ladder<'a>,
+    pub font_size: f64,
+    pub color: [f64; 3],
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct PlanRun {
     pub font: String,
@@ -156,6 +167,8 @@ pub struct PlanRun {
     /// `None` = the source font.
     pub rule: Option<FontRule>,
     pub size: f64,
+    /// Fill colour, RGB 0..1.
+    pub color: [f64; 3],
     pub glyphs: Vec<Glyph>,
     pub clusters: u32,
 }
@@ -280,7 +293,8 @@ fn width(pieces: &[Piece]) -> f64 {
 
 struct Shaper<'a> {
     text: &'a str,
-    size: f64,
+    /// Per candidate: its run's size.
+    sizes: &'a [f64],
     cands: &'a [Candidate<'a>],
 }
 
@@ -292,13 +306,14 @@ impl Shaper<'_> {
         for run in cl.chunk_by(|a, b| a.cand == b.cand && !a.nfd && !b.nfd) {
             let (a, b) = (run[0].bytes.start, run[run.len() - 1].bytes.end);
             let (face, t) = (self.cands[run[0].cand].face, &self.text[a..b]);
+            let size = self.sizes[run[0].cand];
             let mut glyphs = if run[0].nfd {
-                let mut g = face.shape(&t.nfd().collect::<String>(), self.size)?;
+                let mut g = face.shape(&t.nfd().collect::<String>(), size)?;
                 let n16 = t.encode_utf16().count() as u32;
                 g.iter_mut().for_each(|g| g.cluster = 0..n16);
                 g
             } else {
-                face.shape(t, self.size)?
+                face.shape(t, size)?
             };
             for g in &mut glyphs {
                 g.cluster = g.cluster.start + run[0].start16..g.cluster.end + run[0].start16;
@@ -393,9 +408,35 @@ pub fn layout_paragraph(
 /// [`layout_paragraph`] without the budget check, for previews: the same lines and fingerprint
 /// the commit would have, and whether they fit. Missing glyphs and bad text still refuse.
 pub fn layout_unbounded(text: &str, p: &LayoutParams, ladder: &Ladder) -> Result<Laid, PdfError> {
+    let run = TextRun {
+        start: 0,
+        ladder: *ladder,
+        font_size: p.font_size,
+        color: [0.0; 3],
+    };
+    layout_runs(text, p, &[run])
+}
+
+/// [`layout_unbounded`] with style runs (ADR 0013): each cluster takes the ladder, size and
+/// colour of the run its first byte is in. Run starts index the normalized text, so text with
+/// more than one run must already be normalized. Breaking and the budget are the paragraph's.
+pub fn layout_runs(input: &str, p: &LayoutParams, runs: &[TextRun]) -> Result<Laid, PdfError> {
     const EPS: f64 = 1e-6;
-    let text = normalize(text)?;
-    let cands = ladder.candidates()?;
+    let text = normalize(input)?;
+    if runs.first().is_none_or(|r| r.start != 0) || (runs.len() > 1 && text != input) {
+        return Err(PdfError::new(ErrorCode::Internal));
+    }
+    // Every run's candidates in one list; `of_run[k]` is run k's slice of it.
+    let (mut cands, mut sizes, mut colors, mut of_run) =
+        (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+    for r in runs {
+        let c = r.ladder.candidates()?;
+        let at = cands.len();
+        sizes.extend(std::iter::repeat_n(r.font_size, c.len()));
+        colors.extend(std::iter::repeat_n(r.color, c.len()));
+        cands.extend(c);
+        of_run.push(at..cands.len());
+    }
 
     // Resolve every cluster through the ladder first, so one refusal lists all missing characters.
     let mut hard: Vec<(Vec<Cluster>, Vec<Cluster>)> = Vec::new(); // (indent, body)
@@ -428,13 +469,17 @@ pub fn layout_unbounded(text: &str, p: &LayoutParams, ladder: &Ladder) -> Result
             at16 += t.encode_utf16().count() as u32;
             // NFC first, then the decomposition (a subset may hold `a` and U+0328 but not `ą`).
             let nfd: String = t.nfd().collect();
-            let found = cands.iter().enumerate().find_map(|(k, x)| {
-                if x.face.covers(t) {
-                    Some((k, false))
-                } else {
-                    (nfd != t && x.face.covers(&nfd)).then_some((k, true))
-                }
-            });
+            let own = &of_run[runs.partition_point(|r| r.start <= off + c.bytes.start) - 1];
+            let found = cands[own.clone()]
+                .iter()
+                .zip(own.clone())
+                .find_map(|(x, k)| {
+                    if x.face.covers(t) {
+                        Some((k, false))
+                    } else {
+                        (nfd != t && x.face.covers(&nfd)).then_some((k, true))
+                    }
+                });
             match found {
                 Some((k, nfd)) => {
                     (c.cand, c.nfd) = (k, nfd);
@@ -463,7 +508,7 @@ pub fn layout_unbounded(text: &str, p: &LayoutParams, ladder: &Ladder) -> Result
 
     let sh = Shaper {
         text: &text,
-        size: p.font_size,
+        sizes: &sizes,
         cands: &cands,
     };
     let mut lines: Vec<(f64, Vec<Piece>)> = Vec::new();
@@ -504,19 +549,25 @@ pub fn layout_unbounded(text: &str, p: &LayoutParams, ladder: &Ladder) -> Result
         .into_iter()
         .enumerate()
         .map(|(k, (x, pieces))| {
-            let mut runs: Vec<PlanRun> = Vec::new();
+            let mut out: Vec<PlanRun> = Vec::new();
             for pc in pieces {
-                let c = &cands[pc.cand];
-                match runs.last_mut() {
-                    Some(r) if r.font == c.face.id() && r.rule == c.rule => {
+                let (c, size, color) = (&cands[pc.cand], sizes[pc.cand], colors[pc.cand]);
+                match out.last_mut() {
+                    Some(r)
+                        if r.font == c.face.id()
+                            && r.rule == c.rule
+                            && r.size == size
+                            && r.color == color =>
+                    {
                         r.glyphs.extend(pc.glyphs);
                         r.clusters += pc.clusters;
                     }
-                    _ => runs.push(PlanRun {
+                    _ => out.push(PlanRun {
                         font: c.face.id().into(),
                         source: c.face.source(),
                         rule: c.rule,
-                        size: p.font_size,
+                        size,
+                        color,
                         glyphs: pc.glyphs,
                         clusters: pc.clusters,
                     }),
@@ -525,7 +576,7 @@ pub fn layout_unbounded(text: &str, p: &LayoutParams, ladder: &Ladder) -> Result
             PlanLine {
                 baseline_y: p.first_baseline + k as f64 * p.line_step,
                 x,
-                runs,
+                runs: out,
             }
         })
         .collect();
@@ -542,17 +593,25 @@ pub fn layout_unbounded(text: &str, p: &LayoutParams, ladder: &Ladder) -> Result
         h.bytes(&v.to_bits().to_le_bytes());
     }
     h.bytes(&p.max_lines.to_le_bytes())
-        .bytes(&ladder.registry.version().to_le_bytes())
-        .field(ladder.caller.unwrap_or("").as_bytes())
-        .field(ladder.source.map_or("", |s| s.id()).as_bytes())
-        .field(ladder.source_name.as_bytes())
-        .bytes(&[
-            ladder.flags.mono as u8,
-            ladder.flags.serif as u8,
-            ladder.flags.bold as u8,
-            ladder.flags.italic as u8,
-        ]);
-    for r in ladder.font_match {
+        .bytes(&runs[0].ladder.registry.version().to_le_bytes());
+    for r in runs {
+        let l = &r.ladder;
+        h.bytes(&(r.start as u64).to_le_bytes())
+            .bytes(&r.font_size.to_bits().to_le_bytes());
+        for c in r.color {
+            h.bytes(&c.to_bits().to_le_bytes());
+        }
+        h.field(l.caller.unwrap_or("").as_bytes())
+            .field(l.source.map_or("", |s| s.id()).as_bytes())
+            .field(l.source_name.as_bytes())
+            .bytes(&[
+                l.flags.mono as u8,
+                l.flags.serif as u8,
+                l.flags.bold as u8,
+                l.flags.italic as u8,
+            ]);
+    }
+    for r in runs[0].ladder.font_match {
         h.field(r.pattern.as_bytes()).field(r.family.as_bytes());
     }
     Ok(Laid {

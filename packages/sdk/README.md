@@ -5,7 +5,7 @@
 <p align="center"><b>A PDF engine in Rust and WebAssembly for the browser. Extract, search, render, edit, redact and sanitize PDFs on the user's device. The document never leaves it.</b></p>
 
 ```sh
-npm install @zilijonas/foliark@0.1.3 --save-exact
+npm install @zilijonas/foliark@0.1.4 --save-exact
 ```
 
 ESM only, no runtime dependencies, typed. Runs in a worker, fetches only its own `.wasm` and worker script, and refuses what it cannot do safely with a typed `FoliarkError` instead of degrading quietly.
@@ -126,6 +126,6 @@ Chromium on desktop (macOS arm64) is supported and has budgets. WebKit is suppor
 
 [AGPL-3.0-only](https://github.com/zilijonas/foliark/blob/main/LICENSE), the same licence family as the AGPL option PyMuPDF is offered under. If the AGPL does not fit your use, separate commercial licensing is available: see `COMMERCIAL-LICENSING.md` in the package. This is not legal advice. Details are in `LICENSING.md`.
 
-Foliark is free software, so the complete corresponding source of version 0.1.3 (Rust engine, vendored hayro fork and patches, build scripts) is tag `v0.1.3` of https://github.com/zilijonas/foliark. Build steps are in `docs/development.md` there (`scripts/build-wasm.sh`, `pnpm build:sdk`, `tests/package-consumers/pack.sh`). The package contains `dist/`, `wasm/` (5.8 MB raw, 2.2 MB gzip), `cmaps/`, `LICENSE`, `LICENSING.md`, `COMMERCIAL-LICENSING.md`, `LICENSE_FOXIT`, `NOTICE`, `THIRD_PARTY_NOTICES.md` and `SUPPORT_MATRIX.md`.
+Foliark is free software, so the complete corresponding source of version 0.1.4 (Rust engine, vendored hayro fork and patches, build scripts) is tag `v0.1.4` of https://github.com/zilijonas/foliark. Build steps are in `docs/development.md` there (`scripts/build-wasm.sh`, `pnpm build:sdk`, `tests/package-consumers/pack.sh`). The package contains `dist/`, `wasm/` (5.8 MB raw, 2.2 MB gzip), `cmaps/`, `LICENSE`, `LICENSING.md`, `COMMERCIAL-LICENSING.md`, `LICENSE_FOXIT`, `NOTICE`, `THIRD_PARTY_NOTICES.md` and `SUPPORT_MATRIX.md`.
 
 PyMuPDF and MuPDF are products of Artifex Software, Inc. Foliark is independent of them and not affiliated with Artifex.

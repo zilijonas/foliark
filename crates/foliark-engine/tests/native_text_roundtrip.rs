@@ -559,7 +559,6 @@ fn registered_liberation_sans_run_is_searchable_in_both_oracles() {
         &plan,
         &fonts,
         &BTreeMap::new(),
-        [0.0, 0.0, 0.0],
         [1.0, 0.0, 0.0, -1.0, 0.0, 792.0],
     )
     .unwrap();

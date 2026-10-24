@@ -361,6 +361,8 @@ CASES = [
     ("leaky: word in a font whose /W is wider than it draws", gen.quartz_type0_tight_widths, {"forbidden": [gen.TIGHT_WORD]}, {"TEXT_GLYPH"}, {"TEXT_FITZ"}),
     # NEW-106: Word's bold heading directly above its regular body; the body word an edit replaces.
     ("leaky: body word under a bold Word heading", gen.word_bold_heading_body, {"forbidden": [gen.STYLE_SECRET]}, {"TEXT_FITZ", "TEXT_PYPDF"}, set()),
+    # NEW-113: Word's inline bold terms and italic reference in a regular body; the regular word an edit replaces.
+    ("leaky: regular word between inline bold Word terms", gen.word_inline_runs, {"forbidden": [gen.RUNS_SECRET]}, {"TEXT_FITZ", "TEXT_PYPDF"}, set()),
     ("leaky: ActualText / Alt", leak_actualtext, {"forbidden": ["SECRET_ACTUALTEXT", "SECRET_ALT_TEXT"]}, {"STREAM"}, set()),
     ("leaky: JS OpenAction + metadata + attachment", gen.leaks_metadata_attachment_js, {"forbidden": ["SECRET_OPENACTION_JS", "SECRET_ATTACHMENT_BODY"]}, {"FEATURE", "STRING", "STREAM"}, set()),
     ("leaky: encrypted output", lambda: gen._encrypted("AES_128"), {"password": gen.ENC_USER}, {"FEATURE"}, set()),
@@ -373,6 +375,7 @@ CASES = [
     ("safe: combining-mark page, secret not shown", gen.quartz_type0_combining_marks, {"forbidden": ["SECRET_NOT_SHOWN"]}, None, set()),
     ("safe: tight-width Quartz page, secret not shown", gen.quartz_type0_tight_widths, {"forbidden": ["SECRET_NOT_SHOWN"]}, None, set()),
     ("safe: bold-heading Word page, secret not shown", gen.word_bold_heading_body, {"forbidden": ["SECRET_NOT_SHOWN"]}, None, set()),
+    ("safe: inline-runs Word page, secret not shown", gen.word_inline_runs, {"forbidden": ["SECRET_NOT_SHOWN"]}, None, set()),
     ("safe: apply_redactions on text", safe_redact_text, S, None, set()),
     ("safe: apply_redactions image pixels", safe_redact_image, IMG, None, set()),
     ("safe: untouched public image, no region", safe_untouched_image, S, None, set()),

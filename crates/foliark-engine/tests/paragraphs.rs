@@ -57,6 +57,19 @@ fn per_line_blocks_become_one_paragraph_matching_the_pymupdf_oracle() {
     near(p.origin_x, 20.0);
     assert_eq!(p.color, [0.0, 0.0, 0.0]);
     assert!(!p.mixed_style && !p.bold && !p.italic);
+    // One style, one segment over the whole text.
+    let text = p.original_text.as_deref().unwrap();
+    let [seg] = &p.segments[..] else {
+        panic!("{:?}", p.segments);
+    };
+    assert_eq!(
+        (seg.start, seg.end),
+        (0, text.encode_utf16().count() as u32)
+    );
+    assert_eq!(
+        (seg.font_size, seg.color, seg.bold),
+        (p.font_size, p.color, p.bold)
+    );
     // Content right edge 145 (oracle) and no word beside the paragraph.
     near(p.wrap_width, 125.0);
     // Soft wraps rejoin with a space; the break after the short line is hard.

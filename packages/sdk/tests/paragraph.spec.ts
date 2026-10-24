@@ -9,6 +9,7 @@ import { createWorkerCore } from "../src/worker-core.js";
 
 const wasmBytes = readFileSync(new URL("../wasm/foliark_wasm_bg.wasm", import.meta.url));
 const pdf = new Uint8Array(readFileSync(new URL("../../../tests/fixtures/hddn/shared-image.pdf", import.meta.url)));
+const wordPdf = new Uint8Array(readFileSync(new URL("../../../tests/fixtures/generated/word-bold-heading-body.pdf", import.meta.url)));
 const sans = new Uint8Array(readFileSync(new URL("../../../crates/foliark-text/tests/data/LiberationSans-Regular.ttf", import.meta.url)));
 
 const worker = (): Worker => {
@@ -55,5 +56,27 @@ describe("paragraph edits", () => {
     const plan = await doc.prepareExport({ mode: "native" });
     expect(plan.report.edits).toEqual({ applied: 1, approximate: 1 });
     expect(new TextDecoder("latin1").decode((await doc.export(plan)).slice(0, 8))).toBe("%PDF-1.7");
+  });
+
+  it("reports the style segments of a mixed block, rejoining to its text", async () => {
+    const f = await createFoliark({ wasmUrl: "unused", worker });
+    clients.push(f);
+    const doc = await f.open(wordPdf.slice());
+    const info = await doc.prepareParagraph(0, [{ x: 15, y: 94, width: 165, height: 31 }], { editorFace: true });
+    const text = info.originalText!;
+    expect(info.segments.map((s) => text.slice(s.start, s.end)).join("")).toBe(text);
+    expect(info.segments).toMatchObject([
+      { start: 0, bold: true, font: { source: "embedded" } },
+      { end: text.length, bold: false, font: { source: "embedded" } },
+    ]);
+    expect(text.slice(0, info.segments[0].end)).toBe("1 ARTICLE. SCOPE\n");
+    expect(info.segments[1].editorFace!.bytes).toBeInstanceOf(Uint8Array);
+    // ADR 0013: the looks (body, heading) and the runs of the text they draw, each face a Uint8Array.
+    expect(info.runs.map((r) => text.slice(r.start, r.end)).join("")).toBe(text);
+    expect(info.looks.map((l) => l.bold)).toEqual([false, true]);
+    expect(info.runs[0]).toMatchObject({ start: 0, look: 1 });
+    for (const l of info.looks) expect(l.editorFace!.bytes).toBeInstanceOf(Uint8Array);
+    const p = await doc.layoutEdit(0, [{ x: 15, y: 94, width: 165, height: 31 }], text.replace("charlie", "charles"));
+    expect(p.styles.map((s) => s.look)).toEqual(info.runs.map((r) => r.look));
   });
 });
