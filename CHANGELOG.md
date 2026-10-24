@@ -4,6 +4,13 @@ All notable changes to `@zilijonas/foliark` (named `@foliark/sdk` before 0.1.0 w
 
 ## [Unreleased]
 
+### Fixed
+- Editing a paragraph with inline bold or italic text (a Word law article's bold defined terms inside regular body lines) turned those runs regular: the changed part was laid out in one style, and with a caller font in that one face. Each character now keeps its run's style (font, weight, italic, size, colour); new text takes the style of the run it is typed into, carried through a word-level diff of the edited text against `originalText`. With a caller font, a bold or italic run takes the caller family's face in that weight and style, or the edit refuses `EDIT_NO_FONT` naming the characters when that face is not registered. Owner Word PDF: 14 of 14 inline bold terms of article 2 stay bold in the commit and the export after one body word is edited; owner iOS PDF still 0 untouched paragraphs refuse or re-break (ADR 0013). Fixture `generated/word-inline-runs.pdf` with a leaky and a safe oracle control (NEW-113).
+
+### Added
+- `ParagraphInfo.looks` and `ParagraphInfo.runs`, `EditPreview.styles` (additive, ADR 0013): the page styles a paragraph is drawn in and which UTF-16 range of `originalText`, and of the text a preview laid out, each one draws, so an editor can draw every run in its own face (NEW-113).
+- `ParagraphInfo.segments` (additive): the paragraph's style segments (ADR 0012) as UTF-16 ranges of `originalText` that rejoin to it exactly, each with its font (the page's own, never the caller's), size, colour, flags and editor face, so an app no longer calls `prepareParagraph` per row to learn the look of a mixed block. Empty when `originalText` is null (NEW-110).
+
 ## [0.1.3] - 2026-10-24
 
 Edits on Word PDFs: untouched glyphs are no longer erased when fonts share a program, and editing a paragraph keeps its heading and body styles and stays inside the margin. Source: tag `v0.1.3`. Tarball and hashes: `docs/release/candidate.md`.

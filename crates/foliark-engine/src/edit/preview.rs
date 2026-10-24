@@ -1,10 +1,15 @@
 //! Edit previews (ADR 0004): the layout an edit would commit, computed by the same function
 //! `apply_one` calls, so a preview and the committed text cannot disagree.
+use super::paragraph::{style_spans, text_runs};
+use super::runs::carry;
 use crate::Document;
 use crate::document::EditContext;
 use crate::edit::Prepared;
-use foliark_model::{EditPreview, PdfError, PreviewGlyph, PreviewLine, Rect};
-use foliark_text::{FontFace, Ladder, Laid, LayoutParams, layout_unbounded, normalize};
+use foliark_model::{
+    EditPreview, ErrorCode, ErrorDetails, FontStyle, PdfError, PreviewGlyph, PreviewLine, Rect,
+    StyleSpan,
+};
+use foliark_text::{Laid, LayoutParams, layout_runs, normalize};
 
 /// Everything an edit needs before anything is written: the selection, the normalized text and
 /// its layout with the budget not yet enforced. With style segments (ADR 0012) these are the
@@ -15,6 +20,8 @@ pub(super) struct Planned {
     pub text: String,
     pub at16: u32,
     pub laid: Laid,
+    /// The look of every character of the whole text (ADR 0013), as UTF-16 spans.
+    pub styles: Vec<StyleSpan>,
 }
 
 /// ADR 0012: the part of a selection an edit changes. `text` is split at LF and lined up with
@@ -81,8 +88,14 @@ pub(super) fn plan_edit(
 ) -> Result<Planned, PdfError> {
     let whole = doc.prepare(page, rects, font, false, ctx.fonts, ctx.font_match)?;
     let text = normalize(text)?;
-    let (prepared, text, at16) = match changed_part(&whole, &text) {
-        None => (whole, text, 0),
+    // ADR 0013: the look every character of the edited text is drawn in.
+    let looks = match whole.info.original_text.as_deref() {
+        Some(original) => carry(original, &whole.text_looks, &text, whole.main),
+        None => vec![whole.main; text.chars().count()],
+    };
+    let styles = style_spans(&text, &looks);
+    let (prepared, part, at16) = match changed_part(&whole, &text) {
+        None => (whole, text.clone(), 0),
         Some((ids, part, at16)) if ids.is_empty() => (
             Prepared {
                 ids: Vec::new(),
@@ -91,23 +104,75 @@ pub(super) fn plan_edit(
             part,
             at16,
         ),
-        Some((ids, part, at16)) => (
-            doc.prepare_clusters(page, &ids, font, ctx.fonts, ctx.font_match)?,
-            part,
-            at16,
-        ),
+        Some((ids, part, at16)) => {
+            // The part's own metrics; looks stay the whole selection's, which `looks` indexes.
+            let own = doc.prepare_clusters(page, &ids, font, ctx.fonts, ctx.font_match)?;
+            let index = own.looks[own.main].index;
+            let main = whole.looks.iter().position(|l| l.index == index);
+            (
+                Prepared {
+                    main: main.ok_or_else(|| PdfError::new(ErrorCode::Internal))?,
+                    looks: whole.looks,
+                    ..own
+                },
+                part,
+                at16,
+            )
+        }
     };
+    let skip = text
+        .chars()
+        .scan(0, |at, c| {
+            *at += c.len_utf16() as u32;
+            Some(*at)
+        })
+        .take_while(|&end| end <= at16)
+        .count();
+    let part_looks = &looks[skip..skip + part.chars().count()];
     let info = &prepared.info;
-    let ladder = Ladder {
-        registry: ctx.fonts,
-        caller: font,
-        source: prepared.source.as_ref().map(|s| s as &dyn FontFace),
-        source_name: &prepared.source_name,
-        flags: prepared.flags,
-        font_match: ctx.font_match,
+    // A caller font draws the paragraph's own style; a run in another weight or style takes the
+    // caller family's face in that weight and style, and refuses when it is not registered.
+    let main = &prepared.looks[prepared.main];
+    let mut missing = String::new();
+    let caller_for = |k: usize| -> Option<Option<&str>> {
+        let Some(id) = font else { return Some(None) };
+        let (look, want) = (prepared.looks[k].flags(), main.flags());
+        if (look.bold, look.italic) == (want.bold, want.italic) {
+            return Some(Some(id));
+        }
+        let family = &ctx.fonts.get(id)?.info().family;
+        let face = ctx.fonts.lookup(family, look.bold, look.italic)?.info();
+        let style = if look.italic {
+            FontStyle::Italic
+        } else {
+            FontStyle::Normal
+        };
+        (face.weight == if look.bold { 700 } else { 400 } && face.style == style)
+            .then_some(Some(face.id.as_str()))
     };
-    let laid = layout_unbounded(
-        &text,
+    for (c, &k) in part.chars().zip(part_looks) {
+        if caller_for(k).is_none() && !missing.contains(c) && !c.is_whitespace() {
+            missing.push(c);
+        }
+    }
+    if !missing.is_empty() {
+        return Err(PdfError::with(
+            ErrorCode::EditNoFont,
+            ErrorDetails {
+                chars: Some(missing),
+                ..Default::default()
+            },
+        ));
+    }
+    let runs = text_runs(&part, part_looks, &prepared.looks, prepared.main, |k| {
+        let ladder = prepared.looks[k].ladder(ctx.fonts, ctx.font_match);
+        foliark_text::Ladder {
+            caller: caller_for(k).flatten(),
+            ..ladder
+        }
+    });
+    let laid = layout_runs(
+        &part,
         &LayoutParams {
             font_size: info.font_size,
             wrap_width: info.wrap_width,
@@ -116,13 +181,14 @@ pub(super) fn plan_edit(
             first_baseline: info.first_baseline,
             origin_x: info.origin_x,
         },
-        &ladder,
+        &runs,
     )?;
     Ok(Planned {
         prepared,
-        text,
+        text: part,
         at16,
         laid,
+        styles,
     })
 }
 
@@ -141,6 +207,7 @@ pub fn layout_edit(
         text,
         at16,
         laid,
+        styles,
     } = plan_edit(doc, page, rects, font, text, ctx)?;
     let text16: Vec<u16> = text.encode_utf16().collect();
     let (mut lines, mut boxes) = (Vec::new(), Vec::new());
@@ -185,6 +252,7 @@ pub fn layout_edit(
         approximate: layout.approximate,
         runs: layout.runs,
         fingerprint: layout.fingerprint,
+        styles,
         glyphs: glyphs.then_some(boxes),
     })
 }

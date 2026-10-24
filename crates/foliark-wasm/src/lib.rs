@@ -273,14 +273,33 @@ impl Engine {
             .prepare_paragraph(doc, page, rects, font, editor_face.unwrap_or(false))
             .map_err(err)?;
         let out = to_js(&p)?;
-        if let Some(face) = &p.editor_face {
-            // `bytes` is typed `Uint8Array` (and transferred), not the number array serde makes.
-            let f = Reflect::get(&out, &"editorFace".into())?;
-            set(
-                f.unchecked_ref(),
-                "bytes",
-                Uint8Array::from(&face.bytes[..]).into(),
-            )?;
+        // `bytes` is typed `Uint8Array` (and transferred), not the number array serde makes: the
+        // paragraph's face, each segment's and each look's.
+        let segments = Reflect::get(&out, &"segments".into())?;
+        let looks = Reflect::get(&out, &"looks".into())?;
+        let at = |list: &JsValue, i: usize| Reflect::get_u32(list, i as u32).unwrap_or_default();
+        let owners = std::iter::once((out.clone(), &p.editor_face))
+            .chain(
+                p.segments
+                    .iter()
+                    .enumerate()
+                    .map(|(i, s)| (at(&segments, i), &s.editor_face)),
+            )
+            .chain(
+                p.looks
+                    .iter()
+                    .enumerate()
+                    .map(|(i, l)| (at(&looks, i), &l.editor_face)),
+            );
+        for (owner, face) in owners {
+            if let Some(face) = face {
+                let f = Reflect::get(&owner, &"editorFace".into())?;
+                set(
+                    f.unchecked_ref(),
+                    "bytes",
+                    Uint8Array::from(&face.bytes[..]).into(),
+                )?;
+            }
         }
         Ok(out)
     }

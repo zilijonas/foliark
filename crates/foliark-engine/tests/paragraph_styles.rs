@@ -89,6 +89,49 @@ fn export(e: &mut Engine, doc: &str) -> Vec<u8> {
 }
 
 #[test]
+fn a_mixed_block_reports_one_segment_per_style_and_they_rejoin_to_its_text() {
+    let (mut e, doc) = open();
+    let info = e
+        .prepare_paragraph(&doc, 0, vec![BLOCK], None, true)
+        .unwrap();
+    let text: Vec<u16> = info
+        .original_text
+        .as_deref()
+        .unwrap()
+        .encode_utf16()
+        .collect();
+    let [head, body] = &info.segments[..] else {
+        panic!("{:?}", info.segments);
+    };
+    // Contiguous from 0 to the end: the heading's LF ends the heading.
+    assert_eq!(
+        (head.start, head.end, body.end),
+        (0, HEAD.len() as u32 + 1, text.len() as u32)
+    );
+    assert_eq!(body.start, head.end);
+    let rejoined: Vec<u16> = info
+        .segments
+        .iter()
+        .flat_map(|s| text[s.start as usize..s.end as usize].to_vec())
+        .collect();
+    assert_eq!(rejoined, text);
+    assert!(head.bold && !body.bold, "{head:?} {body:?}");
+    // Each segment is the page's own font, with the face an editor draws it in; the two differ.
+    let name = |s: &foliark_model::ParagraphSegment| match &s.font {
+        foliark_model::FontResolution::Embedded { name, .. } => name.clone(),
+        other => panic!("{other:?}"),
+    };
+    assert!(name(head).contains("Bold") && !name(body).contains("Bold"));
+    let faces: Vec<_> = info
+        .segments
+        .iter()
+        .map(|s| s.editor_face.as_ref().map(|f| f.bytes.len()))
+        .collect();
+    assert!(faces.iter().all(|f| f.is_some_and(|n| n > 0)), "{faces:?}");
+    assert_ne!(head.editor_face, body.editor_face);
+}
+
+#[test]
 fn editing_the_body_keeps_the_heading_and_both_styles_inside_the_right_edge() {
     let (mut e, doc) = open();
     let info = e

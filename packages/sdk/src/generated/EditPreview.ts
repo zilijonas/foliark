@@ -2,6 +2,7 @@
 import type { LayoutRun } from "./LayoutRun";
 import type { PreviewGlyph } from "./PreviewGlyph";
 import type { PreviewLine } from "./PreviewLine";
+import type { StyleSpan } from "./StyleSpan";
 
 /**
  * ADR 0004: the layout `applyChanges` would commit for one text edit, without committing.
@@ -23,6 +24,11 @@ fits: boolean, approximate: boolean, runs: Array<LayoutRun>,
  * Equals `ChangeResult.layouts[].fingerprint` for the same inputs.
  */
 fingerprint: string, 
+/**
+ * Style runs of the whole normalized text sent (ADR 0013): UTF-16 ranges that tile it, each
+ * indexing the `looks` `prepareParagraph` returns for the same rects.
+ */
+styles: Array<StyleSpan>, 
 /**
  * Only when asked for.
  */
