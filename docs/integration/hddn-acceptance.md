@@ -1,5 +1,17 @@
 # HDDN replacement and rollback acceptance (NEW-76)
 
+## Production history
+
+| HDDN `main` | Foliark | Date | What changed for HDDN |
+|---|---|---|---|
+| `f1248ff` (PR #18) | 0.1.1 | 2026-10-23 | PyMuPDF/Pyodide replaced; details below |
+| `341e870`, `befe8fe` (PRs #19, #20) | 0.1.1 | 2026-10-23 | prepared-offline survives Cloudflare HTML rewrites and the `/redact` redirect (NEW-95) |
+| `b8a29cd` (PR #25) | 0.1.2 | 2026-10-24 | iOS (Quartz) PDFs readable and editable, combining marks redact natively, unchanged paragraphs fit; citation-date group; export refusal reasons |
+| `4f0fa7d` (PR #26) | 0.1.3 | 2026-10-24 | edits keep untouched glyphs (Word twin fonts) and heading/body styles; sidebar confirm state; per-segment preview; don't-ask-again font prompt |
+| `1006e0e` (PR #27) | 0.1.4 | 2026-10-25 | edits keep inline bold/italic; versioned translation catalogs |
+
+Each row was deployed after the local gate (`pnpm predeploy`) and checked live in real Safari on the owner's own documents (kept local; counts and renders only). Rollback reference for the first switch: `7754031` (Pyodide + PyMuPDF).
+
 ## Production (0.1.1, NEW-93)
 
 HDDN (github.com/zilijonas/docs-reader) runs `@zilijonas/foliark` 0.1.1 from npm in production since 2026-10-23.
