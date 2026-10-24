@@ -19,7 +19,7 @@
 use crate::Document;
 use crate::interpret::{DiagnosticKind, GlyphItem, ItemKind};
 use crate::reader::{self, object_id};
-use crate::writer::fonts::{self, Program};
+use crate::writer::fonts::{self, Program, program_of};
 use crate::writer::{NewStream, Val, Writer};
 use foliark_model::{ErrorCode, ObjectId, PdfError};
 use hayro::hayro_syntax::object::{
@@ -159,23 +159,6 @@ fn drawn(doc: &Document) -> Result<(HashMap<ObjectId, Vec<GlyphItem>>, bool), Pd
         }
     }
     Ok((out, blind))
-}
-
-fn program_of(font: &Dict<'_>) -> Option<ObjectId> {
-    let owner = if font.get::<Name<'_>>("Subtype")?.as_str() == "Type0" {
-        font.get::<Array<'_>>("DescendantFonts")?
-            .iter::<Dict<'_>>()
-            .next()?
-    } else {
-        font.clone()
-    };
-    let d = owner.get::<Dict<'_>>("FontDescriptor")?;
-    ["FontFile2", "FontFile3", "FontFile"]
-        .into_iter()
-        .find_map(|k| match d.get_raw::<Object<'_>>(k)? {
-            MaybeRef::Ref(r) => Some(object_id(r)),
-            MaybeRef::NotRef(_) => None,
-        })
 }
 
 /// Type3 CharProcs no drawn code points at become empty streams.

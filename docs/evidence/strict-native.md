@@ -18,6 +18,16 @@ Inputs: all 39 entries of `tests/fixtures/manifest.json` = the 35 manifest input
 - Negative controls in the same run: R replaced by the S bytes for mixed-regions, ocr-over-image, jpeg-payload-secret must be caught
   (IMAGE_REGION, VECTOR_REGION, STREAM, TEXT_FITZ as applicable). Refused: both runs must fail with the exact code and the engine holds 0 plan bytes.
 
+## NEW-105 addendum (2026-10-24): 45 cases = 37 supported + 8 refused, 0 skipped
+`word-twins-shared-program` joined the manifest: Word's WinAnsi TrueType and its Identity-H twin drawing from one `FontFile2`, the
+heading's hyphen and digits from the TrueType only. Removing text drawn by both fonts used to empty every outline the font written
+last no longer drew. fidelity.py gained GLYPHS (every untouched glyph drawn again with the same glyph id and the same ink; two fail
+controls and one pass control in `controls.py`); in this run every supported case passed it as well.
+
+| fixture | outcome | checks | hashes |
+|---|---|---|---|
+| word-twins-shared-program | supported | R+S | b239d4265be4 / 3e5d20df1705 / a432cda65558 |
+
 ## NEW-100 addendum (2026-10-23): 42 cases = 34 supported + 8 refused, 0 skipped
 Two font-shape fixtures from real documents joined the manifest (`cjk-predefined-cmaps` had joined in NEW-88):
 `quartz-type0-empty-tounicode` (iOS Quartz Type0 Identity-H, ToUnicode with no mapping) and `word-winansi-type0-twins` (Word's
