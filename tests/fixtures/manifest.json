@@ -7,9 +7,9 @@
   "python": "3.9"
  },
  "counts": {
-  "total": 44,
+  "total": 45,
   "hddn": 20,
-  "generated": 24,
+  "generated": 25,
   "byFeature": {
    "actualtext": 1,
    "additional-actions": 1,
@@ -25,7 +25,7 @@
    "deep-form": 1,
    "dimension-bomb": 1,
    "embedded-file": 2,
-   "embedded-font": 7,
+   "embedded-font": 8,
    "empty-tounicode": 3,
    "encrypted": 5,
    "flate-bomb": 1,
@@ -48,6 +48,7 @@
    "malformed-xref": 1,
    "many-pages": 1,
    "metadata": 2,
+   "mixed-style-paragraph": 1,
    "multi-page": 3,
    "non-bmp": 2,
    "ocg": 2,
@@ -2324,6 +2325,55 @@
        43.5
       ],
       "text": "KEEP_PUBLIC_TWINS"
+     }
+    ]
+   }
+  },
+  {
+   "id": "word-bold-heading-body",
+   "path": "generated/word-bold-heading-body.pdf",
+   "sha256": "e4248650243ba80c96a0b6d7c18b995589f34e40fac0b4ba92b910cd6904536e",
+   "bytes": 3933,
+   "pages": 1,
+   "features": [
+    "embedded-font",
+    "mixed-style-paragraph"
+   ],
+   "origin": "tests/fixtures/generators/generate.py",
+   "license": "synthetic, generated (original)",
+   "deterministic": true,
+   "expected": {
+    "behavior": "Word shape: a bold heading line directly above its regular body in one text object; editing the body keeps the heading as it is and the body regular, inside the body's own right edge, and the replaced word is gone",
+    "mustRemove": [
+     "charlie"
+    ],
+    "mustKeepText": [
+     "KEEP_PUBLIC_STYLES",
+     "KEEP_STYLE_LINE",
+     "ARTICLE."
+    ],
+    "regions": [
+     {
+      "kind": "sensitive",
+      "page": 0,
+      "rectTopLeft": [
+       79,
+       103,
+       116,
+       110
+      ],
+      "text": "charlie"
+     },
+     {
+      "kind": "public",
+      "page": 0,
+      "rectTopLeft": [
+       20,
+       32.0,
+       119.0,
+       42.5
+      ],
+      "text": "KEEP_PUBLIC_STYLES"
      }
     ]
    }

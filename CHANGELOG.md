@@ -4,6 +4,9 @@ All notable changes to `@zilijonas/foliark` (named `@foliark/sdk` before 0.1.0 w
 
 ## [Unreleased]
 
+### Fixed
+- Editing the body of a block that holds a bold heading line over a regular paragraph (Word articles; HDDN joins them into one editable block) re-drew the whole block bold and up to 5.7 pt past the right margin while reporting fit: the paragraph took the first cluster's style, and the box was measured with that bold font. The selection now splits into style segments at hard breaks where the look changes; an edit removes and lays out only the segments it changes, each in its own style and box, and the rest stays on the page as it is. The paragraph style is the one most of its text is drawn in, and the box is measured in the page's fonts, never a wider caller font. Owner Word PDF: heading untouched, body regular, inside the margin; owner iOS PDF still 0 of 38 untouched paragraphs refuse or re-break (ADR 0012). Fixture `generated/word-bold-heading-body.pdf` with a leaky and a safe oracle control (NEW-106).
+
 ## [0.1.2] - 2026-10-24
 
 Fixes for PDFs written by iOS (Quartz) and Word, found on real documents: no search results or selectable text, `<?>` in the editor, edits refused, and native redaction refused on pages with combining marks. Source: tag `v0.1.2`. Tarball and hashes: `docs/release/candidate.md`.

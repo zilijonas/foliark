@@ -153,6 +153,7 @@ fn apply_one(
         prepared: p,
         text,
         laid,
+        ..
     } = plan_edit(doc, page, &e.rects, e.font.as_deref(), &e.text, ctx)?;
     let info = &p.info;
     let plan = laid.fit()?;
