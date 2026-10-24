@@ -441,6 +441,47 @@ def word_winansi_type0_twins():
     return simple(content, ex, fonts="/F1 5 0 R /FT 6 0 R /FU 7 0 R")
 
 
+# Word as it writes the twins (NEW-105): both fonts draw from ONE embedded program (one FontFile2). The TrueType draws by
+# WinAnsi code through the program's Unicode cmap, the Type0 by glyph id. The heading's hyphen and digits come from the
+# TrueType only, its letters from the Type0 only; the body paragraph uses both. `blank`: characters drawn with no outline.
+SHARED_HEAD = [("U", "Nr. XV"), ("T", "-"), ("T", "512")]
+SHARED_BODY = [[("T", "SECRET_bir"), ("U", "ž"), ("T", "elio")], [("T", "second line")]]
+
+
+def word_twins_shared_program(size=10, blank=""):
+    chars = "".join(chr(c) for c in range(32, 127)) + TWIN_U  # glyph k+1 draws chars[k]
+    prog = _box_ttf(len(chars) + 1, cmap={c: k + 1 for k, c in enumerate(chars)}, blank={1} | {chars.index(c) + 1 for c in blank})
+    drawn = sorted({c for runs in [SHARED_HEAD] + SHARED_BODY for f, s in runs if f == "U" for c in s})
+    tu = ("/CIDInit /ProcSet findresource begin 12 dict begin begincmap /CMapName /Adobe-Identity-UCS def /CMapType 2 def\n"
+          "1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n%d beginbfchar\n%s\nendbfchar\n"
+          "endcmap CMapName currentdict /CMap defineresource pop end end\n"
+          % (len(drawn), "\n".join("<%04X> <%04X>" % (chars.index(c) + 1, ord(c)) for c in drawn)))
+    desc = ("<< /Type /FontDescriptor /FontName /%s+FoliarkBox /Flags 32 /FontBBox [50 0 950 800] /ItalicAngle 0 /Ascent 800 "
+            "/Descent -200 /CapHeight 800 /StemV 80 /FontFile2 12 0 R >>")
+    ex = {
+        6: ("<< /Type /Font /Subtype /TrueType /BaseFont /AAAAAE+FoliarkBox /Encoding /WinAnsiEncoding /FirstChar 32 /LastChar 126 "
+            "/Widths [%s] /FontDescriptor 8 0 R >>" % " ".join(["1000"] * 95)),
+        7: "<< /Type /Font /Subtype /Type0 /BaseFont /AAAAAF+FoliarkBox /Encoding /Identity-H /DescendantFonts [9 0 R] /ToUnicode 11 0 R >>",
+        8: desc % "AAAAAE",
+        9: ("<< /Type /Font /Subtype /CIDFontType2 /BaseFont /AAAAAF+FoliarkBox /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) "
+            "/Supplement 0 >> /DW 1000 /CIDToGIDMap /Identity /FontDescriptor 10 0 R >>"),
+        10: desc % "AAAAAF",
+        11: stream("", tu.encode(), flate=True),
+        12: stream("/Length1 %d" % len(prog), prog, flate=True),
+    }
+
+    def line(runs, y):
+        out, x = "", 20
+        for font, s in runs:
+            shown = "(%s)" % s if font == "T" else _cid_hex(s, chars)
+            out += "BT /F%s %d Tf 1 0 0 1 %d %d Tm [%s] TJ ET\n" % (font, size, x, y, shown)
+            x += size * len(s)
+        return out.encode()
+
+    content = text(20, 360, "KEEP_PUBLIC_SHARED") + line(SHARED_HEAD, 330) + line(SHARED_BODY[0], 300) + line(SHARED_BODY[1], 286)
+    return simple(content, ex, fonts="/F1 5 0 R /FT 6 0 R /FU 7 0 R")
+
+
 def _joined(runs):
     return "".join(s for _, s in runs)
 
@@ -530,6 +571,11 @@ FIXTURES = {
                                   "mustRemove": [_joined(TWIN_SECRET)], "mustKeepText": ["KEEP_PUBLIC_TWINS", _joined(TWIN_DATE).split()[2]],
                                   "regions": [{"kind": "sensitive", "page": 0, "rectTopLeft": [19, 120, 171, 134], "text": _joined(TWIN_SECRET)},
                                               R(20, 360, "KEEP_PUBLIC_TWINS", kind="public")]}, {}),
+    "word-twins-shared-program": (word_twins_shared_program, ["embedded-font", "identity-h", "font-twins", "shared-font-program"],
+                                  {"behavior": "Word shape as written: the WinAnsi TrueType and its Identity-H twin draw from one embedded program; removing text drawn by both fonts must keep every glyph either font still draws (the heading's hyphen and digits come from the TrueType only)",
+                                   "mustRemove": [_joined(SHARED_BODY[0])], "mustKeepText": ["KEEP_PUBLIC_SHARED", "XV-512", "second line"],
+                                   "regions": [{"kind": "sensitive", "page": 0, "rectTopLeft": [19, 90, 171, 104], "text": _joined(SHARED_BODY[0])},
+                                               R(20, 360, "KEEP_PUBLIC_SHARED", kind="public")]}, {}),
 }
 for _id, _mode, _alg in (("encrypted-rc4-40", "RC4_40", "RC4-40"), ("encrypted-rc4-128", "RC4_128", "RC4-128"),
                          ("encrypted-aes-128", "AES_128", "AES-128"), ("encrypted-aes-256", "AES_256", "AES-256")):

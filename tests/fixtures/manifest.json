@@ -7,9 +7,9 @@
   "python": "3.9"
  },
  "counts": {
-  "total": 44,
+  "total": 45,
   "hddn": 20,
-  "generated": 24,
+  "generated": 25,
   "byFeature": {
    "actualtext": 1,
    "additional-actions": 1,
@@ -25,17 +25,17 @@
    "deep-form": 1,
    "dimension-bomb": 1,
    "embedded-file": 2,
-   "embedded-font": 7,
+   "embedded-font": 8,
    "empty-tounicode": 3,
    "encrypted": 5,
    "flate-bomb": 1,
    "font-payload": 1,
-   "font-twins": 1,
+   "font-twins": 2,
    "form": 2,
    "form-xobject": 4,
    "hidden-ocg-text": 1,
    "icc-profile": 1,
-   "identity-h": 4,
+   "identity-h": 5,
    "image": 6,
    "image-payload": 1,
    "incremental-update": 2,
@@ -61,6 +61,7 @@
    "rotation-crop": 1,
    "rotation-matrix": 1,
    "shared-content-stream": 1,
+   "shared-font-program": 1,
    "shared-form": 1,
    "shared-image": 1,
    "shared-vector": 1,
@@ -2324,6 +2325,57 @@
        43.5
       ],
       "text": "KEEP_PUBLIC_TWINS"
+     }
+    ]
+   }
+  },
+  {
+   "id": "word-twins-shared-program",
+   "path": "generated/word-twins-shared-program.pdf",
+   "sha256": "b239d4265be4fa634b81b643e29ab582099731f43a8eaa7b5b4d58c9499c3b58",
+   "bytes": 3290,
+   "pages": 1,
+   "features": [
+    "embedded-font",
+    "identity-h",
+    "font-twins",
+    "shared-font-program"
+   ],
+   "origin": "tests/fixtures/generators/generate.py",
+   "license": "synthetic, generated (original)",
+   "deterministic": true,
+   "expected": {
+    "behavior": "Word shape as written: the WinAnsi TrueType and its Identity-H twin draw from one embedded program; removing text drawn by both fonts must keep every glyph either font still draws (the heading's hyphen and digits come from the TrueType only)",
+    "mustRemove": [
+     "SECRET_bir\u017eelio"
+    ],
+    "mustKeepText": [
+     "KEEP_PUBLIC_SHARED",
+     "XV-512",
+     "second line"
+    ],
+    "regions": [
+     {
+      "kind": "sensitive",
+      "page": 0,
+      "rectTopLeft": [
+       19,
+       90,
+       171,
+       104
+      ],
+      "text": "SECRET_bir\u017eelio"
+     },
+     {
+      "kind": "public",
+      "page": 0,
+      "rectTopLeft": [
+       20,
+       28.8,
+       158.6,
+       43.5
+      ],
+      "text": "KEEP_PUBLIC_SHARED"
      }
     ]
    }

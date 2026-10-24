@@ -58,16 +58,17 @@ tests/oracles/.venv/bin/python tests/oracles/fidelity.py in.pdf out.pdf --change
 | Check | Proves | Code |
 |---|---|---|
 | Pixel diff | both PDFs rendered by PyMuPDF at `dpi`; declared regions (+`margin`) masked; pixels differing by more than `threshold` (max channel) stay under `max_frac` of the unmasked area. Catches dropped images/content, shifted text | PIXELS |
+| Glyphs (NEW-105) | every glyph PyMuPDF traces visibly outside changed regions is drawn again with the same glyph id at the same origin (`text_tol`), and its box rendered at `glyph_dpi` has differing pixels (> `threshold`) on at most half of its ink (pixels unlike the box's most common colour). Catches an emptied outline (id and text unchanged) and a small glyph lost under the page-level PIXELS tolerance | GLYPHS |
 | Words, PyMuPDF | every input word outside changed regions has an output word with equal text and bbox within `text_tol`, and every output word outside them has an input word (both directions, greedy 1:1) | WORDS_FITZ |
 | Text chunks, pypdf | every pypdf text-show chunk of an input line that does not touch a region has an output chunk with equal text and start point within `text_tol` | WORDS_PYPDF |
 | Preserve | each `preserve` string is extractable (whitespace-insensitive) by PyMuPDF and by pypdf | PRESERVE_FITZ, PRESERVE_PYPDF |
 | Raster | with `"raster": true`: no words, no pypdf text, no fonts on any page (else RASTER_TEXT); text mapping and preserve are skipped and the loss is printed as a note. Raster must be declared: an undeclared raster output fails WORDS_*/PRESERVE_* | RASTER_TEXT |
 | Structure | page count, page size and render size equal | PAGES, SIZE |
 
-Defaults (override in the spec): `dpi` 72, `margin` 2 pt, `threshold` 32 (of 255), `max_frac` 0.0002 (0.02% of unmasked pixels), `text_tol` 1.0 pt.
+Defaults (override in the spec): `dpi` 72, `margin` 2 pt, `threshold` 32 (of 255), `max_frac` 0.0002 (0.02% of unmasked pixels), `text_tol` 1.0 pt, `glyph_dpi` 144.
 Raster outputs re-sample every page, so declare looser pixel limits with them (controls use `threshold` 64, `max_frac` 0.01; measured 0.16%).
-Controls (in `controls.py`, 5 fail + 2 pass): unaffected image dropped, unaffected text shifted 5 pt, unaffected text lost while pixel-identical (outlined as an image; PIXELS must stay silent),
-undeclared raster, declared raster that kept its text layer; pass: PyMuPDF `apply_redactions`, declared raster without text. Measured baselines: identical re-save 0 px, correct redaction 0 px, 5 pt shift 0.8%, dropped image 17%.
+Controls (in `controls.py`, 7 fail + 3 pass): unaffected image dropped, unaffected text shifted 5 pt, unaffected text lost while pixel-identical (outlined as an image; PIXELS must stay silent),
+undeclared raster, declared raster that kept its text layer, a 3 pt glyph left drawn with an emptied outline (only GLYPHS may fire), a glyph drawn with another glyph id that looks the same (PIXELS silent); pass: PyMuPDF `apply_redactions`, declared raster without text, Word twins sharing one program with only the changed paragraph differing. Measured baselines: identical re-save 0 px, correct redaction 0 px, 5 pt shift 0.8%, dropped image 17%.
 
 Limits: the margin must cover anti-aliasing around changed regions; a region declared too large hides regressions inside it. Pixel diff compares one renderer (MuPDF) on both sides, so it
 sees changes, not rendering errors common to both. pypdf chunk matching is operator-granular: an engine that re-splits an unaffected line into different text-show operators fails WORDS_PYPDF

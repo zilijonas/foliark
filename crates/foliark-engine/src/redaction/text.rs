@@ -16,12 +16,14 @@
 //!   `Uni*-UCS2-*` CMaps likewise (their code width is unknown).
 //! - CFF / Type 1 programs are kept and Type3 CharProcs are not dropped: both are listed in
 //!   [`TextReport::fonts_with_glyph_inventory`] for `FONT_GLYPH_INVENTORY_RETAINED`.
-//! - Two font dictionaries sharing one TrueType program: the later one's survivors win.
+//! - Font dictionaries sharing one TrueType program (Word's WinAnsi TrueType and its Identity-H
+//!   twin) each write it with the union of their survivors, so no write drops another's glyph.
 //!
 //! On `Err` the writer may hold part of the work: drop it.
 use super::forms::Targets;
 use super::plan::{PlannedCluster, RedactionPlan};
 use crate::Document;
+use crate::interpret::GlyphItem;
 use crate::limits::{self, Budget};
 use crate::writer::fonts::{self, Program};
 use crate::writer::{Writer, string_token};
@@ -93,10 +95,22 @@ pub fn redact_text(
         w.replace_span(stream, span, new.as_bytes());
     }
 
+    // The union per program also takes in survivors added after planning (an edit's reused glyphs).
+    let mut programs = BTreeMap::new();
+    let mut shared: BTreeMap<ObjectId, Vec<&GlyphItem>> = BTreeMap::new();
+    for (font, survivors) in &plan.font_survivors {
+        if let Some(p) = fonts::program_of(&font_dict(doc, *font)?) {
+            programs.insert(*font, p);
+            shared.entry(p).or_default().extend(survivors);
+        }
+    }
     for (font, survivors) in &plan.font_survivors {
         let (subtype, name) = font_names(doc, *font)?;
         report.fonts_touched += 1;
-        let program = fonts::touch_font(w, *font, survivors.iter())?;
+        let all = programs
+            .get(font)
+            .map_or_else(|| survivors.iter().collect(), |p| shared[p].clone());
+        let program = fonts::touch_font(w, *font, all)?;
         if program == Program::InventoryRetained || subtype == "Type3" {
             report.fonts_with_glyph_inventory.push((*font, name));
         }

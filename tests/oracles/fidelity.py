@@ -3,14 +3,15 @@
 
   .venv/bin/python fidelity.py in.pdf out.pdf --changed 0:x0,y0,x1,y1 [--changed ...] [--preserve TEXT] [--raster] [--spec spec.json]
   spec: {"changed":[{"page":0,"rect":[x0,y0,x1,y1]}], "preserve":["TEXT"], "raster":false, "dpi":72, "margin":2, "threshold":32,
-         "max_frac":0.0002, "text_tol":1.0, "password":"", "pypdf_chunks":true}      rects are display space (spec section 2), points
+         "max_frac":0.0002, "text_tol":1.0, "glyph_dpi":144, "password":"", "pypdf_chunks":true}      rects are display space (spec section 2), points
 
 Everything outside the declared changed regions (+margin) must look and read the same. Exit 0 iff no finding.
 Importable: check_isolated(in, out, spec) -> (findings ["CODE: detail"], notes [str]).
-Finding codes: OPEN PAGES SIZE PIXELS WORDS_FITZ WORDS_PYPDF PRESERVE_FITZ PRESERVE_PYPDF RASTER_TEXT TIMEOUT CRASH.
+Finding codes: OPEN PAGES SIZE PIXELS GLYPHS WORDS_FITZ WORDS_PYPDF PRESERVE_FITZ PRESERVE_PYPDF RASTER_TEXT TIMEOUT CRASH.
 """
 import json
 import re
+from collections import Counter
 import subprocess
 import sys
 
@@ -20,7 +21,7 @@ from pypdf import PdfReader
 import objects
 from objects import grow, unrot
 
-DEFAULTS = {"dpi": 72, "margin": 2.0, "threshold": 32, "max_frac": 0.0002, "text_tol": 1.0}
+DEFAULTS = {"dpi": 72, "margin": 2.0, "threshold": 32, "max_frac": 0.0002, "text_tol": 1.0, "glyph_dpi": 144}
 
 
 def pixel_diff(pa, pb, masks, thr):
@@ -44,6 +45,58 @@ def pixel_diff(pa, pb, masks, thr):
             d = max(abs(ra[i] - rb[i]), abs(ra[i + 1] - rb[i + 1]), abs(ra[i + 2] - rb[i + 2]))
             mx, over = max(mx, d), over + (d > thr)
     return mx, over, total
+
+
+def traced(pg):
+    """[(glyph id, origin, bbox)] of every glyph PyMuPDF draws visibly (not Tr 3, not fully transparent), unrotated page space."""
+    return [(gid, fitz.Point(org), fitz.Rect(bb)) for s in pg.get_texttrace() if s["type"] != 3 and s["opacity"] > 0
+            for _, gid, org, bb in s["chars"]]
+
+
+def lost_glyphs(pa, pb, regs, spec):
+    """Glyphs of pa outside regs that pb does not draw again: [(glyph id, x, y, why)]. Each must come back with the same glyph
+    id at the same origin (text_tol) and look the same in its box at glyph_dpi: an emptied outline keeps its id and its text, and a
+    small glyph is under the page-level PIXELS tolerance. A box whose pixels differ (> threshold) on over half of its ink (pixels
+    unlike the box's most common colour) is a loss; so is another glyph id at the origin. A glyph gone with its box unchanged
+    (a space, clipped or hidden text) is not: the word checks judge the text."""
+    k, thr, tol = spec["glyph_dpi"] / 72, spec["threshold"], spec["text_tol"]
+    xa, xb = pa.get_pixmap(dpi=spec["glyph_dpi"], alpha=False), pb.get_pixmap(dpi=spec["glyph_dpi"], alpha=False)
+    if (xa.width, xa.height) != (xb.width, xb.height):
+        return []  # SIZE already reported
+    sa, sb, st, n = xa.samples, xb.samples, xa.stride, xa.n
+    page, m = fitz.IRect(0, 0, xa.width, xa.height), pa.rotation_matrix * fitz.Matrix(k, k)
+
+    def differs(box):
+        rows = [(sa[y * st + box.x0 * n:y * st + box.x1 * n], sb[y * st + box.x0 * n:y * st + box.x1 * n]) for y in range(box.y0, box.y1)]
+        if all(a == b for a, b in rows):
+            return None
+        px = [(a[i:i + n], b[i:i + n]) for a, b in rows for i in range(0, len(a), n)]
+        bg = Counter(p for p, _ in px).most_common(1)[0][0]
+        ink = sum(max(abs(u - v) for u, v in zip(p, bg)) > thr for p, _ in px)
+        over = sum(max(abs(u - v) for u, v in zip(p, q)) > thr for p, q in px)
+        return "%d of %d ink px differ" % (over, ink) if 2 * over > max(ink, 2) else None
+
+    near = lambda o, q: abs(o.x - q.x) <= tol and abs(o.y - q.y) <= tol
+    drawn = traced(pb)
+    live = {}
+    for gid, org, _ in drawn:
+        live.setdefault(gid, []).append(org)
+    out = []
+    for gid, org, bb in traced(pa):
+        box = (bb * m).irect & page
+        if gid < 0 or box.is_empty or any(bb.intersects(g) for g in regs):  # gid -1: a ligature's 2nd..nth character
+            continue
+        same = live.get(gid, [])
+        j = next((i for i, o in enumerate(same) if near(o, org)), None)
+        if j is not None:
+            same.pop(j)
+            why = differs(box)
+        else:
+            sub = next((g for g, o, _ in drawn if g != gid and near(o, org)), None)
+            why = "drawn as glyph %d" % sub if sub is not None else differs(box) and "not drawn, " + differs(box)
+        if why:
+            out.append((gid, round(org.x, 1), round(org.y, 1), why))
+    return out
 
 
 def fitz_words(pg):
@@ -127,6 +180,9 @@ def check(out_path, spec):
             else:
                 N.append("page %d: RASTER output has no text layer (%d input words lost, declared)" % (i, len(wa)))
             continue
+        lost = lost_glyphs(pa, pb, regs, spec)
+        if lost:
+            F.append("GLYPHS: page %d %d glyphs outside changed regions not drawn as in the input (glyph id, x, y): %s" % (i, len(lost), lost[:20]))
         # text mapping, PyMuPDF: words outside regions, both directions
         for side, a, b in (("lost", wa, wb), ("appeared", wb, wa)):
             miss = match_words(a, b, regs, tol)

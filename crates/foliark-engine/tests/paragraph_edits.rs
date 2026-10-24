@@ -4,7 +4,7 @@
 mod common;
 use common::{Font, fidelity_oracle, fixture, objects_oracle, pdf_bytes, python, run, tmp};
 use foliark_engine::edit::ParagraphApplier;
-use foliark_engine::{Applied, Document, EditApplier, EditContext, Engine};
+use foliark_engine::{Applied, Document, EditApplier, EditContext, Engine, RenderOptions};
 use foliark_model::{
     ChangeResult, ChangeSet, ErrorCode, ExportMode, ExportPolicy, ExportReport, ExtractOptions,
     FontSource, FontStyle, Limits, LossCode, Rect, Redaction, RejectedChange, RunSource, TextEdit,
@@ -662,6 +662,60 @@ fn an_edit_on_a_page_with_images_keeps_them_and_a_font_program_keeps_reused_glyp
         "reused TrueType glyphs must still have outlines, ink {}",
         p.ink
     );
+}
+
+/// NEW-105: Word draws a WinAnsi TrueType font and its Identity-H twin from one embedded program.
+/// The untouched heading's hyphen and digits come from the TrueType only, its letters from the
+/// twin only. Edited: the body paragraph (both fonts, the twin written last) and its second line
+/// alone (the TrueType only, the twin untouched). Every heading glyph must still be drawn, and
+/// the new text reuses TrueType glyphs only the removed text drew.
+#[test]
+fn an_edit_keeps_every_glyph_of_a_program_two_fonts_share() {
+    let input = fixture("generated/word-twins-shared-program.pdf");
+    let heading = rect(15.0, 58.0, 110.0, 18.0);
+    let draw = |e: &mut Engine, doc: &str| {
+        let opts = RenderOptions {
+            scale: 2.0,
+            clip: Some(heading),
+            ..Default::default()
+        };
+        let t = e.render(doc, 0, opts);
+        run(e, t).unwrap().data
+    };
+    let cases = [
+        ("both", rect(10.0, 88.0, 230.0, 30.0), "nice bold line"),
+        ("one", rect(10.0, 104.0, 230.0, 14.0), "nice line"),
+    ];
+    for (name, sel, new) in cases {
+        let (mut e, doc) = engine(input.clone(), false);
+        let before = draw(&mut e, &doc);
+        let r = changes(&mut e, &doc, Some(vec![edit("e", 0, &[sel], new)]), None);
+        assert!(r.accepted, "{name}: {:?}", r.rejected);
+        let sources: Vec<_> = r.layouts[0].runs.iter().map(|x| x.source).collect();
+        assert_eq!(sources, [RunSource::Embedded], "{name}");
+        assert!(
+            draw(&mut e, &doc) == before,
+            "{name}: the untouched heading renders differently after the edit"
+        );
+
+        let (out, _) = export(&mut e, &doc);
+        let p = probe(&format!("shared-{name}.out.pdf"), &out, sel, (5.0, 5.0));
+        assert_text(&p, &[new, "Nr. XV-512"], &["second line"]);
+        assert!(
+            p.ink > 0.02,
+            "{name}: the reused glyphs are drawn, ink {}",
+            p.ink
+        );
+        let (ok, log) = fidelity_oracle(
+            "paragraph-edits",
+            &format!("shared-{name}"),
+            &input,
+            &out,
+            &[(0, sel.x, sel.y, sel.x + sel.width, sel.y + sel.height)],
+            &["Nr. XV-512", "KEEP_PUBLIC_SHARED"],
+        );
+        assert!(ok, "{name}: fidelity.py: {log}");
+    }
 }
 
 // ---- preserve-mode working copies (spec 8.3, NEW-79) ----------------------------------------------

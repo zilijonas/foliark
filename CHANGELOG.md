@@ -4,6 +4,9 @@ All notable changes to `@zilijonas/foliark` (named `@foliark/sdk` before 0.1.0 w
 
 ## [Unreleased]
 
+### Fixed
+- An edit or a text redaction no longer erases glyphs of untouched text drawn by a font twin. Word embeds each font once and draws it through two font dictionaries, a WinAnsi TrueType and an Identity-H Type0, both pointing at one `FontFile2`; removing text emptied the outlines of every glyph the touched dictionary no longer drew, and the dictionary written last won. On the owner's Word PDF, editing one paragraph on page 1 erased the hyphen of an untouched heading (drawn by the TrueType alone) in the re-rendered page and the export, nine more hyphens on pages 10, 14 and 18 and 30 glyphs on page 20, while the text layer still read them. The program now keeps every glyph any font drawing from it still draws; ToUnicode stays per font. Fixture `generated/word-twins-shared-program.pdf`; the fidelity oracle gains GLYPHS (every untouched glyph drawn again with the same glyph id and the same ink), with two fail controls and one pass control (NEW-105).
+
 ## [0.1.2] - 2026-10-24
 
 Fixes for PDFs written by iOS (Quartz) and Word, found on real documents: no search results or selectable text, `<?>` in the editor, edits refused, and native redaction refused on pages with combining marks. Source: tag `v0.1.2`. Tarball and hashes: `docs/release/candidate.md`.
