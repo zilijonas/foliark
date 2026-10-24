@@ -482,6 +482,35 @@ def word_twins_shared_program(size=10, blank=""):
     return simple(content, ex, fonts="/F1 5 0 R /FT 6 0 R /FU 7 0 R")
 
 
+# Word again (NEW-106): an article heading set bold directly above its regular body paragraph, in one text object, each face a
+# TrueType WinAnsi subset named as Word names Arial (box glyphs; bold 1.2 em, regular 1 em wide, size 5). The body's rows fill
+# the box (the next word never fits) and the heading ends short of it, so one hard break sits where the look changes. A KEEP line
+# below bounds the paragraph; nothing else on the page reaches the body's right edge.
+STYLE_HEAD = "1 ARTICLE. SCOPE"
+STYLE_ROWS = ["alpha bravo charlie delta echo", "foxtrot golf hotels india lima", "mikes oscar papa quebec romeos"]
+STYLE_SECRET, STYLE_KEEP = "charlie", "KEEP_STYLE_LINE"
+
+
+def word_bold_heading_body():
+    ascii_chars = "".join(chr(c) for c in range(32, 127))
+    cmap = {c: k + 1 for k, c in enumerate(ascii_chars)}
+
+    def face(num, name, adv):
+        ttf = _box_ttf(len(ascii_chars) + 1, cmap=cmap, blank={1}, adv=adv)
+        return {
+            num: ("<< /Type /Font /Subtype /TrueType /BaseFont /%s /Encoding /WinAnsiEncoding /FirstChar 32 /LastChar 126 "
+                  "/Widths [%s] /FontDescriptor %d 0 R >>" % (name, " ".join([str(adv)] * 95), num + 1)),
+            num + 1: ("<< /Type /FontDescriptor /FontName /%s /Flags 32 /FontBBox [50 0 950 800] /ItalicAngle 0 /Ascent 800 "
+                      "/Descent -200 /CapHeight 800 /StemV 80 /FontFile2 %d 0 R >>" % (name, num + 2)),
+            num + 2: stream("/Length1 %d" % len(ttf), ttf, flate=True),
+        }
+
+    ex = {**face(6, "AAAAAG+Arial-BoldMT", 1200), **face(9, "AAAAAH+ArialMT", 1000)}
+    rows = "".join("0 -7 Td (%s) Tj\n" % r for r in STYLE_ROWS)
+    content = (text(20, 360, "KEEP_PUBLIC_STYLES", 10) + ("BT /FB 5 Tf 20 300 Td (%s) Tj\n/FR 5 Tf 0 -1 Td\n%sET\n" % (STYLE_HEAD, rows)
+               + "BT /FR 5 Tf 20 262 Td (%s) Tj ET\n" % STYLE_KEEP).encode())
+    return simple(content, ex, fonts="/F1 5 0 R /FB 6 0 R /FR 9 0 R")
+
 def _joined(runs):
     return "".join(s for _, s in runs)
 
@@ -576,6 +605,11 @@ FIXTURES = {
                                    "mustRemove": [_joined(SHARED_BODY[0])], "mustKeepText": ["KEEP_PUBLIC_SHARED", "XV-512", "second line"],
                                    "regions": [{"kind": "sensitive", "page": 0, "rectTopLeft": [19, 90, 171, 104], "text": _joined(SHARED_BODY[0])},
                                                R(20, 360, "KEEP_PUBLIC_SHARED", kind="public")]}, {}),
+    "word-bold-heading-body": (word_bold_heading_body, ["embedded-font", "mixed-style-paragraph"],
+                               {"behavior": "Word shape: a bold heading line directly above its regular body in one text object; editing the body keeps the heading as it is and the body regular, inside the body's own right edge, and the replaced word is gone",
+                                "mustRemove": [STYLE_SECRET], "mustKeepText": ["KEEP_PUBLIC_STYLES", STYLE_KEEP, STYLE_HEAD.split()[1]],
+                                "regions": [{"kind": "sensitive", "page": 0, "rectTopLeft": [79, 103, 116, 110], "text": STYLE_SECRET},
+                                            R(20, 360, "KEEP_PUBLIC_STYLES", 10, kind="public")]}, {}),
 }
 for _id, _mode, _alg in (("encrypted-rc4-40", "RC4_40", "RC4-40"), ("encrypted-rc4-128", "RC4_128", "RC4-128"),
                          ("encrypted-aes-128", "AES_128", "AES-128"), ("encrypted-aes-256", "AES_256", "AES-256")):

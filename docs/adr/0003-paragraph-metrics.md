@@ -1,6 +1,6 @@
 # ADR 0003: Paragraph metrics and edit application
 
-Status: Accepted, 2026-10-22 (NEW-50, NEW-51). Refines spec §6.2, §6.3, §4. `wrapWidth` and `maxLines` amended by ADR 0011.
+Status: Accepted, 2026-10-22 (NEW-50, NEW-51). Refines spec §6.2, §6.3, §4. `wrapWidth` and `maxLines` amended by ADR 0011; the paragraph style and what an edit removes and draws by ADR 0012.
 
 ## Decisions
 - `originX` is the minimum x over all selected clusters (spec text says the first line): a first-line indent survives an edit. HDDN uses the union x0.

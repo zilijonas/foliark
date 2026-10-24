@@ -138,12 +138,23 @@ fn line_part(l: &Line, clusters: &[Cluster], text: &[Vec<u16>], styles: &[StyleR
     out
 }
 
-/// HDDN's rule for hard versus soft breaks: a line break is hard (LF) when the line ends visibly
-/// short of the paragraph's right edge or the next line starts indented; otherwise the line
-/// wrapped on its own and the break is `soft` (a space). A hard line's indent becomes leading spaces.
-fn original_text(parts: &[Part], space: f64, soft: char) -> String {
+/// HDDN's rule for hard versus soft breaks: the break before row `k` (`k >= 1`) is hard when the
+/// row above ends visibly short of the paragraph's right edge or row `k` starts indented.
+fn hard_breaks(parts: &[Part]) -> Vec<bool> {
     let x0 = parts.iter().map(|p| p.x0).fold(f64::INFINITY, f64::min);
     let x1 = parts.iter().map(|p| p.x1).fold(f64::NEG_INFINITY, f64::max);
+    let mut hard = vec![true];
+    hard.extend(parts.windows(2).map(|w| {
+        let (prev, cur) = (&w[0], &w[1]);
+        prev.x1 < x1 - prev.h.max(1.0) * 1.5 || cur.x0 > x0 + cur.h.max(1.0) * 0.5
+    }));
+    hard
+}
+
+/// Rows joined by LF at hard breaks and by `soft` (a space) where a line wrapped on its own
+/// ([`hard_breaks`]). A hard line's indent becomes leading spaces.
+fn original_text(parts: &[Part], space: f64, soft: char) -> String {
+    let x0 = parts.iter().map(|p| p.x0).fold(f64::INFINITY, f64::min);
     let lead = |p: &Part| {
         let n = if space > 0.0 {
             ((p.x0 - x0) / space).round()
@@ -157,9 +168,8 @@ fn original_text(parts: &[Part], space: f64, soft: char) -> String {
         })
     };
     let mut s = format!("{}{}", lead(&parts[0]), parts[0].text);
-    for w in parts.windows(2) {
-        let (prev, cur) = (&w[0], &w[1]);
-        if prev.x1 < x1 - prev.h.max(1.0) * 1.5 || cur.x0 > x0 + cur.h.max(1.0) * 0.5 {
+    for (cur, hard) in parts.iter().zip(hard_breaks(parts)).skip(1) {
+        if hard {
             s.push('\n');
             s.push_str(&lead(cur));
         } else {
@@ -170,8 +180,28 @@ fn original_text(parts: &[Part], space: f64, soft: char) -> String {
     s
 }
 
+/// The style most of `ids` are drawn in; on a tie, the one that comes first.
+fn dominant(ids: &[usize], clusters: &[Cluster]) -> u32 {
+    let mut counts: Vec<(u32, usize)> = Vec::new();
+    for &i in ids {
+        let s = clusters[i].style_index;
+        match counts.iter_mut().find(|c| c.0 == s) {
+            Some(c) => c.1 += 1,
+            None => counts.push((s, 1)),
+        }
+    }
+    // `max_by_key` keeps the last maximum, so search from the back.
+    counts.iter().rev().max_by_key(|c| c.1).map_or(0, |c| c.0)
+}
+
 fn same_style(a: &StyleRun, b: &StyleRun) -> bool {
-    a.font_ref == b.font_ref
+    a.font_ref == b.font_ref && same_look(a, b)
+}
+
+/// Same look on the page: font name (twins of one face in two font objects agree), size, color
+/// and flags.
+fn same_look(a: &StyleRun, b: &StyleRun) -> bool {
+    a.font_name == b.font_name
         && (a.size - b.size).abs() < 0.01
         && a.color
             .iter()
@@ -180,13 +210,24 @@ fn same_style(a: &StyleRun, b: &StyleRun) -> bool {
         && a.flags == b.flags
 }
 
+/// One style segment of a selection (ADR 0012): consecutive hard lines of `originalText` drawn
+/// in the same look.
+pub struct Segment {
+    /// Index of the segment's first line in `originalText` split at LF.
+    pub line: usize,
+    /// The segment's clusters, as indices into the page's clusters.
+    pub clusters: Vec<usize>,
+}
+
 /// What `prepare_paragraph` worked out, with what applying an edit needs on top of the wire
 /// record: the selected clusters, the source face and the style inputs of the font ladder.
 pub struct Prepared {
     pub info: ParagraphInfo,
     /// The selected clusters, in text order.
     pub ids: Vec<ClusterId>,
-    /// The first selected cluster's font as a ladder rung 2, when it can be reused.
+    /// The style segments, top to bottom; empty when `originalText` is null.
+    pub segments: Vec<Segment>,
+    /// The paragraph style's font as a ladder rung 2, when it can be reused.
     pub source: Option<SourceFontFace>,
     /// That font's object (the same font as `source`), whether or not it can be reused.
     pub font_obj: Option<ObjectId>,
@@ -224,14 +265,39 @@ impl Document {
         registry: &Registry,
         font_match: &[FontMatchRule],
     ) -> Result<Prepared, PdfError> {
+        let pick = |l: &TextLayout| select_clusters(l, rects);
+        self.prepare_with(page, pick, font, editor_face, registry, font_match)
+    }
+
+    /// [`Document::prepare`] for page clusters `ids` (a segment of an earlier selection).
+    pub fn prepare_clusters(
+        &self,
+        page: usize,
+        ids: &[usize],
+        font: Option<&str>,
+        registry: &Registry,
+        font_match: &[FontMatchRule],
+    ) -> Result<Prepared, PdfError> {
+        self.prepare_with(page, |_| ids.to_vec(), font, false, registry, font_match)
+    }
+
+    fn prepare_with(
+        &self,
+        page: usize,
+        pick: impl FnOnce(&TextLayout) -> Vec<usize>,
+        font: Option<&str>,
+        editor_face: bool,
+        registry: &Registry,
+        font_match: &[FontMatchRule],
+    ) -> Result<Prepared, PdfError> {
         let model = self.page_model(page)?;
         let layout = TextLayout::build(&model, false)?;
         let clusters = layout.page.clusters.as_deref().unwrap_or_default();
         let styles = &layout.page.styles;
-        let sel = select_clusters(&layout, rects);
-        let Some(&first) = sel.first() else {
+        let sel = pick(&layout);
+        if sel.is_empty() {
             return Err(PdfError::new(ErrorCode::EditNoStyle));
-        };
+        }
         if sel.iter().any(|&i| !upright(&clusters[i].quad)) {
             return Err(PdfError::new(ErrorCode::EditRotatedText));
         }
@@ -264,7 +330,8 @@ impl Document {
         }
 
         let baseline: Vec<f64> = layout.meta.iter().map(|m| m.baseline).collect();
-        let style = &styles[clusters[first].style_index as usize];
+        // ADR 0012: the paragraph's style is the one most of its clusters are drawn in.
+        let style = &styles[dominant(&sel, clusters) as usize];
         let size = style.size;
         let mixed = sel
             .iter()
@@ -429,9 +496,33 @@ impl Document {
                     .collect()
             });
         let original = parts.as_deref().map(|p| original_text(p, space, ' '));
+        // ADR 0012: a hard break where the rows' look changes (a bold heading over its body)
+        // starts a new style segment.
+        let mut segments: Vec<Segment> = Vec::new();
+        if let Some(p) = parts.as_deref() {
+            let mut line = 0;
+            let look = |l: &Line| &styles[dominant(&l.clusters, clusters) as usize];
+            for (k, hard) in hard_breaks(p).into_iter().enumerate() {
+                line += usize::from(hard && k > 0);
+                match segments.last_mut() {
+                    Some(seg) if !hard || same_look(look(&rows[k - 1]), look(&rows[k])) => {
+                        seg.clusters.extend(&rows[k].clusters)
+                    }
+                    _ => segments.push(Segment {
+                        line,
+                        clusters: rows[k].clusters.clone(),
+                    }),
+                }
+            }
+        }
         // ADR 0011: the box holds the paragraph's own lines as the layout measures them, so text
         // left as it is keeps its breaks where the page draws narrower than the widths the layout
-        // reads (TJ corrections, Tc, a fallback font). Every row is laid out as a hard line.
+        // reads (TJ corrections, Tc, a fallback font). Every row is laid out as a hard line, in
+        // the fonts the page draws it with: never the caller's font, which may be wider (ADR 0012).
+        let page_fonts = Ladder {
+            caller: None,
+            ..ladder
+        };
         let measured = parts
             .as_deref()
             .and_then(|p| {
@@ -443,7 +534,7 @@ impl Document {
                     first_baseline,
                     origin_x: x0,
                 };
-                layout_unbounded(&original_text(p, space, '\n'), &params, &ladder).ok()
+                layout_unbounded(&original_text(p, space, '\n'), &params, &page_fonts).ok()
             })
             .map_or(0.0, |laid| {
                 laid.plan
@@ -492,6 +583,7 @@ impl Document {
         Ok(Prepared {
             info,
             ids: sel.iter().map(|&i| layout.meta[i].id.clone()).collect(),
+            segments,
             source,
             font_obj,
             source_name: style.font_name.clone(),
