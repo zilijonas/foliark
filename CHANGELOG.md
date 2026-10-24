@@ -4,6 +4,10 @@ All notable changes to `@zilijonas/foliark` (named `@foliark/sdk` before 0.1.0 w
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-10-24
+
+Fixes for PDFs written by iOS (Quartz) and Word, found on real documents: no search results or selectable text, `<?>` in the editor, edits refused, and native redaction refused on pages with combining marks. Source: tag `v0.1.2`. Tarball and hashes: `docs/release/candidate.md`.
+
 ### Fixed
 - Text of a font whose ToUnicode maps nothing (iOS/macOS Quartz writes Type0 Identity-H fonts whose ToUnicode declares only a codespace) is read from the embedded TrueType/OpenType program's own Unicode cmap, glyph id back to code point; it was all U+FFFD, so the page had no findings, a paragraph edit showed replacement characters and its commit was refused (`EDIT_UNSUPPORTED_SCRIPT`). The same fallback covers a code a partial ToUnicode or the encoding leaves unmapped; a symbol cmap is never read as text. Fixtures `generated/quartz-type0-empty-tounicode.pdf` and `generated/word-winansi-type0-twins.pdf` (Word's WinAnsi TrueType plus Identity-H twin, switching mid-word) (NEW-100).
 - A zero-advance glyph (a combining mark: iOS Quartz writes "ą" as "a" plus U+0328, the mark with width 0) has no box of its own, and its zero-area quad made every region on that page refuse native export (`INVALID_ARGUMENT feature=textPositionUnknown`). A mark now takes the box and the line position of the glyph before it in the same show, so a region over the base removes the mark and a word with marks is one word, not split at each mark. Genuinely unplaceable text (singular CTM, size 0) still refuses. Fixture `generated/quartz-type0-combining-marks.pdf` with a leaky and a safe oracle control (NEW-102).
