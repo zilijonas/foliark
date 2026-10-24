@@ -7,9 +7,9 @@
   "python": "3.9"
  },
  "counts": {
-  "total": 40,
+  "total": 44,
   "hddn": 20,
-  "generated": 20,
+  "generated": 24,
   "byFeature": {
    "actualtext": 1,
    "additional-actions": 1,
@@ -18,20 +18,24 @@
    "annotation": 2,
    "appearance-stream": 2,
    "cjk": 1,
+   "combining-marks": 2,
    "corrupt-flate": 1,
    "cyclic-form": 1,
    "decode-ratio": 1,
    "deep-form": 1,
    "dimension-bomb": 1,
    "embedded-file": 2,
-   "embedded-font": 3,
+   "embedded-font": 7,
+   "empty-tounicode": 3,
    "encrypted": 5,
    "flate-bomb": 1,
    "font-payload": 1,
+   "font-twins": 1,
    "form": 2,
    "form-xobject": 4,
    "hidden-ocg-text": 1,
    "icc-profile": 1,
+   "identity-h": 4,
    "image": 6,
    "image-payload": 1,
    "incremental-update": 2,
@@ -63,6 +67,7 @@
    "structure-alt": 1,
    "text": 1,
    "thumbnail": 1,
+   "tight-widths": 1,
    "truncated": 1,
    "uri-action": 1,
    "vector": 2,
@@ -2118,6 +2123,207 @@
        43.5
       ],
       "text": "KEEP_PUBLIC_CJK"
+     }
+    ]
+   }
+  },
+  {
+   "id": "quartz-type0-empty-tounicode",
+   "path": "generated/quartz-type0-empty-tounicode.pdf",
+   "sha256": "d6985a96803a9822c64fb977e49f7dbda1672032a13766fd9935c62963ddd00c",
+   "bytes": 2195,
+   "pages": 1,
+   "features": [
+    "embedded-font",
+    "identity-h",
+    "empty-tounicode"
+   ],
+   "origin": "tests/fixtures/generators/generate.py",
+   "license": "synthetic, generated (original)",
+   "deterministic": true,
+   "expected": {
+    "behavior": "iOS Quartz shape: Type0 Identity-H, ToUnicode with a codespace and no mapping, no CIDToGIDMap, drawn space glyphs; the text comes from the embedded TrueType's own Unicode cmap (glyph id back to its code point)",
+    "mustRemove": [
+     "SECRET_QUARTZ"
+    ],
+    "mustKeepText": [
+     "KEEP_PUBLIC_QUARTZ",
+     "2026-10-23",
+     "KEEP_QUARTZ_LINE"
+    ],
+    "regions": [
+     {
+      "kind": "sensitive",
+      "page": 0,
+      "rectTopLeft": [
+       19,
+       90,
+       151,
+       104
+      ],
+      "text": "SECRET_QUARTZ"
+     },
+     {
+      "kind": "public",
+      "page": 0,
+      "rectTopLeft": [
+       20,
+       28.8,
+       158.6,
+       43.5
+      ],
+      "text": "KEEP_PUBLIC_QUARTZ"
+     }
+    ]
+   }
+  },
+  {
+   "id": "quartz-type0-combining-marks",
+   "path": "generated/quartz-type0-combining-marks.pdf",
+   "sha256": "b8b831ac1a20c8321380322cd35db75b5fd53ccd2716cacf045113bfe6b0ea00",
+   "bytes": 2099,
+   "pages": 1,
+   "features": [
+    "embedded-font",
+    "identity-h",
+    "empty-tounicode",
+    "combining-marks"
+   ],
+   "origin": "tests/fixtures/generators/generate.py",
+   "license": "synthetic, generated (original)",
+   "deterministic": true,
+   "expected": {
+    "behavior": "iOS Quartz shape with decomposed accents: ogonek and acute are zero-advance glyphs drawn over their base; a mark belongs to its base glyph, so redacting the base removes the mark and a page with marks still redacts natively",
+    "mustRemove": [
+     "SECRET_A\u0328_E\u0301X"
+    ],
+    "mustKeepText": [
+     "KEEP_PUBLIC_MARKS",
+     "KEEP_E\u0301_MARK"
+    ],
+    "regions": [
+     {
+      "kind": "sensitive",
+      "page": 0,
+      "rectTopLeft": [
+       19,
+       90,
+       135,
+       104
+      ],
+      "text": "SECRET_A\u0328_E\u0301X"
+     },
+     {
+      "kind": "public",
+      "page": 0,
+      "rectTopLeft": [
+       20,
+       28.8,
+       150.9,
+       43.5
+      ],
+      "text": "KEEP_PUBLIC_MARKS"
+     }
+    ]
+   }
+  },
+  {
+   "id": "quartz-type0-tight-widths",
+   "path": "generated/quartz-type0-tight-widths.pdf",
+   "sha256": "f62acbe20961b89a5080fdedde8aa54dd7554456b036a1b067791a1359e365ed",
+   "bytes": 2273,
+   "pages": 1,
+   "features": [
+    "embedded-font",
+    "identity-h",
+    "empty-tounicode",
+    "combining-marks",
+    "tight-widths"
+   ],
+   "origin": "tests/fixtures/generators/generate.py",
+   "license": "synthetic, generated (original)",
+   "deterministic": true,
+   "expected": {
+    "behavior": "iOS Quartz shape whose /W widths are 1/1000 em wider than the advances the content stream draws (TJ corrections), with an ogonek as a zero-advance mark and no precomposed glyph; unchanged paragraphs fit their edit box with their own line breaks, and the word redacts natively",
+    "mustRemove": [
+     "KILO"
+    ],
+    "mustKeepText": [
+     "KEEP_PUBLIC_TIGHT",
+     "KEEP_TIGHT_LINE",
+     "LIMA"
+    ],
+    "regions": [
+     {
+      "kind": "sensitive",
+      "page": 0,
+      "rectTopLeft": [
+       19,
+       191,
+       61,
+       203
+      ],
+      "text": "KILO"
+     },
+     {
+      "kind": "public",
+      "page": 0,
+      "rectTopLeft": [
+       20,
+       28.8,
+       150.9,
+       43.5
+      ],
+      "text": "KEEP_PUBLIC_TIGHT"
+     }
+    ]
+   }
+  },
+  {
+   "id": "word-winansi-type0-twins",
+   "path": "generated/word-winansi-type0-twins.pdf",
+   "sha256": "3e007021c9c166e2021a5a12f18e528ef2340a19733ed5cefaefb0570c3e9aae",
+   "bytes": 3563,
+   "pages": 1,
+   "features": [
+    "embedded-font",
+    "identity-h",
+    "font-twins"
+   ],
+   "origin": "tests/fixtures/generators/generate.py",
+   "license": "synthetic, generated (original)",
+   "deterministic": true,
+   "expected": {
+    "behavior": "Word shape: a TrueType WinAnsi subset plus a Type0 Identity-H twin (bfchar + array bfrange ToUnicode) for the non-WinAnsi letters, switching mid-word; words and dates read across the switch",
+    "mustRemove": [
+     "SECRET_gegu\u017e\u0117s"
+    ],
+    "mustKeepText": [
+     "KEEP_PUBLIC_TWINS",
+     "bir\u017eelio"
+    ],
+    "regions": [
+     {
+      "kind": "sensitive",
+      "page": 0,
+      "rectTopLeft": [
+       19,
+       120,
+       171,
+       134
+      ],
+      "text": "SECRET_gegu\u017e\u0117s"
+     },
+     {
+      "kind": "public",
+      "page": 0,
+      "rectTopLeft": [
+       20,
+       28.8,
+       150.9,
+       43.5
+      ],
+      "text": "KEEP_PUBLIC_TWINS"
      }
     ]
    }

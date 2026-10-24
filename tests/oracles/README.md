@@ -18,6 +18,7 @@ Run `controls.py` first; an oracle that has not just caught the leaky controls p
 | Check | Proves | Code |
 |---|---|---|
 | Text via pypdf AND PyMuPDF | forbidden strings are not extractable by two independent extractors (whitespace-insensitive) | TEXT_PYPDF, TEXT_FITZ |
+| Glyphs by their font program | every glyph MuPDF draws, named by its embedded TrueType/OpenType program's own cmap (FreeType, glyph id to lowest code point; MuPDF's Unicode where the program has none), does not spell a forbidden string. Both extractors read a font whose ToUnicode maps nothing (iOS Quartz Type0) as junk (NEW-100) | TEXT_GLYPH |
 | Raw file bytes | forbidden string (ASCII, UTF-16BE/LE) is not anywhere in the file bytes | BYTES_RAW |
 | Every decoded stream | not in any stream of ANY object, reachable or not, incl. text operands of Tj/TJ (hex strings, kerning splits) | STREAM |
 | Every string and name object | not in any PDF string/name/key, e.g. /Info, /ActualText, /Alt, JS | STRING |
@@ -53,7 +54,7 @@ Each leaky output must produce its expected codes; a case that should be caught 
 ```sh
 tests/oracles/.venv/bin/python tests/oracles/fidelity.py in.pdf out.pdf --changed 0:x0,y0,x1,y1 [--preserve TEXT] [--raster] [--spec spec.json]
 ```
-`fidelity.check_isolated(in, out, spec)` returns `(findings, notes)`; notes carry per-page metrics (max diff, pixels over threshold) and the raster declaration. Changed rects are display space (spec section 2).
+`fidelity.check_isolated(in, out, spec)` returns `(findings, notes)`; notes carry per-page metrics (max diff, pixels over threshold) and the raster declaration. Changed rects are display space (spec section 2). An input with a Type0 font whose ToUnicode maps nothing reads as junk while Foliark's export names those glyphs; `objects.named_copy(in, tmp)` gives the input with a ToUnicode from the font program's own cmap (pikepdf + FreeType, nothing drawn changes), and the strict native checker judges outputs against that copy.
 | Check | Proves | Code |
 |---|---|---|
 | Pixel diff | both PDFs rendered by PyMuPDF at `dpi`; declared regions (+`margin`) masked; pixels differing by more than `threshold` (max channel) stay under `max_frac` of the unmasked area. Catches dropped images/content, shifted text | PIXELS |

@@ -218,17 +218,34 @@ def _cid_table(name):
     return t
 
 
-def _box_ttf(n):
-    """TrueType with .notdef plus n-1 box glyphs (advance 1000, 50..950 x 0..800), tables head hhea maxp hmtx loca glyf."""
+def _cmap4(mapping):
+    """cmap table with one (3,1) format-4 subtable, one segment per {character: glyph id} entry."""
+    pairs = sorted((ord(c), g) for c, g in mapping.items()) + [(0xFFFF, 0)]
+    n = len(pairs)
+    k = n.bit_length() - 1
+    body = struct.pack(">HHHH", 2 * n, 2 << k, k, 2 * n - (2 << k))
+    body += b"".join(struct.pack(">H", c) for c, _ in pairs) + b"\0\0" + b"".join(struct.pack(">H", c) for c, _ in pairs)
+    body += b"".join(struct.pack(">H", (g - c) & 0xFFFF if c != 0xFFFF else 1) for c, g in pairs) + b"\0\0" * n
+    sub = struct.pack(">HHH", 4, 6 + len(body), 0) + body
+    return struct.pack(">HHHHI", 0, 1, 3, 1, 12) + sub
+
+
+def _box_ttf(n, cmap=None, blank=(), adv=1000):
+    """TrueType with .notdef plus n-1 box glyphs (advance `adv`, 50..950 x 0..800), tables head hhea maxp hmtx loca glyf;
+    with `cmap` ({character: glyph id}) also a Unicode cmap; glyph ids in `blank` have no outline (a space)."""
     box = struct.pack(">hhhhh", 1, 50, 0, 950, 800) + struct.pack(">H", 3) + struct.pack(">H", 0) + bytes([1] * 4)
     box += struct.pack(">4h", 50, 0, 900, 0) + struct.pack(">4h", 0, 800, 0, -800)
-    glyf = box * n
-    loca = b"".join(struct.pack(">H", i * len(box) // 2) for i in range(n + 1))
+    sizes = [0 if i in blank else len(box) for i in range(n)]
+    glyf = box * (n - len(blank))
+    loca = b"".join(struct.pack(">H", sum(sizes[:i]) // 2) for i in range(n + 1))
     head = struct.pack(">IIIIHHqqhhhhHHhhh", 0x10000, 0x10000, 0, 0x5F0F3CF5, 0, 1000, 0, 0, 50, 0, 950, 800, 0, 8, 2, 0, 0)
     hhea = struct.pack(">IhhhHhhhhhhhhhhhH", 0x10000, 800, -200, 0, 1000, 50, 50, 950, 1, 0, 0, 0, 0, 0, 0, 0, n)
     maxp = struct.pack(">IH", 0x10000, n) + struct.pack(">13H", 4, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0)
-    hmtx = struct.pack(">hh", 1000, 50) * n
-    tables = sorted({"head": head, "hhea": hhea, "maxp": maxp, "hmtx": hmtx, "loca": loca, "glyf": glyf}.items())
+    hmtx = struct.pack(">hh", adv, 50) * n
+    tables = {"head": head, "hhea": hhea, "maxp": maxp, "hmtx": hmtx, "loca": loca, "glyf": glyf}
+    if cmap:
+        tables["cmap"] = _cmap4(cmap)
+    tables = sorted(tables.items())
     out, offset = b"", 12 + 16 * len(tables)
     directory = struct.pack(">IHHHH", 0x10000, len(tables), 64, 2, 0)
     for tag, data in tables:
@@ -277,6 +294,155 @@ def cjk_predefined_cmaps():
     content = (text(20, 360, "KEEP_PUBLIC_CJK") + ("BT /FG 24 Tf 20 300 Td %s Tj ET\nBT /FJ 24 Tf 20 240 Td %s Tj ET\n"
                "BT /FS 24 Tf 20 180 Td %s Tj ET\n" % (hexs(GB_TEXT), hexs(JP_TEXT), hexs(SONG_TEXT))).encode())
     return simple(content, ex, fonts="/F1 5 0 R /FG 6 0 R /FJ 7 0 R /FS 8 0 R")
+
+
+# --- real-document font shapes (NEW-100) ---------------------------------------------------------------------------
+# iOS Quartz: Type0 /Identity-H over an embedded TrueType whose own Unicode cmap is the only source of text: the
+# ToUnicode CMap declares a codespace and no mapping, there is no CIDToGIDMap (identity) and spaces are drawn glyphs.
+QUARTZ_SECRET, QUARTZ_DATE, QUARTZ_KEEP = "SECRET_QUARTZ", "2026-10-23", "KEEP_QUARTZ_LINE"
+
+
+def _cid_hex(text, chars):
+    return "<" + "".join("%04X" % (chars.index(c) + 1) for c in text) + ">"
+
+
+def quartz_type0_empty_tounicode():
+    chars = "".join(sorted(set(QUARTZ_SECRET + QUARTZ_DATE + QUARTZ_KEEP + " ")))
+    cmap = {c: k + 1 for k, c in enumerate(chars)}
+    # Like Times New Roman: NBSP and soft hyphen share the space and hyphen glyphs; the lowest code point names the glyph.
+    cmap.update({"\u00a0": cmap[" "], "\u00ad": cmap["-"]})
+    ttf = _box_ttf(len(chars) + 1, cmap=cmap, blank={cmap[" "]})
+    tu = (b"/CIDInit /ProcSet findresource begin 12 dict begin begincmap /CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) "
+          b"/Supplement 0 >> def /CMapName /Adobe-Identity-UCS def /CMapType 2 def\n1 begincodespacerange\n<0000><FFFF>\n"
+          b"endcodespacerange\nendcmap CMapName currentdict /CMap defineresource pop end end\n")
+    ex = {
+        6: "<< /Type /Font /Subtype /Type0 /BaseFont /AAAAAB+FoliarkBox /Encoding /Identity-H /DescendantFonts [7 0 R] /ToUnicode 9 0 R >>",
+        7: ("<< /Type /Font /Subtype /CIDFontType2 /BaseFont /AAAAAB+FoliarkBox /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) "
+            "/Supplement 0 >> /W [1 [%s]] /DW 1000 /FontDescriptor 8 0 R >>" % " ".join(["1000"] * len(chars))),
+        8: ("<< /Type /FontDescriptor /FontName /AAAAAB+FoliarkBox /Flags 4 /FontBBox [50 0 950 800] /ItalicAngle 0 /Ascent 800 "
+            "/Descent -200 /CapHeight 800 /StemV 80 /FontFile2 10 0 R >>"),
+        9: stream("", tu, flate=True),
+        10: stream("/Length1 %d" % len(ttf), ttf, flate=True),
+    }
+    content = (text(20, 360, "KEEP_PUBLIC_QUARTZ") +
+               ("BT /FQ 10 Tf 20 300 Td %s Tj ET\nBT /FQ 10 Tf 20 270 Td %s Tj ET\n"
+                % (_cid_hex(QUARTZ_SECRET + " " + QUARTZ_DATE, chars), _cid_hex(QUARTZ_KEEP, chars))).encode())
+    return simple(content, ex, fonts="/F1 5 0 R /FQ 6 0 R")
+
+
+# iOS Quartz again, with decomposed accents: a combining mark is its own glyph of advance 0 (/W 0), drawn over its base through a
+# TJ kern back and forth, as Quartz writes "ą" (NEW-102). It has no width, so no box of its own: it belongs to its base.
+MARKS_SECRET, MARKS_KEEP = "SECRET_A\u0328_E\u0301X", "KEEP_E\u0301_MARK"
+OGONEK, ACUTE = "\u0328", "\u0301"
+
+
+def quartz_type0_combining_marks():
+    chars = "".join(sorted(set(MARKS_SECRET + MARKS_KEEP)))
+    cmap = {c: k + 1 for k, c in enumerate(chars)}
+    ttf = _box_ttf(len(chars) + 1, cmap=cmap)
+    tu = (b"/CIDInit /ProcSet findresource begin 12 dict begin begincmap /CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) "
+          b"/Supplement 0 >> def /CMapName /Adobe-Identity-UCS def /CMapType 2 def\n1 begincodespacerange\n<0000><FFFF>\n"
+          b"endcodespacerange\nendcmap CMapName currentdict /CMap defineresource pop end end\n")
+    widths = " ".join("0" if c in (OGONEK, ACUTE) else "1000" for c in chars)
+
+    def tj(word):  # a mark follows its base: back one em, the mark (advance 0), forward one em
+        return "[" + "".join(("1000 <%04X> -1000 " if c in (OGONEK, ACUTE) else "<%04X> ") % (chars.index(c) + 1) for c in word) + "] TJ"
+
+    ex = {
+        6: "<< /Type /Font /Subtype /Type0 /BaseFont /AAAAAE+FoliarkBox /Encoding /Identity-H /DescendantFonts [7 0 R] /ToUnicode 9 0 R >>",
+        7: ("<< /Type /Font /Subtype /CIDFontType2 /BaseFont /AAAAAE+FoliarkBox /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) "
+            "/Supplement 0 >> /W [1 [%s]] /DW 1000 /FontDescriptor 8 0 R >>" % widths),
+        8: ("<< /Type /FontDescriptor /FontName /AAAAAE+FoliarkBox /Flags 4 /FontBBox [50 0 950 800] /ItalicAngle 0 /Ascent 800 "
+            "/Descent -200 /CapHeight 800 /StemV 80 /FontFile2 10 0 R >>"),
+        9: stream("", tu, flate=True),
+        10: stream("/Length1 %d" % len(ttf), ttf, flate=True),
+    }
+    content = (text(20, 360, "KEEP_PUBLIC_MARKS") +
+               ("BT /FQ 10 Tf 20 300 Td %s ET\nBT /FQ 10 Tf 20 270 Td %s ET\n" % (tj(MARKS_SECRET), tj(MARKS_KEEP))).encode())
+    return simple(content, ex, fonts="/F1 5 0 R /FQ 6 0 R")
+
+
+# iOS Quartz once more (NEW-104): /W rounds each advance up to 1000 while the program's is 999, and the content stream draws
+# the program's advance through a TJ number of 1 between glyphs, so every line is narrower on the page than its /W widths
+# add up to. A paragraph of three lines that each fill the box (the next word never fits), the KEEP line close below it,
+# a word beside both boxes (a second column), a one-word box, and an ogonek drawn as Quartz draws it: a zero-advance mark right after its base,
+# no kern. The subset has no precomposed letter.
+TIGHT_ROWS = ["ALPHA BRAVO", "DELTA ECHOS", "GOLFS HOTEL"]
+TIGHT_WORD, TIGHT_BESIDE, TIGHT_OGONEK, TIGHT_KEEP = "KILO", "LIMA", "ZA\u0328SIS", "KEEP_TIGHT_LINE"
+
+
+def quartz_type0_tight_widths():
+    chars = "".join(sorted(set("".join(TIGHT_ROWS) + TIGHT_WORD + TIGHT_BESIDE + TIGHT_OGONEK + TIGHT_KEEP + " ")))
+    cmap = {c: k + 1 for k, c in enumerate(chars)}
+    ttf = _box_ttf(len(chars) + 1, cmap=cmap, blank={cmap[" "]}, adv=999)
+    tu = (b"/CIDInit /ProcSet findresource begin 12 dict begin begincmap /CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) "
+          b"/Supplement 0 >> def /CMapName /Adobe-Identity-UCS def /CMapType 2 def\n1 begincodespacerange\n<0000><FFFF>\n"
+          b"endcodespacerange\nendcmap CMapName currentdict /CMap defineresource pop end end\n")
+    widths = " ".join("0" if c == OGONEK else "1000" for c in chars)
+
+    def tj(x, y, word):  # 1/1000 em back before every glyph that is not a mark: the drawn advance is the program's 999
+        body = "".join(("" if i == 0 or c == OGONEK else "1 ") + "<%04X> " % (chars.index(c) + 1) for i, c in enumerate(word))
+        return "BT /FQ 10 Tf %d %d Td [%s] TJ ET\n" % (x, y, body)
+
+    ex = {
+        6: "<< /Type /Font /Subtype /Type0 /BaseFont /AAAAAF+FoliarkBox /Encoding /Identity-H /DescendantFonts [7 0 R] /ToUnicode 9 0 R >>",
+        7: ("<< /Type /Font /Subtype /CIDFontType2 /BaseFont /AAAAAF+FoliarkBox /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) "
+            "/Supplement 0 >> /W [1 [%s]] /DW 1000 /FontDescriptor 8 0 R >>" % widths),
+        8: ("<< /Type /FontDescriptor /FontName /AAAAAF+FoliarkBox /Flags 4 /FontBBox [50 0 950 800] /ItalicAngle 0 /Ascent 800 "
+            "/Descent -200 /CapHeight 800 /StemV 80 /FontFile2 10 0 R >>"),
+        9: stream("", tu, flate=True),
+        10: stream("/Length1 %d" % len(ttf), ttf, flate=True),
+    }
+    rows = "".join(tj(20, 300 - 14 * i, r) for i, r in enumerate(TIGHT_ROWS))
+    beside = tj(200, 300, TIGHT_BESIDE) + tj(200, 200, TIGHT_BESIDE)  # each box ends where its own text ends
+    content = (text(20, 360, "KEEP_PUBLIC_TIGHT") + (rows + beside + tj(20, 252, TIGHT_KEEP) + tj(20, 200, TIGHT_WORD)
+                                                     + tj(20, 170, TIGHT_OGONEK)).encode())
+    return simple(content, ex, fonts="/F1 5 0 R /FQ 6 0 R")
+
+
+# Word: each face twice, a TrueType WinAnsi subset for what WinAnsi can encode and a Type0 /Identity-H twin (ToUnicode with
+# bfchar and an array-form bfrange) for the rest; a word switches fonts mid-word, one positioned run per font switch.
+TWIN_DATE = [("T", "2002 m. bir"), ("U", "\u017e"), ("T", "elio 20 d.")]
+TWIN_SECRET = [("T", "SECRET_gegu"), ("U", "\u017e\u0117"), ("T", "s")]
+TWIN_U = "\u017e\u0117\u0161\u0104"  # glyph k+1 of the twin's program; ToUnicode maps code k+1 back
+
+
+def word_winansi_type0_twins():
+    ascii_chars = "".join(chr(c) for c in range(32, 127))
+    tt = _box_ttf(len(ascii_chars) + 1, cmap={c: k + 1 for k, c in enumerate(ascii_chars)}, blank={1})  # glyph 1 is the space
+    cid = _box_ttf(len(TWIN_U) + 1)
+    tu = ("/CIDInit /ProcSet findresource begin 12 dict begin begincmap /CMapName /Adobe-Identity-UCS def /CMapType 2 def\n"
+          "1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n2 beginbfchar\n<0001> <017E>\n<0004> <0104>\nendbfchar\n"
+          "1 beginbfrange\n<0002> <0003> [<0117> <0161>]\nendbfrange\nendcmap CMapName currentdict /CMap defineresource pop end end\n")
+    ex = {
+        6: ("<< /Type /Font /Subtype /TrueType /BaseFont /AAAAAC+FoliarkBox /Encoding /WinAnsiEncoding /FirstChar 32 /LastChar 126 "
+            "/Widths [%s] /FontDescriptor 8 0 R >>" % " ".join(["1000"] * 95)),
+        7: "<< /Type /Font /Subtype /Type0 /BaseFont /AAAAAD+FoliarkBox /Encoding /Identity-H /DescendantFonts [9 0 R] /ToUnicode 11 0 R >>",
+        8: ("<< /Type /FontDescriptor /FontName /AAAAAC+FoliarkBox /Flags 32 /FontBBox [50 0 950 800] /ItalicAngle 0 /Ascent 800 "
+            "/Descent -200 /CapHeight 800 /StemV 80 /FontFile2 12 0 R >>"),
+        9: ("<< /Type /Font /Subtype /CIDFontType2 /BaseFont /AAAAAD+FoliarkBox /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) "
+            "/Supplement 0 >> /W [1 [1000 1000 1000 1000]] /CIDToGIDMap /Identity /FontDescriptor 10 0 R >>"),
+        10: ("<< /Type /FontDescriptor /FontName /AAAAAD+FoliarkBox /Flags 32 /FontBBox [50 0 950 800] /ItalicAngle 0 /Ascent 800 "
+             "/Descent -200 /CapHeight 800 /StemV 80 /FontFile2 13 0 R >>"),
+        11: stream("", tu.encode(), flate=True),
+        12: stream("/Length1 %d" % len(tt), tt, flate=True),
+        13: stream("/Length1 %d" % len(cid), cid, flate=True),
+    }
+
+    def line(runs, y):
+        out, x = "", 20
+        for font, s in runs:
+            shown = "(%s)" % s if font == "T" else _cid_hex(s, TWIN_U)
+            out += "BT /F%s 10 Tf 1 0 0 1 %d %d Tm [%s] TJ ET\n" % (font, x, y, shown)
+            x += 10 * len(s)
+        return out.encode()
+
+    content = text(20, 360, "KEEP_PUBLIC_TWINS") + line(TWIN_DATE, 300) + line(TWIN_SECRET, 270)
+    return simple(content, ex, fonts="/F1 5 0 R /FT 6 0 R /FU 7 0 R")
+
+
+def _joined(runs):
+    return "".join(s for _, s in runs)
 
 
 K = {"mustKeepText": [], "mustRemove": []}
@@ -344,6 +510,26 @@ FIXTURES = {
                               "mustRemove": [GB_TEXT[1:3]], "mustKeepText": ["KEEP_PUBLIC_CJK", GB_TEXT[0], GB_TEXT[3], JP_TEXT, SONG_TEXT],
                               "requiredAssets": ["cmap:Adobe-GB1-UCS2", "cmap:UniGB-UCS2-H", "cmap:UniJIS-UCS2-H"],
                               "regions": [{"kind": "sensitive", "page": 0, "rectTopLeft": [44, 78, 92, 104], "text": GB_TEXT[1:3]}, R(20, 360, "KEEP_PUBLIC_CJK", kind="public")]}, {}),
+    "quartz-type0-empty-tounicode": (quartz_type0_empty_tounicode, ["embedded-font", "identity-h", "empty-tounicode"],
+                                     {"behavior": "iOS Quartz shape: Type0 Identity-H, ToUnicode with a codespace and no mapping, no CIDToGIDMap, drawn space glyphs; the text comes from the embedded TrueType's own Unicode cmap (glyph id back to its code point)",
+                                      "mustRemove": [QUARTZ_SECRET], "mustKeepText": ["KEEP_PUBLIC_QUARTZ", QUARTZ_DATE, QUARTZ_KEEP],
+                                      "regions": [{"kind": "sensitive", "page": 0, "rectTopLeft": [19, 90, 151, 104], "text": QUARTZ_SECRET},
+                                                  R(20, 360, "KEEP_PUBLIC_QUARTZ", kind="public")]}, {}),
+    "quartz-type0-combining-marks": (quartz_type0_combining_marks, ["embedded-font", "identity-h", "empty-tounicode", "combining-marks"],
+                                     {"behavior": "iOS Quartz shape with decomposed accents: ogonek and acute are zero-advance glyphs drawn over their base; a mark belongs to its base glyph, so redacting the base removes the mark and a page with marks still redacts natively",
+                                      "mustRemove": [MARKS_SECRET], "mustKeepText": ["KEEP_PUBLIC_MARKS", MARKS_KEEP],
+                                      "regions": [{"kind": "sensitive", "page": 0, "rectTopLeft": [19, 90, 135, 104], "text": MARKS_SECRET},
+                                                  R(20, 360, "KEEP_PUBLIC_MARKS", kind="public")]}, {}),
+    "quartz-type0-tight-widths": (quartz_type0_tight_widths, ["embedded-font", "identity-h", "empty-tounicode", "combining-marks", "tight-widths"],
+                                  {"behavior": "iOS Quartz shape whose /W widths are 1/1000 em wider than the advances the content stream draws (TJ corrections), with an ogonek as a zero-advance mark and no precomposed glyph; unchanged paragraphs fit their edit box with their own line breaks, and the word redacts natively",
+                                   "mustRemove": [TIGHT_WORD], "mustKeepText": ["KEEP_PUBLIC_TIGHT", TIGHT_KEEP, TIGHT_BESIDE],
+                                   "regions": [{"kind": "sensitive", "page": 0, "rectTopLeft": [19, 191, 61, 203], "text": TIGHT_WORD},
+                                               R(20, 360, "KEEP_PUBLIC_TIGHT", kind="public")]}, {}),
+    "word-winansi-type0-twins": (word_winansi_type0_twins, ["embedded-font", "identity-h", "font-twins"],
+                                 {"behavior": "Word shape: a TrueType WinAnsi subset plus a Type0 Identity-H twin (bfchar + array bfrange ToUnicode) for the non-WinAnsi letters, switching mid-word; words and dates read across the switch",
+                                  "mustRemove": [_joined(TWIN_SECRET)], "mustKeepText": ["KEEP_PUBLIC_TWINS", _joined(TWIN_DATE).split()[2]],
+                                  "regions": [{"kind": "sensitive", "page": 0, "rectTopLeft": [19, 120, 171, 134], "text": _joined(TWIN_SECRET)},
+                                              R(20, 360, "KEEP_PUBLIC_TWINS", kind="public")]}, {}),
 }
 for _id, _mode, _alg in (("encrypted-rc4-40", "RC4_40", "RC4-40"), ("encrypted-rc4-128", "RC4_128", "RC4-128"),
                          ("encrypted-aes-128", "AES_128", "AES-128"), ("encrypted-aes-256", "AES_256", "AES-256")):

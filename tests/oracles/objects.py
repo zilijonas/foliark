@@ -6,7 +6,7 @@
   "occurrences":[{"page":0,"path":[0],"forbid":[],"require":[]}], "no_unused_xobjects":true}
 
 Exit 0 iff no finding. Importable: check_isolated(path, spec) -> [finding strings "CODE: detail"].
-Finding codes: OPEN TEXT_PYPDF TEXT_FITZ BYTES_RAW STREAM STRING REVISION ORPHAN DANGLING FEATURE DECODE UNSUPPORTED CAP IMAGE_REGION VECTOR_REGION OCCURRENCE UNUSED_XOBJECT TIMEOUT CRASH.
+Finding codes: OPEN TEXT_PYPDF TEXT_FITZ TEXT_GLYPH BYTES_RAW STREAM STRING REVISION ORPHAN DANGLING FEATURE DECODE UNSUPPORTED CAP IMAGE_REGION VECTOR_REGION OCCURRENCE UNUSED_XOBJECT TIMEOUT CRASH.
 Every decode problem, unsupported filter or unsupported geometry is a finding, never a silent pass.
 """
 import json
@@ -77,6 +77,70 @@ def shown_text(s):
                 out += b"".join(bytes(x) for x in ins.operands[0] if isinstance(x, pikepdf.Object) and x._type_code == T.string)
     except Exception:
         pass
+    return out
+
+
+def program_names(doc, xref):
+    """Glyph id -> lowest code point of an embedded TrueType/OpenType program's own cmap (FreeType via PyMuPDF), {} if none."""
+    try:
+        _, ext, _, buf = doc.extract_font(xref)
+        font = fitz.Font(fontbuffer=buf) if ext in ("ttf", "otf") and buf else None
+    except Exception:
+        return {}
+    inv = {}
+    for cp in font.valid_codepoints() if font else []:
+        g = font.has_glyph(cp)
+        if g and cp >= 0x20:
+            inv.setdefault(g, cp)
+    return inv
+
+
+def glyph_text(doc):
+    """Per page, two readings of every shown glyph (MuPDF's trace) named by its font program's own cmap: pypdf and PyMuPDF
+    read a font whose ToUnicode maps nothing (iOS Quartz Type0) as junk, so its glyphs would pass both extractors unseen.
+    A glyph the program does not name keeps MuPDF's Unicode; fonts sharing a name (Word's TrueType and Type0 twins) are
+    read with the first and with the last of them."""
+    names, pages = {}, []
+    for pg in doc:
+        by_name = {}
+        for f in pg.get_fonts(full=True):
+            by_name.setdefault(re.sub(r"^[A-Z]{6}\+", "", f[3]), []).append(f[0])
+        first, last = [], []
+        for span in pg.get_texttrace():
+            maps = [names.setdefault(x, program_names(doc, x)) for x in by_name.get(span["font"], [])] or [{}]
+            for out, m in ((first, maps[0]), (last, maps[-1])):
+                out.append("".join(chr(m.get(g, u)) for u, g, *_ in span["chars"]))
+        pages.append(("".join(first), "".join(last)))
+    return pages
+
+
+def named_copy(path, out):
+    """`path` with every Type0 Identity-H font whose ToUnicode maps nothing (iOS Quartz; glyph id = CID: no CIDToGIDMap or
+    /Identity) given a ToUnicode from its program's own cmap, written to `out`; returns the path to judge against (`path`
+    itself when no font needed it). PyMuPDF and pypdf read such a font as junk; an export whose ToUnicode names the glyphs is
+    compared with the input as its glyphs read. Other fonts and every byte that is drawn stay as they are."""
+    doc, pdf, named = fitz.open(path), pikepdf.open(path), False
+    for f in pdf.objects:
+        if f is None or f._type_code != T.dictionary or f.get("/Subtype") != "/Type0" or f.get("/Encoding") != "/Identity-H":
+            continue
+        tu, kids = f.get("/ToUnicode"), f.get("/DescendantFonts")
+        if tu is not None and re.search(rb"begin(bfchar|bfrange)", tu.read_bytes()):
+            continue
+        if not kids or str(kids[0].get("/CIDToGIDMap", "/Identity")) != "/Identity" or not f.is_indirect:
+            continue
+        inv = program_names(doc, f.objgen[0])
+        if not inv:
+            continue
+        pairs = sorted(inv.items())
+        body = "".join("%d beginbfchar\n%sendbfchar\n" % (len(c), "".join("<%04X> <%s>\n" % (g, chr(u).encode("utf-16-be").hex().upper()) for g, u in c))
+                       for c in (pairs[i:i + 100] for i in range(0, len(pairs), 100)))
+        f.ToUnicode = pdf.make_stream(("/CIDInit /ProcSet findresource begin 12 dict begin begincmap /CMapName /Named def /CMapType 2 def\n"
+                                       "1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n%sendcmap CMapName currentdict /CMap "
+                                       "defineresource pop end end\n" % body).encode())
+        named = True
+    if not named:
+        return path
+    pdf.save(out)
     return out
 
 
@@ -265,6 +329,8 @@ def check(path, spec):
         for i, pg in enumerate(doc):
             tx = squash(pg.get_text("text", flags=0))
             F += ["TEXT_FITZ: %r on page %d" % (s, i) for s in forb if squash(s) in tx]
+        for i, readings in enumerate(glyph_text(doc) if forb else []):
+            F += ["TEXT_GLYPH: %r on page %d" % (s, i) for s in forb if any(squash(s) in squash(t) for t in readings)]
     except Exception as e:
         F.append("TEXT_FITZ: extractor failed: %s" % e)
         return F

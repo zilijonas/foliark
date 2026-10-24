@@ -26,6 +26,7 @@ FIXTURES = [
     "hddn/optional-content-layer.pdf", "hddn/outline-bookmark.pdf",
     "hddn/rotation-crop.pdf", "hddn/shared-image.pdf", "hddn/shared-vector.pdf",
     "hddn/thumbnail.pdf", "hddn/unicode-glyph-widths.pdf",
+    "generated/word-winansi-type0-twins.pdf",
 ]
 
 

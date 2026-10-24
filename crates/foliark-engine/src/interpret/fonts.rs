@@ -1,6 +1,7 @@
 //! What the semantic model records about a font dictionary (spec §3.1, §3.2).
 use hayro::hayro_syntax::object::{Array, Dict, Name, Object, Stream};
 use skrifa::{FontRef, MetadataProvider, instance::LocationRef, instance::Size};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FontKind {
@@ -181,6 +182,41 @@ fn program_metrics(stream: &Stream<'_>) -> Option<(f64, f64)> {
     let upem = f64::from(m.units_per_em);
     (upem > 0.0 && (m.ascent != 0.0 || m.descent != 0.0))
         .then(|| (f64::from(m.ascent) / upem, f64::from(m.descent) / upem))
+}
+
+/// Glyph id -> Unicode by the embedded TrueType/OpenType program's own Unicode cmap, inverted (the
+/// lowest code point of a glyph names it). The text of glyphs that neither ToUnicode nor the
+/// encoding maps: iOS Quartz writes Type0 fonts whose ToUnicode declares a codespace and no
+/// mapping. `None`: no embedded sfnt, or no cmap, or a symbol cmap (its codes are not text).
+pub(super) fn program_unicode(font: &Dict<'_>) -> Option<HashMap<u32, char>> {
+    let cid = font
+        .get::<Array<'_>>("DescendantFonts")
+        .and_then(|a| a.iter::<Dict<'_>>().next());
+    let desc = cid
+        .as_ref()
+        .unwrap_or(font)
+        .get::<Dict<'_>>("FontDescriptor")?;
+    let data = ["FontFile2", "FontFile3"]
+        .into_iter()
+        .find_map(|k| desc.get::<Stream<'_>>(k))?
+        .decoded()
+        .ok()?;
+    let charmap = FontRef::new(&data).ok()?.charmap();
+    if !charmap.has_map() || charmap.is_symbol() {
+        return None;
+    }
+    let mut out = HashMap::new();
+    for (cp, gid) in charmap.mappings() {
+        let (Some(c), gid) = (char::from_u32(cp), gid.to_u32()) else {
+            continue;
+        };
+        if gid != 0 && !c.is_control() {
+            out.entry(gid)
+                .and_modify(|old: &mut char| *old = (*old).min(c))
+                .or_insert(c);
+        }
+    }
+    Some(out)
 }
 
 /// A CID font's `/W`: `c [w1 w2 ...]` and `first last w`, both forms mixed.

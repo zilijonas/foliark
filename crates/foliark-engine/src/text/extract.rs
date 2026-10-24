@@ -169,6 +169,19 @@ impl TextLayout {
                             y: 0.0,
                         })
                     };
+                    // A zero-advance mark (interpret gives it its base's box) also continues from the
+                    // base's end, wherever its kern drew it, so neither it nor the next glyph reads
+                    // as a gap in the word.
+                    let (origin, end) = match glyphs.last() {
+                        Some(b)
+                            if !glyph.vertical
+                                && glyph.advance_em == 0.0
+                                && b.id.loc == item.loc =>
+                        {
+                            (b.end, b.end)
+                        }
+                        _ => (origin, end),
+                    };
                     let (text, mut flags) = cluster_text(glyph.unicode.as_deref());
                     let whitespace = flags & UNMAPPED == 0 && text.chars().all(char::is_whitespace);
                     if matches!(glyph.render_mode, 3 | 7) {

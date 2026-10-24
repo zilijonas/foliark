@@ -76,7 +76,10 @@ def main(path):
     for case in json.load(open(path)):
         tmp = tempfile.mkdtemp()
         inp = plain_copy(case["input"], case["password"], tmp)
-        doc = fitz.open(inp)
+        # The reference the outputs are judged against: the input, with a font whose ToUnicode maps nothing read by its own
+        # program's cmap (objects.named_copy), as the export's rebuilt ToUnicode reads it. The input control uses `inp` itself.
+        ref = objects.named_copy(inp, os.path.join(tmp, "named.pdf"))
+        doc = fitz.open(ref)
         secrets, regions = case["secrets"], case["regions"]
         visible = page_text(doc)
         flat = lambda s: "".join(s.split())
@@ -92,10 +95,10 @@ def main(path):
         # image region grows by one source sample (4 pt here); objects.py still demands every sample inside the region itself is black.
         grow = lambda g: [g["rect"][0] - 4, g["rect"][1] - 4, g["rect"][2] + 4, g["rect"][3] + 4] if g["kind"] == "sensitive-image" else g["rect"]
         changed = [{"page": g["page"], "rect": grow(g)} for g in regions] + secret_rects(doc, secrets) + no_ap_rects(doc)
-        r["redacted"] = judge(case["redacted"], inp, case, {**spec, "password": ""}, changed, "redacted")
+        r["redacted"] = judge(case["redacted"], ref, case, {**spec, "password": ""}, changed, "redacted")
         # sanitize-only: only what the input page itself shows may remain; the rest must be gone
         gone = [s for s in secrets if flat(s) not in flat(visible)]
-        r["sanitize"] = judge(case["sanitize"], inp, case, {"forbidden": gone}, no_ap_rects(doc), "sanitize")
+        r["sanitize"] = judge(case["sanitize"], ref, case, {"forbidden": gone}, no_ap_rects(doc), "sanitize")
         r["sanitize_gone"] = gone
         res[case["id"]] = r
     print("\n@@" + json.dumps(res))

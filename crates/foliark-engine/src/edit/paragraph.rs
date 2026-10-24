@@ -8,7 +8,7 @@ use foliark_model::{
     Cluster, EditorFace, ErrorCode, ErrorDetails, FontMatchRule, FontResolution, FontRule,
     GROUPING, ObjectId, ParagraphInfo, PdfError, Quad, Rect, StyleRun,
 };
-use foliark_text::{FontFace, Ladder, Registry, StyleFlags};
+use foliark_text::{FontFace, Ladder, LayoutParams, Registry, StyleFlags, layout_unbounded};
 
 const INVISIBLE: u32 = 1;
 const UNMAPPED: u32 = 2;
@@ -140,8 +140,8 @@ fn line_part(l: &Line, clusters: &[Cluster], text: &[Vec<u16>], styles: &[StyleR
 
 /// HDDN's rule for hard versus soft breaks: a line break is hard (LF) when the line ends visibly
 /// short of the paragraph's right edge or the next line starts indented; otherwise the line
-/// wrapped on its own and the break is a space. A hard line's indent becomes leading spaces.
-fn original_text(parts: &[Part], space: f64) -> String {
+/// wrapped on its own and the break is `soft` (a space). A hard line's indent becomes leading spaces.
+fn original_text(parts: &[Part], space: f64, soft: char) -> String {
     let x0 = parts.iter().map(|p| p.x0).fold(f64::INFINITY, f64::min);
     let x1 = parts.iter().map(|p| p.x1).fold(f64::NEG_INFINITY, f64::max);
     let lead = |p: &Part| {
@@ -163,7 +163,7 @@ fn original_text(parts: &[Part], space: f64) -> String {
             s.push('\n');
             s.push_str(&lead(cur));
         } else {
-            s.push(' ');
+            s.push(soft);
         }
         s.push_str(&cur.text);
     }
@@ -422,13 +422,44 @@ impl Document {
             .floor()
             .max(-1.0) as i64
             + 1;
-        let original = (!sel.iter().any(|&i| clusters[i].flags & UNMAPPED != 0)).then(|| {
-            let parts: Vec<Part> = rows
-                .iter()
-                .map(|l| line_part(l, clusters, &text, styles))
-                .collect();
-            original_text(&parts, space)
-        });
+        let parts: Option<Vec<Part>> = (!sel.iter().any(|&i| clusters[i].flags & UNMAPPED != 0))
+            .then(|| {
+                rows.iter()
+                    .map(|l| line_part(l, clusters, &text, styles))
+                    .collect()
+            });
+        let original = parts.as_deref().map(|p| original_text(p, space, ' '));
+        // ADR 0011: the box holds the paragraph's own lines as the layout measures them, so text
+        // left as it is keeps its breaks where the page draws narrower than the widths the layout
+        // reads (TJ corrections, Tc, a fallback font). Every row is laid out as a hard line.
+        let measured = parts
+            .as_deref()
+            .and_then(|p| {
+                let params = LayoutParams {
+                    font_size: size,
+                    wrap_width: f64::INFINITY,
+                    max_lines: u32::MAX,
+                    line_step,
+                    first_baseline,
+                    origin_x: x0,
+                };
+                layout_unbounded(&original_text(p, space, '\n'), &params, &ladder).ok()
+            })
+            .map_or(0.0, |laid| {
+                laid.plan
+                    .lines
+                    .iter()
+                    .map(|l| {
+                        let w: f64 = l
+                            .runs
+                            .iter()
+                            .flat_map(|r| &r.glyphs)
+                            .map(|g| g.x_advance)
+                            .sum();
+                        l.x - x0 + w
+                    })
+                    .fold(0.0, f64::max)
+            });
         let info = ParagraphInfo {
             doc_id: String::new(),
             revision: 0,
@@ -450,9 +481,10 @@ impl Document {
             serif: style.flags.serif,
             mono: style.flags.mono,
             mixed_style: mixed,
-            wrap_width: wrap_right - x0,
+            wrap_width: (wrap_right - x0).max(measured),
             max_height: bottom_limit - top,
-            max_lines: max_lines.max(0) as u32,
+            // The lines the paragraph has now are always there to use.
+            max_lines: max_lines.max(rows.len() as i64) as u32,
             original_text: original,
             font: resolution,
             editor_face: face,
