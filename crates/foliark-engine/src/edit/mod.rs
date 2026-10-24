@@ -3,6 +3,7 @@
 mod apply;
 mod paragraph;
 mod preview;
+mod runs;
 
 pub use apply::ParagraphApplier;
 pub use paragraph::{Prepared, select_clusters};

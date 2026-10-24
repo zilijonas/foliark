@@ -1,15 +1,18 @@
 //! `prepareParagraph` (spec §6.1, §6.2, §6.4): which clusters a paragraph edit selects, the
 //! fixed budget around them (wrap width, line count, height) and the font it will use.
 //! Everything is in display space and computed from the page as it is, never from the edit.
+use super::runs::carry;
 use crate::Document;
 use crate::interpret::{GlyphItem, ItemKind, SemanticPage};
 use crate::text::{ClusterId, SourceFontFace, TextLayout};
 use foliark_model::{
     Cluster, EditorFace, ErrorCode, ErrorDetails, FontMatchRule, FontResolution, FontRule,
-    GROUPING, ObjectId, ParagraphInfo, ParagraphSegment, PdfError, Quad, Rect, StyleRun,
+    GROUPING, ObjectId, ParagraphInfo, ParagraphSegment, PdfError, Quad, Rect, StyleRun, StyleSpan,
+    TextLook,
 };
 use foliark_text::{
-    Candidate, FontFace, Ladder, LayoutParams, Registry, StyleFlags, layout_unbounded,
+    Candidate, FontFace, Ladder, LayoutParams, Registry, StyleFlags, TextRun, layout_runs,
+    normalize,
 };
 
 const INVISIBLE: u32 = 1;
@@ -103,6 +106,8 @@ fn overlap_fraction(a: &Quad, b: &Quad) -> f64 {
 
 struct Part {
     text: String,
+    /// The page style of each `char` of `text`; a word gap is the paragraph's (`main`).
+    looks: Vec<u32>,
     x0: f64,
     x1: f64,
     h: f64,
@@ -110,9 +115,16 @@ struct Part {
 
 /// A line's text: overprinted duplicates dropped (same Unicode over >= 50% of the previous
 /// kept cluster, which repairs faux bold), a space wherever the pen gap is a word gap.
-fn line_part(l: &Line, clusters: &[Cluster], text: &[Vec<u16>], styles: &[StyleRun]) -> Part {
+fn line_part(
+    l: &Line,
+    clusters: &[Cluster],
+    text: &[Vec<u16>],
+    styles: &[StyleRun],
+    main: u32,
+) -> Part {
     let mut out = Part {
         text: String::new(),
+        looks: Vec::new(),
         x0: f64::INFINITY,
         x1: f64::NEG_INFINITY,
         h: 0.0,
@@ -129,9 +141,12 @@ fn line_part(l: &Line, clusters: &[Cluster], text: &[Vec<u16>], styles: &[StyleR
             let em = styles[c.style_index as usize].size;
             if b[0] - out.x1 >= GROUPING.word_gap * em {
                 out.text.push(' ');
+                out.looks.push(main);
             }
         }
-        out.text.push_str(&String::from_utf16_lossy(&text[i]));
+        let t = String::from_utf16_lossy(&text[i]);
+        out.looks.extend(t.chars().map(|_| c.style_index));
+        out.text.push_str(&t);
         out.x0 = out.x0.min(b[0]);
         out.x1 = out.x1.max(b[2]);
         out.h = out.h.max(b[3] - b[1]);
@@ -154,8 +169,9 @@ fn hard_breaks(parts: &[Part]) -> Vec<bool> {
 }
 
 /// Rows joined by LF at hard breaks and by `soft` (a space) where a line wrapped on its own
-/// ([`hard_breaks`]). A hard line's indent becomes leading spaces.
-fn original_text(parts: &[Part], space: f64, soft: char) -> String {
+/// ([`hard_breaks`]). A hard line's indent becomes leading spaces. With the page style of each
+/// `char`: a break or an indent the page does not draw is the paragraph's (`main`).
+fn original_text(parts: &[Part], space: f64, soft: char, main: u32) -> (String, Vec<u32>) {
     let x0 = parts.iter().map(|p| p.x0).fold(f64::INFINITY, f64::min);
     let lead = |p: &Part| {
         let n = if space > 0.0 {
@@ -169,17 +185,19 @@ fn original_text(parts: &[Part], space: f64, soft: char) -> String {
             0
         })
     };
-    let mut s = format!("{}{}", lead(&parts[0]), parts[0].text);
-    for (cur, hard) in parts.iter().zip(hard_breaks(parts)).skip(1) {
-        if hard {
-            s.push('\n');
-            s.push_str(&lead(cur));
-        } else {
-            s.push(soft);
-        }
+    let (mut s, mut looks) = (String::new(), Vec::new());
+    for (k, (cur, hard)) in parts.iter().zip(hard_breaks(parts)).enumerate() {
+        let gap = match (k, hard) {
+            (0, _) => lead(cur),
+            (_, true) => format!("\n{}", lead(cur)),
+            _ => soft.to_string(),
+        };
+        looks.extend(gap.chars().map(|_| main));
+        looks.extend(&cur.looks);
+        s.push_str(&gap);
         s.push_str(&cur.text);
     }
-    s
+    (s, looks)
 }
 
 /// The style most of `ids` are drawn in; on a tie, the one that comes first.
@@ -303,22 +321,105 @@ pub struct Segment {
     pub clusters: Vec<usize>,
 }
 
+/// One page style of the selection (ADR 0013) with its font as a ladder rung 2.
+pub struct Look {
+    /// Index into the page's styles.
+    pub index: u32,
+    pub style: StyleRun,
+    /// The style's font as a ladder rung 2, when it can be reused.
+    pub source: Option<SourceFontFace>,
+    /// That font's object (the same font as `source`), whether or not it can be reused.
+    pub font_obj: Option<ObjectId>,
+    /// Every glyph of `font_obj` on the page: the evidence `source` was built from.
+    pub glyphs: Vec<GlyphItem>,
+}
+
+impl Look {
+    pub fn flags(&self) -> StyleFlags {
+        style_flags(&self.style)
+    }
+
+    /// The ladder of the page's fonts for this look: no caller font.
+    pub fn ladder<'a>(
+        &'a self,
+        registry: &'a Registry,
+        font_match: &'a [FontMatchRule],
+    ) -> Ladder<'a> {
+        Ladder {
+            registry,
+            caller: None,
+            source: self.source.as_ref().map(|s| s as &dyn FontFace),
+            source_name: &self.style.font_name,
+            flags: self.flags(),
+            font_match,
+        }
+    }
+}
+
 /// What `prepare_paragraph` worked out, with what applying an edit needs on top of the wire
-/// record: the selected clusters, the source face and the style inputs of the font ladder.
+/// record: the selected clusters, the page styles and their fonts.
 pub struct Prepared {
     pub info: ParagraphInfo,
     /// The selected clusters, in text order.
     pub ids: Vec<ClusterId>,
     /// The style segments, top to bottom; empty when `originalText` is null.
     pub segments: Vec<Segment>,
-    /// The paragraph style's font as a ladder rung 2, when it can be reused.
-    pub source: Option<SourceFontFace>,
-    /// That font's object (the same font as `source`), whether or not it can be reused.
-    pub font_obj: Option<ObjectId>,
-    pub source_name: String,
-    pub flags: StyleFlags,
-    /// Every glyph of `font_obj` on the page: the evidence `source` was built from.
-    pub glyphs: Vec<GlyphItem>,
+    /// The page styles the selection is drawn in; `info.looks` in the same order.
+    pub looks: Vec<Look>,
+    /// The paragraph style's look.
+    pub main: usize,
+    /// The look of each `char` of `originalText`; empty when it is null.
+    pub text_looks: Vec<usize>,
+}
+
+/// `looks` (one per `char` of `text`) as runs of `text`, each with the ladder `ladder(look)`;
+/// empty text is one run of look `main`.
+pub fn text_runs<'a>(
+    text: &str,
+    looks: &[usize],
+    all: &[Look],
+    main: usize,
+    ladder: impl Fn(usize) -> Ladder<'a>,
+) -> Vec<TextRun<'a>> {
+    let mut out: Vec<(TextRun<'a>, usize)> = Vec::new();
+    let each = text
+        .char_indices()
+        .map(|(at, _)| at)
+        .zip(looks.iter().copied());
+    for (at, k) in each.chain(text.is_empty().then_some((0, main))) {
+        if out.last().is_none_or(|r| r.1 != k) {
+            let style = &all[k].style;
+            out.push((
+                TextRun {
+                    start: at,
+                    ladder: ladder(k),
+                    font_size: style.size,
+                    color: style.color,
+                },
+                k,
+            ));
+        }
+    }
+    out.into_iter().map(|r| r.0).collect()
+}
+
+/// `looks` (one per `char` of `text`) as UTF-16 spans.
+pub fn style_spans(text: &str, looks: &[usize]) -> Vec<StyleSpan> {
+    let mut out: Vec<StyleSpan> = Vec::new();
+    let mut at = 0;
+    for (c, &k) in text.chars().zip(looks) {
+        let end = at + c.len_utf16() as u32;
+        match out.last_mut() {
+            Some(s) if s.look == k as u32 => s.end = end,
+            _ => out.push(StyleSpan {
+                start: at,
+                end,
+                look: k as u32,
+            }),
+        }
+        at = end;
+    }
+    out
 }
 
 impl Document {
@@ -444,7 +545,8 @@ impl Document {
 
         let baseline: Vec<f64> = layout.meta.iter().map(|m| m.baseline).collect();
         // ADR 0012: the paragraph's style is the one most of its clusters are drawn in.
-        let style = &styles[dominant(&sel, clusters) as usize];
+        let main_index = dominant(&sel, clusters);
+        let style = &styles[main_index as usize];
         let size = style.size;
         let mixed = sel
             .iter()
@@ -521,21 +623,47 @@ impl Document {
             (model.geometry.height - margin).max(y1)
         };
 
+        let parts: Option<Vec<Part>> = (!sel.iter().any(|&i| clusters[i].flags & UNMAPPED != 0))
+            .then(|| {
+                rows.iter()
+                    .map(|l| line_part(l, clusters, &text, styles, main_index))
+                    .collect()
+            });
+        // ADR 0013: the page styles the selection is drawn in, the paragraph's own first, each
+        // with its font as a ladder rung 2.
+        let mut order = vec![main_index];
+        for k in parts.iter().flatten().flat_map(|p| &p.looks) {
+            if !order.contains(k) {
+                order.push(*k);
+            }
+        }
+        let looks = order
+            .iter()
+            .map(|&k| {
+                let st = &styles[k as usize];
+                let SourceFont { obj, glyphs, face } = self.source_font(&model, st)?;
+                Ok(Look {
+                    index: k,
+                    style: st.clone(),
+                    source: face,
+                    font_obj: obj,
+                    glyphs,
+                })
+            })
+            .collect::<Result<Vec<Look>, PdfError>>()?;
+        let look_of = |k: &u32| {
+            order
+                .iter()
+                .position(|o| o == k)
+                .expect("every style is in order")
+        };
+
         // Font (§6.4): the ladder's first choice names the paragraph's font; every candidate
         // reserves descent, so the budget holds whichever one a cluster ends up using.
-        let SourceFont {
-            obj: font_obj,
-            glyphs: evidence,
-            face: source,
-        } = self.source_font(&model, style)?;
-        let flags = style_flags(style);
+        let source = looks[0].source.as_ref();
         let ladder = Ladder {
-            registry,
             caller: font,
-            source: source.as_ref().map(|s| s as &dyn FontFace),
-            source_name: &style.font_name,
-            flags,
-            font_match,
+            ..looks[0].ladder(registry, font_match)
         };
         let candidates = ladder.candidates()?;
         let Some(primary) = candidates.first() else {
@@ -550,19 +678,19 @@ impl Document {
             .iter()
             .find_map(|c| c.face.shape(" ", size).ok())
             .map_or(size * 0.28, |g| g.iter().map(|g| g.x_advance).sum());
-        let (resolution, face) = describe(style, primary, source.as_ref(), registry, editor_face);
+        let (resolution, face) = describe(style, primary, source, registry, editor_face);
 
         let max_lines = ((bottom_limit + 0.1 - first_baseline - descent) / line_step)
             .floor()
             .max(-1.0) as i64
             + 1;
-        let parts: Option<Vec<Part>> = (!sel.iter().any(|&i| clusters[i].flags & UNMAPPED != 0))
-            .then(|| {
-                rows.iter()
-                    .map(|l| line_part(l, clusters, &text, styles))
-                    .collect()
-            });
-        let original = parts.as_deref().map(|p| original_text(p, space, ' '));
+        let (original, text_looks) = match parts.as_deref() {
+            Some(p) => {
+                let (t, l) = original_text(p, space, ' ', main_index);
+                (Some(t), l.iter().map(look_of).collect())
+            }
+            None => (None, Vec::new()),
+        };
         // ADR 0012: a hard break where the rows' look changes (a bold heading over its body)
         // starts a new style segment.
         let mut segments: Vec<Segment> = Vec::new();
@@ -585,7 +713,8 @@ impl Document {
         // ADR 0011: the box holds the paragraph's own lines as the layout measures them, so text
         // left as it is keeps its breaks where the page draws narrower than the widths the layout
         // reads (TJ corrections, Tc, a fallback font). Every row is laid out as a hard line, in
-        // the fonts the page draws it with: never the caller's font, which may be wider (ADR 0012).
+        // the fonts the page draws it with: never the caller's font, which may be wider (ADR 0012),
+        // and each run in its own (ADR 0013).
         let page_fonts = Ladder {
             caller: None,
             ..ladder
@@ -601,7 +730,14 @@ impl Document {
                     first_baseline,
                     origin_x: x0,
                 };
-                layout_unbounded(&original_text(p, space, '\n'), &params, &page_fonts).ok()
+                let (raw, raw_looks) = original_text(p, space, '\n', main_index);
+                let raw_looks: Vec<usize> = raw_looks.iter().map(look_of).collect();
+                let rows = normalize(&raw).ok()?;
+                let row_looks = carry(&raw, &raw_looks, &rows, 0);
+                let runs = text_runs(&rows, &row_looks, &looks, 0, |k| {
+                    looks[k].ladder(registry, font_match)
+                });
+                layout_runs(&rows, &params, &runs).ok()
             })
             .map_or(0.0, |laid| {
                 laid.plan
@@ -646,6 +782,40 @@ impl Document {
                 ));
             }
         }
+        let wire_looks = looks
+            .iter()
+            .map(|l| {
+                let cands = l.ladder(registry, font_match).candidates()?;
+                let (font, face) = match cands.first() {
+                    Some(first) => {
+                        describe(&l.style, first, l.source.as_ref(), registry, editor_face)
+                    }
+                    // No font draws this look: its edits refuse `EDIT_NO_FONT` when laid out.
+                    None => (
+                        FontResolution::Embedded {
+                            font_ref: l.style.font_ref.clone(),
+                            name: l.style.font_name.clone(),
+                            covers_ascii: false,
+                        },
+                        None,
+                    ),
+                };
+                let seg = segment_of(&l.style, (0, 0), (font, face));
+                Ok(TextLook {
+                    font_size: seg.font_size,
+                    color: seg.color,
+                    bold: seg.bold,
+                    italic: seg.italic,
+                    serif: seg.serif,
+                    mono: seg.mono,
+                    font: seg.font,
+                    editor_face: seg.editor_face,
+                })
+            })
+            .collect::<Result<Vec<_>, PdfError>>()?;
+        let runs = original
+            .as_deref()
+            .map_or(Vec::new(), |t| style_spans(t, &text_looks));
         let info = ParagraphInfo {
             doc_id: String::new(),
             revision: 0,
@@ -675,16 +845,16 @@ impl Document {
             font: resolution,
             editor_face: face,
             segments: wire,
+            looks: wire_looks,
+            runs,
         };
         Ok(Prepared {
             info,
             ids: sel.iter().map(|&i| layout.meta[i].id.clone()).collect(),
             segments,
-            source,
-            font_obj,
-            source_name: style.font_name.clone(),
-            flags,
-            glyphs: evidence,
+            looks,
+            main: 0,
+            text_looks,
         })
     }
 }

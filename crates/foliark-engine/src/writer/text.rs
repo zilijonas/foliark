@@ -28,7 +28,7 @@ fn num(v: f64) -> String {
     }
 }
 
-/// Operators drawing `plan` in fill color `rgb` (0 to 1), wrapped in `q ... Q`, text mode 0.
+/// Operators drawing `plan`, each run in its own fill color (0 to 1), wrapped in `q ... Q`, text mode 0.
 /// `to_user` is the affine `[a b c d e f]` from plan space (x right, baseline y down, as in
 /// the plan) to default user space; glyphs stand upright in plan space. Each line is one
 /// `BT` with a `Tm` per run and a `TJ` of 2-byte hex CIDs; the difference between a glyph's
@@ -39,16 +39,12 @@ pub fn emit_plan(
     plan: &LayoutPlan,
     fonts: &PlanFonts<'_>,
     sources: &SourceFonts<'_>,
-    rgb: [f64; 3],
     to_user: [f64; 6],
 ) -> Result<Vec<u8>, PdfError> {
     let [a, b, c, d, e, f] = to_user;
-    let mut s = format!(
-        "q\n{} {} {} rg\n0 Tr\n",
-        num(rgb[0]),
-        num(rgb[1]),
-        num(rgb[2])
-    );
+    let mut s = String::from("q\n0 Tr\n");
+    // Each run's own fill (ADR 0013), set when it changes.
+    let mut rgb = None;
     for line in &plan.lines {
         s.push_str("BT\n");
         let mut x = line.x;
@@ -64,6 +60,11 @@ pub fn emit_plan(
                 a * x + c * line.baseline_y + e,
                 b * x + d * line.baseline_y + f,
             );
+            if rgb != Some(run.color) {
+                let [r, g, b] = run.color;
+                let _ = writeln!(s, "{} {} {} rg", num(r), num(g), num(b));
+                rgb = Some(run.color);
+            }
             // text space is y up, plan space y down: flip the second row
             let _ = write!(
                 s,

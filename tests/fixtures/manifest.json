@@ -7,9 +7,9 @@
   "python": "3.9"
  },
  "counts": {
-  "total": 46,
+  "total": 47,
   "hddn": 20,
-  "generated": 26,
+  "generated": 27,
   "byFeature": {
    "actualtext": 1,
    "additional-actions": 1,
@@ -25,7 +25,7 @@
    "deep-form": 1,
    "dimension-bomb": 1,
    "embedded-file": 2,
-   "embedded-font": 9,
+   "embedded-font": 10,
    "empty-tounicode": 3,
    "encrypted": 5,
    "flate-bomb": 1,
@@ -48,7 +48,7 @@
    "malformed-xref": 1,
    "many-pages": 1,
    "metadata": 2,
-   "mixed-style-paragraph": 1,
+   "mixed-style-paragraph": 2,
    "multi-page": 3,
    "non-bmp": 2,
    "ocg": 2,
@@ -2426,6 +2426,55 @@
        42.5
       ],
       "text": "KEEP_PUBLIC_STYLES"
+     }
+    ]
+   }
+  },
+  {
+   "id": "word-inline-runs",
+   "path": "generated/word-inline-runs.pdf",
+   "sha256": "50316bae5c26adeac7980e1abf86b9ada8a83894aa82284f251abcb227c27987",
+   "bytes": 6778,
+   "pages": 1,
+   "features": [
+    "embedded-font",
+    "mixed-style-paragraph"
+   ],
+   "origin": "tests/fixtures/generators/generate.py",
+   "license": "synthetic, generated (original)",
+   "deterministic": true,
+   "expected": {
+    "behavior": "Word shape: inline bold defined terms (one letter from the bold face's Type0 twin) and an inline italic reference inside regular, softly wrapped rows; editing a regular word keeps every bold and italic glyph in its own face, and the replaced word is gone",
+    "mustRemove": [
+     "which"
+    ],
+    "mustKeepText": [
+     "KEEP_PUBLIC_RUNS",
+     "KEEP_RUNS_LINE",
+     "Owner"
+    ],
+    "regions": [
+     {
+      "kind": "sensitive",
+      "page": 0,
+      "rectTopLeft": [
+       54,
+       103,
+       81,
+       110
+      ],
+      "text": "which"
+     },
+     {
+      "kind": "public",
+      "page": 0,
+      "rectTopLeft": [
+       20,
+       32.0,
+       108.0,
+       42.5
+      ],
+      "text": "KEEP_PUBLIC_RUNS"
      }
     ]
    }

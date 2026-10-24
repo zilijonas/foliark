@@ -34,6 +34,8 @@ export type { Matrix } from "./generated/Matrix.js";
 export type { PageGeometry } from "./generated/PageGeometry.js";
 export type { ParagraphInfo } from "./generated/ParagraphInfo.js";
 export type { ParagraphSegment } from "./generated/ParagraphSegment.js";
+export type { StyleSpan } from "./generated/StyleSpan.js";
+export type { TextLook } from "./generated/TextLook.js";
 export type { Point } from "./generated/Point.js";
 export type { Quad } from "./generated/Quad.js";
 export type { Rect } from "./generated/Rect.js";

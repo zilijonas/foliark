@@ -528,6 +528,39 @@ pub struct ParagraphInfo {
     /// them and joining the slices gives it back. Each describes the page's own font, never the
     /// caller's.
     pub segments: Vec<ParagraphSegment>,
+    /// The page styles the selection is drawn in (ADR 0013), each with the page's own font
+    /// (never the caller's). `runs` and `EditPreview.styles` index them.
+    pub looks: Vec<TextLook>,
+    /// Style runs of `originalText`: UTF-16 ranges that tile it, each drawn in one look. Empty
+    /// when `originalText` is null.
+    pub runs: Vec<StyleSpan>,
+}
+
+/// One page style of a paragraph (ADR 0013), as `ParagraphSegment` describes a segment's.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct TextLook {
+    pub font_size: f64,
+    #[ts(type = "[number, number, number]")]
+    pub color: [f64; 3],
+    pub bold: bool,
+    pub italic: bool,
+    pub serif: bool,
+    pub mono: bool,
+    pub font: FontResolution,
+    #[ts(optional = nullable)]
+    pub editor_face: Option<EditorFace>,
+}
+
+/// A UTF-16 range of a paragraph's text drawn in `ParagraphInfo.looks[look]` (ADR 0013).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct StyleSpan {
+    pub start: u32,
+    pub end: u32,
+    pub look: u32,
 }
 
 /// One style segment of a paragraph: consecutive hard lines drawn in one look (ADR 0012).
@@ -717,6 +750,9 @@ pub struct EditPreview {
     pub runs: Vec<LayoutRun>,
     /// Equals `ChangeResult.layouts[].fingerprint` for the same inputs.
     pub fingerprint: String,
+    /// Style runs of the whole normalized text sent (ADR 0013): UTF-16 ranges that tile it, each
+    /// indexing the `looks` `prepareParagraph` returns for the same rects.
+    pub styles: Vec<StyleSpan>,
     /// Only when asked for.
     pub glyphs: Option<Vec<PreviewGlyph>>,
 }

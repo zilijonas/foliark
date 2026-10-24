@@ -511,6 +511,65 @@ def word_bold_heading_body():
                + "BT /FR 5 Tf 20 262 Td (%s) Tj ET\n" % STYLE_KEEP).encode())
     return simple(content, ex, fonts="/F1 5 0 R /FB 6 0 R /FR 9 0 R")
 
+# Word again (NEW-113): a law article's body with inline bold defined terms and an inline italic reference inside regular,
+# softly wrapped rows, in one text object. Faces are TrueType WinAnsi subsets named as Word names Arial (box glyphs: regular
+# 1 em, bold 1.2 em, italic 1.1 em, size 5); the bold term's non-WinAnsi letter comes from the bold face's Type0 Identity-H
+# twin, as Word draws it. Markup: *bold*, _italic_; spaces between runs are regular. Rows fill the box to within 5 pt (soft
+# breaks) and the next word never fits; a KEEP line below leaves room for four more rows.
+RUNS_ROWS = ["In the law a word *Gavėjas* is", "a body which gets data and an", "*Owner* is one who holds it all",
+             "as set out in _Annex II_ unless", "both the sides agree on other", "terms"]
+RUNS_SECRET, RUNS_KEEP = "which", "KEEP_RUNS_LINE"
+
+
+def word_inline_runs():
+    ascii_chars = "".join(chr(c) for c in range(32, 127))
+    cmap = {c: k + 1 for k, c in enumerate(ascii_chars)}
+
+    def face(num, name, adv, flags=32, angle=0):
+        ttf = _box_ttf(len(ascii_chars) + 1, cmap=cmap, blank={1}, adv=adv)
+        return {
+            num: ("<< /Type /Font /Subtype /TrueType /BaseFont /%s /Encoding /WinAnsiEncoding /FirstChar 32 /LastChar 126 "
+                  "/Widths [%s] /FontDescriptor %d 0 R >>" % (name, " ".join([str(adv)] * 95), num + 1)),
+            num + 1: ("<< /Type /FontDescriptor /FontName /%s /Flags %d /FontBBox [50 0 950 800] /ItalicAngle %d /Ascent 800 "
+                      "/Descent -200 /CapHeight 800 /StemV 80 /FontFile2 %d 0 R >>" % (name, flags, angle, num + 2)),
+            num + 2: stream("/Length1 %d" % len(ttf), ttf, flate=True),
+        }
+
+    twin = _box_ttf(2, adv=1200)
+    tu = ("/CIDInit /ProcSet findresource begin 12 dict begin begincmap /CMapName /Adobe-Identity-UCS def /CMapType 2 def\n"
+          "1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n1 beginbfchar\n<0001> <0117>\nendbfchar\n"
+          "endcmap CMapName currentdict /CMap defineresource pop end end\n")
+    ex = {**face(6, "AAAAAJ+ArialMT", 1000), **face(9, "AAAAAK+Arial-BoldMT", 1200),
+          **face(12, "AAAAAL+Arial-ItalicMT", 1100, flags=96, angle=-12),
+          15: "<< /Type /Font /Subtype /Type0 /BaseFont /AAAAAM+Arial-BoldMT /Encoding /Identity-H /DescendantFonts [16 0 R] /ToUnicode 18 0 R >>",
+          16: ("<< /Type /Font /Subtype /CIDFontType2 /BaseFont /AAAAAM+Arial-BoldMT /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) "
+               "/Supplement 0 >> /W [1 [1200]] /CIDToGIDMap /Identity /FontDescriptor 17 0 R >>"),
+          17: ("<< /Type /FontDescriptor /FontName /AAAAAM+Arial-BoldMT /Flags 32 /FontBBox [50 0 950 800] /ItalicAngle 0 /Ascent 800 "
+               "/Descent -200 /CapHeight 800 /StemV 80 /FontFile2 19 0 R >>"),
+          18: stream("", tu.encode(), flate=True),
+          19: stream("/Length1 %d" % len(twin), twin, flate=True)}
+
+    def row(markup):
+        out, font, buf = "", "FR", ""
+        for ch in markup + "\0":
+            nxt = {"*": "FB" if font != "FB" else "FR", "_": "FI" if font != "FI" else "FR"}.get(ch)
+            if (nxt or ch == "\0" or ch == "ė") and buf:
+                out += "/%s 5 Tf (%s) Tj " % (font, buf)
+                buf = ""
+            if nxt:
+                font = nxt
+            elif ch == "ė":
+                out += "/FBU 5 Tf <0001> Tj "
+            elif ch != "\0":
+                buf += ch
+        return out
+
+    rows = "".join("%s%s\n" % ("" if k == 0 else "0 -7 Td ", row(r)) for k, r in enumerate(RUNS_ROWS))
+    content = (text(20, 360, "KEEP_PUBLIC_RUNS", 10) + ("BT 20 300 Td\n%sET\n" % rows
+               + "BT /FR 5 Tf 20 230 Td (%s) Tj ET\n" % RUNS_KEEP).encode())
+    return simple(content, ex, fonts="/F1 5 0 R /FR 6 0 R /FB 9 0 R /FI 12 0 R /FBU 15 0 R")
+
+
 def _joined(runs):
     return "".join(s for _, s in runs)
 
@@ -610,6 +669,11 @@ FIXTURES = {
                                 "mustRemove": [STYLE_SECRET], "mustKeepText": ["KEEP_PUBLIC_STYLES", STYLE_KEEP, STYLE_HEAD.split()[1]],
                                 "regions": [{"kind": "sensitive", "page": 0, "rectTopLeft": [79, 103, 116, 110], "text": STYLE_SECRET},
                                             R(20, 360, "KEEP_PUBLIC_STYLES", 10, kind="public")]}, {}),
+    "word-inline-runs": (word_inline_runs, ["embedded-font", "mixed-style-paragraph"],
+                         {"behavior": "Word shape: inline bold defined terms (one letter from the bold face's Type0 twin) and an inline italic reference inside regular, softly wrapped rows; editing a regular word keeps every bold and italic glyph in its own face, and the replaced word is gone",
+                          "mustRemove": [RUNS_SECRET], "mustKeepText": ["KEEP_PUBLIC_RUNS", RUNS_KEEP, "Owner"],
+                          "regions": [{"kind": "sensitive", "page": 0, "rectTopLeft": [54, 103, 81, 110], "text": RUNS_SECRET},
+                                      R(20, 360, "KEEP_PUBLIC_RUNS", 10, kind="public")]}, {}),
 }
 for _id, _mode, _alg in (("encrypted-rc4-40", "RC4_40", "RC4-40"), ("encrypted-rc4-128", "RC4_128", "RC4-128"),
                          ("encrypted-aes-128", "AES_128", "AES-128"), ("encrypted-aes-256", "AES_256", "AES-256")):

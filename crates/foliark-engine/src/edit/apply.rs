@@ -155,7 +155,6 @@ fn apply_one(
         laid,
         ..
     } = plan_edit(doc, page, &e.rects, e.font.as_deref(), &e.text, ctx)?;
-    let info = &p.info;
     let plan = laid.fit()?;
 
     // Remove the selected clusters. The glyphs the new text reuses from the source font must
@@ -177,13 +176,23 @@ fn apply_one(
     };
     let mut removal = RedactionPlan::build(doc, &committed, binding)?;
     let runs = || plan.lines.iter().flat_map(|l| &l.runs);
-    if let Some(kept) = p.font_obj.and_then(|f| removal.font_survivors.get_mut(&f)) {
-        let reused = runs()
-            .filter(|r| r.source == RunSource::Embedded)
+    // Each look's font (ADR 0013): the codes its runs reuse.
+    let reused = |face: &dyn FontFace| {
+        runs()
+            .filter(|r| r.source == RunSource::Embedded && r.font == face.id())
             .flat_map(|r| r.glyphs.iter().map(|g| g.gid))
-            .collect::<BTreeSet<_>>();
-        for code in reused {
-            if let Some(g) = p.glyphs.iter().find(|g| g.char_code == code)
+            .collect::<BTreeSet<_>>()
+    };
+    for look in &p.looks {
+        let (Some(face), Some(kept)) = (
+            &look.source,
+            look.font_obj
+                .and_then(|f| removal.font_survivors.get_mut(&f)),
+        ) else {
+            continue;
+        };
+        for code in reused(face) {
+            if let Some(g) = look.glyphs.iter().find(|g| g.char_code == code)
                 && !kept.iter().any(|k| k.char_code == code)
             {
                 kept.push(g.clone());
@@ -219,26 +228,23 @@ fn apply_one(
             }
             registered.push((id.to_owned(), font, res));
         }
-        let source_res = format!("FkE{n}S");
+        let source_res: Vec<String> = (0..p.looks.len()).map(|k| format!("FkE{n}S{k}")).collect();
         let mut sources = SourceFonts::new();
-        if let (Some(face), Some(font)) = (&p.source, p.font_obj)
-            && runs().any(|r| r.source == RunSource::Embedded)
-        {
-            w.add_page_font(page, &source_res, Val::Src(font))?;
-            sources.insert(face.id(), (source_res.as_str(), face.code_width()));
+        for (look, res) in p.looks.iter().zip(&source_res) {
+            if let (Some(face), Some(font)) = (&look.source, look.font_obj)
+                && !sources.contains_key(face.id())
+                && !reused(face).is_empty()
+            {
+                w.add_page_font(page, res, Val::Src(font))?;
+                sources.insert(face.id(), (res.as_str(), face.code_width()));
+            }
         }
         let fonts: PlanFonts<'_> = registered
             .iter()
             .map(|(id, font, res)| (id.as_str(), (res.as_str(), font)))
             .collect();
         let geometry = doc.page_geometry(page)?;
-        let ops = emit_plan(
-            &plan,
-            &fonts,
-            &sources,
-            info.color,
-            geometry.display_to_user.0,
-        )?;
+        let ops = emit_plan(&plan, &fonts, &sources, geometry.display_to_user.0)?;
         w.append_page_content(page, &ops)?;
     }
     Ok((w.write()?, plan.edit_layout(&e.id)))
