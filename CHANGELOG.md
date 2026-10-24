@@ -4,6 +4,9 @@ All notable changes to `@zilijonas/foliark` (named `@foliark/sdk` before 0.1.0 w
 
 ## [Unreleased]
 
+### Added
+- `ParagraphInfo.segments` (additive): the paragraph's style segments (ADR 0012) as UTF-16 ranges of `originalText` that rejoin to it exactly, each with its font (the page's own, never the caller's), size, colour, flags and editor face, so an app no longer calls `prepareParagraph` per row to learn the look of a mixed block. Empty when `originalText` is null (NEW-110).
+
 ## [0.1.3] - 2026-10-24
 
 Edits on Word PDFs: untouched glyphs are no longer erased when fonts share a program, and editing a paragraph keeps its heading and body styles and stays inside the margin. Source: tag `v0.1.3`. Tarball and hashes: `docs/release/candidate.md`.

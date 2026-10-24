@@ -2,13 +2,15 @@
 //! fixed budget around them (wrap width, line count, height) and the font it will use.
 //! Everything is in display space and computed from the page as it is, never from the edit.
 use crate::Document;
-use crate::interpret::{GlyphItem, ItemKind};
+use crate::interpret::{GlyphItem, ItemKind, SemanticPage};
 use crate::text::{ClusterId, SourceFontFace, TextLayout};
 use foliark_model::{
     Cluster, EditorFace, ErrorCode, ErrorDetails, FontMatchRule, FontResolution, FontRule,
-    GROUPING, ObjectId, ParagraphInfo, PdfError, Quad, Rect, StyleRun,
+    GROUPING, ObjectId, ParagraphInfo, ParagraphSegment, PdfError, Quad, Rect, StyleRun,
 };
-use foliark_text::{FontFace, Ladder, LayoutParams, Registry, StyleFlags, layout_unbounded};
+use foliark_text::{
+    Candidate, FontFace, Ladder, LayoutParams, Registry, StyleFlags, layout_unbounded,
+};
 
 const INVISIBLE: u32 = 1;
 const UNMAPPED: u32 = 2;
@@ -210,6 +212,88 @@ fn same_look(a: &StyleRun, b: &StyleRun) -> bool {
         && a.flags == b.flags
 }
 
+fn style_flags(style: &StyleRun) -> StyleFlags {
+    StyleFlags {
+        mono: style.flags.mono,
+        serif: style.flags.serif,
+        bold: style.flags.bold,
+        italic: style.flags.italic,
+    }
+}
+
+/// What the wire says about the font the ladder picked first for `style`.
+fn describe(
+    style: &StyleRun,
+    primary: &Candidate,
+    source: Option<&SourceFontFace>,
+    registry: &Registry,
+    editor_face: bool,
+) -> (FontResolution, Option<EditorFace>) {
+    match (primary.rule, source) {
+        (None, Some(s)) => (
+            FontResolution::Embedded {
+                font_ref: style.font_ref.clone(),
+                name: s.name().to_owned(),
+                covers_ascii: s.covers_ascii(),
+            },
+            s.editor_face().filter(|_| editor_face),
+        ),
+        (rule, _) => {
+            let reg = registry
+                .get(primary.face.id())
+                .expect("a registered candidate is in the registry");
+            (
+                FontResolution::Registered {
+                    font_id: reg.info().id.clone(),
+                    family: reg.info().family.clone(),
+                    rule: rule.unwrap_or(FontRule::Flags),
+                },
+                editor_face.then(|| EditorFace {
+                    font_key: format!("reg-{}", reg.info().id),
+                    bytes: reg.bytes().to_vec(),
+                }),
+            )
+        }
+    }
+}
+
+/// UTF-16 offset of the start of line `n` of `text` split at LF.
+fn line_offset(text: &str, n: usize) -> u32 {
+    let mut at = 0;
+    for l in text.split('\n').take(n) {
+        at += l.encode_utf16().count() + 1;
+    }
+    at as u32
+}
+
+/// `style` shown as a segment's look.
+fn segment_of(
+    style: &StyleRun,
+    range: (u32, u32),
+    resolved: (FontResolution, Option<EditorFace>),
+) -> ParagraphSegment {
+    ParagraphSegment {
+        start: range.0,
+        end: range.1,
+        font_size: style.size,
+        color: style.color,
+        bold: style.flags.bold,
+        italic: style.flags.italic,
+        serif: style.flags.serif,
+        mono: style.flags.mono,
+        font: resolved.0,
+        editor_face: resolved.1,
+    }
+}
+
+/// A style's font object, its glyphs on the page and the face built from them (ladder rung 2).
+#[derive(Default)]
+struct SourceFont {
+    obj: Option<ObjectId>,
+    glyphs: Vec<GlyphItem>,
+    face: Option<SourceFontFace>,
+}
+
 /// One style segment of a selection (ADR 0012): consecutive hard lines of `originalText` drawn
 /// in the same look.
 pub struct Segment {
@@ -279,6 +363,35 @@ impl Document {
         font_match: &[FontMatchRule],
     ) -> Result<Prepared, PdfError> {
         self.prepare_with(page, |_| ids.to_vec(), font, false, registry, font_match)
+    }
+
+    /// The paragraph font's object, its glyphs on the page and the face built from them (rung 2).
+    fn source_font(&self, model: &SemanticPage, style: &StyleRun) -> Result<SourceFont, PdfError> {
+        let Some((n, g)) = style
+            .font_ref
+            .split_once(' ')
+            .filter(|_| style.font_ref != "0 0")
+        else {
+            return Ok(SourceFont::default());
+        };
+        let id = ObjectId {
+            num: n.parse().unwrap_or(0),
+            generation: g.parse().unwrap_or(0),
+        };
+        let evidence: Vec<GlyphItem> = model
+            .items
+            .iter()
+            .filter_map(|it| match &it.kind {
+                ItemKind::Glyph(g) if g.font == Some(id) => Some(g.clone()),
+                _ => None,
+            })
+            .collect();
+        let source = SourceFontFace::new(self, id, &evidence)?;
+        Ok(SourceFont {
+            obj: Some(id),
+            glyphs: evidence,
+            face: source,
+        })
     }
 
     fn prepare_with(
@@ -410,33 +523,12 @@ impl Document {
 
         // Font (§6.4): the ladder's first choice names the paragraph's font; every candidate
         // reserves descent, so the budget holds whichever one a cluster ends up using.
-        let mut font_obj = None;
-        let mut evidence: Vec<GlyphItem> = Vec::new();
-        let source = match style.font_ref.split_once(' ') {
-            Some((n, g)) if style.font_ref != "0 0" => {
-                let id = ObjectId {
-                    num: n.parse().unwrap_or(0),
-                    generation: g.parse().unwrap_or(0),
-                };
-                font_obj = Some(id);
-                evidence = model
-                    .items
-                    .iter()
-                    .filter_map(|it| match &it.kind {
-                        ItemKind::Glyph(g) if g.font == Some(id) => Some(g.clone()),
-                        _ => None,
-                    })
-                    .collect();
-                SourceFontFace::new(self, id, &evidence)?
-            }
-            _ => None,
-        };
-        let flags = StyleFlags {
-            mono: style.flags.mono,
-            serif: style.flags.serif,
-            bold: style.flags.bold,
-            italic: style.flags.italic,
-        };
+        let SourceFont {
+            obj: font_obj,
+            glyphs: evidence,
+            face: source,
+        } = self.source_font(&model, style)?;
+        let flags = style_flags(style);
         let ladder = Ladder {
             registry,
             caller: font,
@@ -458,32 +550,7 @@ impl Document {
             .iter()
             .find_map(|c| c.face.shape(" ", size).ok())
             .map_or(size * 0.28, |g| g.iter().map(|g| g.x_advance).sum());
-        let (resolution, face) = match (primary.rule, &source) {
-            (None, Some(s)) => (
-                FontResolution::Embedded {
-                    font_ref: style.font_ref.clone(),
-                    name: s.name().to_owned(),
-                    covers_ascii: s.covers_ascii(),
-                },
-                s.editor_face().filter(|_| editor_face),
-            ),
-            (rule, _) => {
-                let reg = registry
-                    .get(primary.face.id())
-                    .expect("a registered candidate is in the registry");
-                (
-                    FontResolution::Registered {
-                        font_id: reg.info().id.clone(),
-                        family: reg.info().family.clone(),
-                        rule: rule.unwrap_or(FontRule::Flags),
-                    },
-                    editor_face.then(|| EditorFace {
-                        font_key: format!("reg-{}", reg.info().id),
-                        bytes: reg.bytes().to_vec(),
-                    }),
-                )
-            }
-        };
+        let (resolution, face) = describe(style, primary, source.as_ref(), registry, editor_face);
 
         let max_lines = ((bottom_limit + 0.1 - first_baseline - descent) / line_step)
             .floor()
@@ -551,6 +618,34 @@ impl Document {
                     })
                     .fold(0.0, f64::max)
             });
+        // The wire's segments: the page's own fonts (no caller font), as `page_fonts` measures.
+        let mut wire: Vec<ParagraphSegment> = Vec::new();
+        if let Some(text) = original.as_deref() {
+            let total = text.encode_utf16().count() as u32;
+            for (k, seg) in segments.iter().enumerate() {
+                let end = segments
+                    .get(k + 1)
+                    .map_or(total, |n| line_offset(text, n.line));
+                let look = &styles[dominant(&seg.clusters, clusters) as usize];
+                let face = self.source_font(&model, look)?.face;
+                let own = Ladder {
+                    source: face.as_ref().map(|s| s as &dyn FontFace),
+                    source_name: &look.font_name,
+                    flags: style_flags(look),
+                    ..page_fonts
+                };
+                let cands = own.candidates()?;
+                let Some(first) = cands.first() else {
+                    return Err(PdfError::new(ErrorCode::EditNoFont));
+                };
+                let resolved = describe(look, first, face.as_ref(), registry, editor_face);
+                wire.push(segment_of(
+                    look,
+                    (line_offset(text, seg.line), end),
+                    resolved,
+                ));
+            }
+        }
         let info = ParagraphInfo {
             doc_id: String::new(),
             revision: 0,
@@ -579,6 +674,7 @@ impl Document {
             original_text: original,
             font: resolution,
             editor_face: face,
+            segments: wire,
         };
         Ok(Prepared {
             info,

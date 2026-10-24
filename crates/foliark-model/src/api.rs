@@ -523,6 +523,31 @@ pub struct ParagraphInfo {
     pub font: FontResolution,
     #[ts(optional = nullable)]
     pub editor_face: Option<EditorFace>,
+    /// ADR 0012's style segments, top to bottom; empty when `originalText` is null. Their ranges
+    /// tile `originalText` exactly (a segment's hard-break LF ends it), so slicing the text at
+    /// them and joining the slices gives it back. Each describes the page's own font, never the
+    /// caller's.
+    pub segments: Vec<ParagraphSegment>,
+}
+
+/// One style segment of a paragraph: consecutive hard lines drawn in one look (ADR 0012).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ParagraphSegment {
+    /// UTF-16 offsets into `ParagraphInfo.originalText`, `start` inclusive.
+    pub start: u32,
+    pub end: u32,
+    pub font_size: f64,
+    #[ts(type = "[number, number, number]")]
+    pub color: [f64; 3],
+    pub bold: bool,
+    pub italic: bool,
+    pub serif: bool,
+    pub mono: bool,
+    pub font: FontResolution,
+    #[ts(optional = nullable)]
+    pub editor_face: Option<EditorFace>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]

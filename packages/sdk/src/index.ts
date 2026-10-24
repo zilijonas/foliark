@@ -33,6 +33,7 @@ export type { Limits } from "./generated/Limits.js";
 export type { Matrix } from "./generated/Matrix.js";
 export type { PageGeometry } from "./generated/PageGeometry.js";
 export type { ParagraphInfo } from "./generated/ParagraphInfo.js";
+export type { ParagraphSegment } from "./generated/ParagraphSegment.js";
 export type { Point } from "./generated/Point.js";
 export type { Quad } from "./generated/Quad.js";
 export type { Rect } from "./generated/Rect.js";
