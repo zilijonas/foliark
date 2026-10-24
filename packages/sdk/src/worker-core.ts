@@ -168,7 +168,7 @@ export function createWorkerCore(host: WorkerHost, stepBudget = STEP_BUDGET) {
         return { result: e.registerFonts(a.fonts.map((f: Args) => ({ ...f, bytes: new Uint8Array(f.bytes) }))) };
       case "prepareParagraph": {
         const r = e.prepareParagraph(d, a.page, a.rects, a.font, a.editorFace);
-        const faces = [r, ...r.segments].flatMap((x) => (x.editorFace ? [x.editorFace] : []));
+        const faces = [r, ...r.segments, ...r.looks].flatMap((x) => (x.editorFace ? [x.editorFace] : []));
         for (const face of faces) face.bytes = ownBuffer(face.bytes);
         return { result: r, transfer: faces.map((face) => face.bytes as unknown as ArrayBuffer) };
       }

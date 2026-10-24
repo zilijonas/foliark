@@ -71,5 +71,12 @@ describe("paragraph edits", () => {
     ]);
     expect(text.slice(0, info.segments[0].end)).toBe("1 ARTICLE. SCOPE\n");
     expect(info.segments[1].editorFace!.bytes).toBeInstanceOf(Uint8Array);
+    // ADR 0013: the looks (body, heading) and the runs of the text they draw, each face a Uint8Array.
+    expect(info.runs.map((r) => text.slice(r.start, r.end)).join("")).toBe(text);
+    expect(info.looks.map((l) => l.bold)).toEqual([false, true]);
+    expect(info.runs[0]).toMatchObject({ start: 0, look: 1 });
+    for (const l of info.looks) expect(l.editorFace!.bytes).toBeInstanceOf(Uint8Array);
+    const p = await doc.layoutEdit(0, [{ x: 15, y: 94, width: 165, height: 31 }], text.replace("charlie", "charles"));
+    expect(p.styles.map((s) => s.look)).toEqual(info.runs.map((r) => r.look));
   });
 });

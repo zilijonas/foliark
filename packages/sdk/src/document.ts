@@ -163,7 +163,7 @@ export function makeHandle(link: Link, id: string, info: DocumentInfo): Document
     async prepareParagraph(p, rects, o) {
       const r = await call<ParagraphInfo>("prepareParagraph", { page: page(p), rects, font: o?.font, editorFace: o?.editorFace });
       // The faces cross the worker boundary as transferred ArrayBuffers.
-      for (const x of [r, ...r.segments]) if (x.editorFace) x.editorFace.bytes = new Uint8Array(x.editorFace.bytes as unknown as ArrayBuffer);
+      for (const x of [r, ...r.segments, ...r.looks]) if (x.editorFace) x.editorFace.bytes = new Uint8Array(x.editorFace.bytes as unknown as ArrayBuffer);
       return r;
     },
     async layoutEdit(p, rects, text, o) {

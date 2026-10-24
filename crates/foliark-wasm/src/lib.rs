@@ -274,16 +274,23 @@ impl Engine {
             .map_err(err)?;
         let out = to_js(&p)?;
         // `bytes` is typed `Uint8Array` (and transferred), not the number array serde makes: the
-        // paragraph's face and each segment's.
+        // paragraph's face, each segment's and each look's.
         let segments = Reflect::get(&out, &"segments".into())?;
-        let owners = std::iter::once((out.clone(), &p.editor_face)).chain(
-            p.segments.iter().enumerate().map(|(i, s)| {
-                (
-                    Reflect::get_u32(&segments, i as u32).unwrap_or_default(),
-                    &s.editor_face,
-                )
-            }),
-        );
+        let looks = Reflect::get(&out, &"looks".into())?;
+        let at = |list: &JsValue, i: usize| Reflect::get_u32(list, i as u32).unwrap_or_default();
+        let owners = std::iter::once((out.clone(), &p.editor_face))
+            .chain(
+                p.segments
+                    .iter()
+                    .enumerate()
+                    .map(|(i, s)| (at(&segments, i), &s.editor_face)),
+            )
+            .chain(
+                p.looks
+                    .iter()
+                    .enumerate()
+                    .map(|(i, l)| (at(&looks, i), &l.editor_face)),
+            );
         for (owner, face) in owners {
             if let Some(face) = face {
                 let f = Reflect::get(&owner, &"editorFace".into())?;
