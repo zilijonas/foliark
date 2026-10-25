@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Pinned, bounded fuzz run: every target for SECS seconds (default 60) with a fixed libFuzzer
-# seed, 2 s per-input timeout, 2 GB RSS cap. Exits non-zero if any target crashes, hangs or
+# seed, 5 s per-input timeout (a hang detector: valid 10-15 KB roundtrip units take 2-3.5 s in the sanitizer build, NEW-121), 2 GB RSS cap. Exits non-zero if any target crashes, hangs or
 # runs out of memory (the first artifact of each failing target is printed).
 #   tools/fuzz-smoke/run.sh [target...]        FUZZ_SECS=120  FUZZ_RUNS=200000 (exec-exact)
 # On the owner's Mac mini the whole run goes through the memory queue (4 GB); without ~/ai/bin/memory-queue it runs directly. Needs `rustup toolchain install nightly`
@@ -26,7 +26,7 @@ cargo +nightly fuzz build || exit 2
 failed=()
 for t in "${targets[@]}"; do
   echo "== $t ($stop)"
-  cargo +nightly fuzz run "$t" -- "$stop" -seed=1 -max_len=262144 -timeout=2 \
+  cargo +nightly fuzz run "$t" -- "$stop" -seed=1 -max_len=262144 -timeout=5 \
     -rss_limit_mb=2048 -malloc_limit_mb=1024 -dict=fuzz/pdf.dict -print_final_stats=1 || {
     failed+=("$t")
     ls fuzz/artifacts/"$t" 2>/dev/null | head -3 | sed "s|^|   artifact fuzz/artifacts/$t/|"
