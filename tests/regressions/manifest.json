@@ -46,6 +46,17 @@
       "license": "synthetic, generated (Foliark, owner-authored)"
     },
     {
+      "path": "roundtrip-2.pdf",
+      "target": "roundtrip",
+      "kind": "panic (writer output only reopens with repair)",
+      "cause": "empty dict key (`/` then `1`): pdf-writer pads only after a regular byte, so the output read `/1`, a key without a value",
+      "fix": "writer/mod.rs name(): an empty name is refused with MALFORMED_PDF instead of written ambiguously",
+      "sha256": "bf8d4efb9c94f756bf0a21c8571db0a342382818d3f80b0d8a3682550a66cf10",
+      "bytes": 196,
+      "origin": "synthetic, hand-minimized from a fuzz-smoke finding (NEW-117)",
+      "license": "synthetic, generated (Foliark, owner-authored)"
+    },
+    {
       "path": "render-1.pdf",
       "target": "render",
       "kind": "allocation beyond limit (30 GB malloc)",

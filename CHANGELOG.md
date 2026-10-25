@@ -10,6 +10,7 @@ Retyping over a selection gives the new text one look. Source: tag `v0.1.5`. Tar
 
 ### Fixed
 - Retyping over a selection in a paragraph with inline bold or italic text could split the typed words across looks: select all and type a sentence gave a regular first word and italic next words; select from a bold word to the end gave a bold word and an italic rest. The edit lined single spaces up as if they were shared words, so each typed word took the look of whichever old word its space landed on. Text typed over text now takes one look (the first replaced character's); words you kept keep theirs (ADR 0013) (NEW-115).
+- A file with an empty name (a bare `/`) in a dictionary the export keeps, such as a font resource key, was written so the output read back as a different, incomplete dictionary and only reopened with repair. Export now refuses such a file with `MALFORMED_PDF` (found by fuzzing; 0.1.4 has the same defect) (NEW-117).
 
 ## [0.1.4] - 2026-10-24
 
