@@ -26,3 +26,10 @@ On the owner's iOS PDF, 10 of 38 paragraphs reported "does not fit" with their t
 - The box may exceed the page extent by the original text's own excess (0.01 to 0.05 pt here). Edited text can reach that far, never further: text longer than the widest original line, as measured, still wraps or refuses `EDIT_NO_FIT`. `ParagraphInfo.wrapWidth` reports the widened value, the one the layout uses.
 - A decomposed mark is written with its own advance and no kern, as Quartz draws it. A source font whose marks need a positioning kern (outline right of the origin) would show the mark beside its base; no such file is known.
 - `prepare` lays the original text out once more (one shaping pass, no I/O).
+
+## Amendment 2026-10-25 (NEW-119): a lone line uses the room beside it
+Owner invoice: the "Kodas" column header, one line with the next header beside it, wrapped after the typed space ("Kodas 2") with free space between the two. Spec §6.1 gave a paragraph with a word beside it `wrapRight` = its own max x, so a one-line header had no room to grow.
+
+Decision: when the selection is a single line, `wrapRight` is the x of the nearest word beside it (vertically overlapping, starting right of the line) minus one space width of the paragraph's font, never less than the line's own max x. A paragraph of two or more lines keeps the spec value (the width it wraps at is its own), and so does one with nothing beside it (the page's text edge). `maxLines` is untouched. Preview and commit share `prepare`, so both use it.
+
+Consequences: no text is placed over another column (the box ends a space before it); `wrapWidth` of a one-line paragraph with neighbours is larger than before, an additive change to a value apps already treat as a limit.
