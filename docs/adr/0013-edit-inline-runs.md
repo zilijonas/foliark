@@ -1,6 +1,6 @@
 # ADR 0013: An edit keeps inline bold and italic runs
 
-Status: Accepted, 2026-10-24 (NEW-113). Amends spec §6.2 (`ParagraphInfo.looks`, `runs`), §6.3 (each character drawn in its own run's style) and §6.4 (a caller font per run); amends ADR 0012 (a style change mid-line is no longer flattened). ADR 0004 is unchanged: preview and commit still call one `plan_edit`, and the fingerprint covers the runs.
+Status: Accepted, 2026-10-24 (NEW-113); amended 2026-10-25 (NEW-115, see Amendment). Amends spec §6.2 (`ParagraphInfo.looks`, `runs`), §6.3 (each character drawn in its own run's style) and §6.4 (a caller font per run); amends ADR 0012 (a style change mid-line is no longer flattened). ADR 0004 is unchanged: preview and commit still call one `plan_edit`, and the fingerprint covers the runs.
 
 ## Context
 Owner's Word law PDF in Safari on 0.1.3: editing one word of article 2 turned its inline bold defined terms (bold runs inside regular body lines, Arial-Bold/Arial twins) regular. ADR 0012 splits a selection only at hard breaks where the row's look changes; inside a segment the whole changed part was laid out with one ladder, the segment's main style, so every bold or italic glyph on the re-laid-out lines came back regular. With HDDN's "Use a similar font?" the caller font (one registered face) drew the whole part. On the article the owner edited, 14 inline bold terms (381 bold glyphs) sit in a region of 6 segments; 3 of the terms share the edited segment.
@@ -25,3 +25,14 @@ Owner's Word law PDF in Safari on 0.1.3: editing one word of article 2 turned it
 - A look whose characters no font covers still refuses `EDIT_NO_FONT` when it is laid out; a run's own source subset covers only the characters the page draws with it, so a letter new to a bold term falls to the registered fonts (the bold face by flags) as before.
 - Size per run is kept; a superscript's rise is not (it lands on the baseline), as before.
 - Limit: a run boundary inside a word that a replaced block covers goes with the block's rule (the first replaced character's look), e.g. retyping a whole word whose first letter was bold.
+
+## Amendment, 2026-10-25 (NEW-115): retyped text takes one look
+Owner's Word PDF in Safari: select all in a paragraph (regular start, inline bold, italic tail) and type a three-word sentence ending in a full stop gave a regular first word and italic next words; select from a bold word to the end and type gave bold, then regular, then italic. Cause, measured on that paragraph (look ids and token positions only): the word diff treated each single whitespace character as a token that can match, so the new text's two spaces lined up with the last two spaces of the old italic tail, which cut one replaced block into word-sized pieces, and each piece took the look of the old word its space landed on; the final '.' kept the old italic as a common character suffix.
+
+Rule, replacing "a shared space aligns words" and "a common character prefix and suffix keep their looks in any block":
+- Only words line up (prefix, suffix and the longest common subsequence run on words); a shared whitespace character is no evidence that the words around it correspond.
+- Between shared words, old and new text with the same number of words (two or more) replace word for word, each new word taking the look of the old word it replaces (`Owner is` to `Owners be` keeps bold on the first word only). With any other counts the block is one replacement and takes ONE look: the first replaced character's. The insertion rule (neighbours' shared look, else the paragraph's) applies only where nothing is replaced.
+- In a block, equal whitespace at its ends keeps its looks; a common character prefix and suffix keep theirs only when each side is a single word (an in-word edit: a twin letter, a letter typed at the end of a word), since across several words a shared letter or full stop is stray.
+- A new whitespace character is still the paragraph's.
+
+Consequence: `Owner is` replaced by `Owners now be` is one block and is all bold; before, only `Owners` was (the fixture tests now retype `Owner is` as `Owners be`, word for word). Typing a letter new to a bold run over a bold term still needs the bold face (`EDIT_NO_FONT` as above). A word kept by the diff keeps its characters' looks as before.
