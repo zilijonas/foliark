@@ -4,6 +4,10 @@ All notable changes to `@zilijonas/foliark` (named `@foliark/sdk` before 0.1.0 w
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-10-25
+
+Retyping over a selection gives the new text one look. Source: tag `v0.1.5`. Tarball and hashes: `docs/release/candidate.md`.
+
 ### Fixed
 - Retyping over a selection in a paragraph with inline bold or italic text could split the typed words across looks: select all and type a sentence gave a regular first word and italic next words; select from a bold word to the end gave a bold word and an italic rest. The edit lined single spaces up as if they were shared words, so each typed word took the look of whichever old word its space landed on. Text typed over text now takes one look (the first replaced character's); words you kept keep theirs (ADR 0013) (NEW-115).
 
