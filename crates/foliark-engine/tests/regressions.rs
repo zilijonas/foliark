@@ -99,6 +99,12 @@ fn regressions_have_typed_results() {
         match path.extension().and_then(|e| e.to_str()) {
             Some("pdf") => {
                 pdf(&data);
+                if name == "roundtrip-3.pdf" {
+                    // 4 MiB of junk tokens per stream are dropped, not carried into the output.
+                    let doc = open(&data, true).unwrap();
+                    let out = Writer::new(doc.reader(), tight()).write().unwrap();
+                    assert!(out.len() < 8 << 10, "junk survived: {} bytes", out.len());
+                }
                 if name == "roundtrip-2.pdf" {
                     // An empty name cannot be written unambiguously: refused, never emitted.
                     let doc = open(&data, true).unwrap();
