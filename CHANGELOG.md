@@ -7,6 +7,9 @@ All notable changes to `@zilijonas/foliark` (named `@foliark/sdk` before 0.1.0 w
 ### Changed
 - A one-line paragraph with other text beside it (a table header with its neighbour column) now has `ParagraphInfo.wrapWidth` up to one space short of that text instead of its own width, so typing a longer header uses the free room before wrapping. A wrapped paragraph keeps the width it wraps at, and a line never reaches into the next column (ADR 0011 amendment) (NEW-119).
 
+### Fixed
+- The editor face claimed characters the page never drew with that font when the program's own cmap already agreed with the glyph evidence and also mapped more: a Word subset keeps every glyph slot with the outlines of unused glyphs emptied. The browser then drew such a typed letter blank (or as the wrong glyph) instead of falling back to the bundled font, while the layout set it in that font and the commit saved it. The cmap is now the evidence exactly, so the browser's per-glyph fallback matches the engine's ladder. Owner Word PDF (a bold subset with 4685 glyph slots): the editor drew `c f h q x G H J Q W X Y Z` blank; none now (NEW-120).
+
 ## [0.1.5] - 2026-10-25
 
 Retyping over a selection gives the new text one look. Source: tag `v0.1.5`. Tarball and hashes: `docs/release/candidate.md`.
