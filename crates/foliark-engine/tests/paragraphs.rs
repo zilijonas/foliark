@@ -108,6 +108,22 @@ fn budget_stops_at_the_word_below_and_the_page_bottom() {
 }
 
 #[test]
+fn a_single_line_grows_into_the_free_room_beside_it() {
+    // A table header "Code" with the next column's header 100 pt to its right. The line below
+    // reaches past that header: the page's text edge must not pull the box into its column.
+    let doc = build(
+        &["BT /F1 10 Tf 20 300 Td (Code) Tj ET\n\
+           BT /F1 10 Tf 120 300 Td (Name) Tj ET\n\
+           BT /F1 10 Tf 20 250 Td (a long line of text that ends at the right edge) Tj ET"],
+        &Font::default(),
+        0,
+    );
+    let code = prepare(&doc, &[rect(10.0, 85.0, 40.0, 20.0)]).unwrap();
+    // Up to a space (5 pt) short of the next text: never into the other column.
+    near(code.wrap_width, 120.0 - 5.0 - 20.0);
+}
+
+#[test]
 fn columns_do_not_borrow_each_others_space() {
     let doc = build(
         &["BT /F1 10 Tf 20 300 Td (left column a) Tj ET\n\

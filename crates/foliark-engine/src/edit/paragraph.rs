@@ -605,7 +605,12 @@ impl Document {
             .filter(|c| c.flags & INVISIBLE == 0)
             .map(|c| bounds(&c.quad))
             .collect();
-        let beside = others.iter().any(|w| w[0] > x1 && w[1] < y1 && w[3] > top);
+        let nearest = others
+            .iter()
+            .filter(|w| w[0] > x1 && w[1] < y1 && w[3] > top)
+            .map(|w| w[0])
+            .fold(f64::INFINITY, f64::min);
+        let beside = nearest.is_finite();
         let wrap_right = if beside {
             x1
         } else {
@@ -680,6 +685,13 @@ impl Document {
             .map_or(size * 0.28, |g| g.iter().map(|g| g.x_advance).sum());
         let (resolution, face) = describe(style, primary, source, registry, editor_face);
 
+        // ADR 0011 amendment: a lone line has no wrap width of its own, so beside other text it
+        // may grow up to a space short of it. A wrapped paragraph keeps the width it wraps at.
+        let room = if rows.len() == 1 && beside {
+            (nearest - space).max(wrap_right)
+        } else {
+            wrap_right
+        };
         let max_lines = ((bottom_limit + 0.1 - first_baseline - descent) / line_step)
             .floor()
             .max(-1.0) as i64
@@ -837,7 +849,7 @@ impl Document {
             serif: style.flags.serif,
             mono: style.flags.mono,
             mixed_style: mixed,
-            wrap_width: (wrap_right - x0).max(measured),
+            wrap_width: (room - x0).max(measured),
             max_height: bottom_limit - top,
             // The lines the paragraph has now are always there to use.
             max_lines: max_lines.max(rows.len() as i64) as u32,
