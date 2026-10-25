@@ -6,7 +6,7 @@ Canonical for Claude Code and Codex (`CLAUDE.md` only imports this file). Read i
 
 Headless Rust/WASM PDF SDK for redacting, editing and sanitizing PDFs in the browser, offline and on mobile, with typed refusals instead of silent fallbacks. First consumer: HDDN (the owner's private app, a separate repo), replacing Pyodide + PyMuPDF.
 
-Status: `@zilijonas/foliark` 0.1.5 on npm, 0.1.6 release candidate (release record `docs/release/candidate.md`), HDDN production on 0.1.4 since 2026-10-25 (first Foliark release in production 2026-10-23) (`docs/integration/hddn-acceptance.md`). License: AGPL-3.0-only plus separate commercial licensing (`LICENSING.md`, `COMMERCIAL-LICENSING.md`). External code contributions are not accepted (`CONTRIBUTING.md`); only the owner and agents acting for the owner commit. Security reports: `SECURITY.md`. Board: Workbench project `NEW` (section 8).
+Status: `@zilijonas/foliark` 0.1.6 on npm (release record `docs/release/candidate.md`), HDDN production on 0.1.6 since 2026-10-25 (first Foliark release in production 2026-10-23) (`docs/integration/hddn-acceptance.md`). License: AGPL-3.0-only plus separate commercial licensing (`LICENSING.md`, `COMMERCIAL-LICENSING.md`). External code contributions are not accepted (`CONTRIBUTING.md`); only the owner and agents acting for the owner commit. Security reports: `SECURITY.md`. Board: Workbench project `NEW` (section 8).
 
 ## 2. Architecture
 

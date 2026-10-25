@@ -51,7 +51,7 @@ fn emit(data: &[u8], obj: ObjectId, subs: &[(Range<usize>, Vec<u8>)]) -> Result<
                 }
             }
             None => {
-                if !OPERATORS.contains(&&**ins.operator) {
+                if !is_operator(ins.operator) {
                     continue;
                 }
                 let mark = out.len();
@@ -212,14 +212,20 @@ const MARKED_KEYS: [&[u8]; 5] = [b"MCID", b"Type", b"Subtype", b"BBox", b"Attach
 
 /// PDF 32000 operators; anything else (inside `BX`/`EX` or not) is dropped with its operands, since
 /// a reader ignores it and its operands can carry anything.
-const OPERATORS: &[&[u8]] = &[
-    b"b", b"B", b"b*", b"B*", b"BDC", b"BI", b"BMC", b"BT", b"BX", b"c", b"cm", b"CS", b"cs", b"d",
-    b"d0", b"d1", b"Do", b"DP", b"EI", b"EMC", b"ET", b"EX", b"f", b"F", b"f*", b"G", b"g", b"gs",
-    b"h", b"i", b"ID", b"j", b"J", b"K", b"k", b"l", b"m", b"M", b"MP", b"n", b"q", b"Q", b"re",
-    b"RG", b"rg", b"ri", b"s", b"S", b"SC", b"sc", b"SCN", b"scn", b"sh", b"T*", b"Tc", b"Td",
-    b"TD", b"Tf", b"Tj", b"TJ", b"TL", b"Tm", b"Tr", b"Ts", b"Tw", b"Tz", b"v", b"w", b"W", b"W*",
-    b"y", b"'", b"\"",
-];
+// A `match` compiles to length and byte compares; scanning a slice cost up to 77 memcmp per junk
+// token (a 4 MiB flate bomb of one-byte tokens took ~0.4 s in NEW-122).
+#[rustfmt::skip]
+fn is_operator(op: &[u8]) -> bool {
+    matches!(op,
+        b"b" | b"B" | b"b*" | b"B*" | b"BDC" | b"BI" | b"BMC" | b"BT" | b"BX" | b"c" | b"cm" |
+        b"CS" | b"cs" | b"d" | b"d0" | b"d1" | b"Do" | b"DP" | b"EI" | b"EMC" | b"ET" | b"EX" |
+        b"f" | b"F" | b"f*" | b"G" | b"g" | b"gs" | b"h" | b"i" | b"ID" | b"j" | b"J" | b"K" |
+        b"k" | b"l" | b"m" | b"M" | b"MP" | b"n" | b"q" | b"Q" | b"re" | b"RG" | b"rg" | b"ri" |
+        b"s" | b"S" | b"SC" | b"sc" | b"SCN" | b"scn" | b"sh" | b"T*" | b"Tc" | b"Td" | b"TD" |
+        b"Tf" | b"Tj" | b"TJ" | b"TL" | b"Tm" | b"Tr" | b"Ts" | b"Tw" | b"Tz" | b"v" | b"w" | b"W" |
+        b"W*" | b"y" | b"'" | b"\""
+    )
+}
 
 /// `ins` is one normalized `/Tag << ... >> BDC` (or `DP`) instruction with its inline dictionary
 /// cut to [`MARKED_KEYS`] whose values hold no string or dictionary. A named property list
@@ -372,6 +378,21 @@ mod tests {
         assert_eq!(
             out,
             "/Span << /MCID 3 /Type /Pagination /BBox [0 0 1 1] >> BDC\n/Span << >> BDC\n/P /MC0 BDC\n/OC /Ly BDC\nEMC\nEMC\nEMC\nEMC\n/Artifact << >> BDC\nEMC\n/T << >> DP\nBX\nEX\n1 0 0 1 0 0 cm\n"
+        );
+    }
+
+    #[test]
+    fn keeps_every_pdf_operator_and_drops_everything_else() {
+        // The operators of PDF 32000 except BI/ID/EI, which need image data.
+        let ops = "b B b* B* BDC BMC BT BX c cm CS cs d d0 d1 Do DP EMC ET EX f F f* G g gs h i j J K k \
+                   l m M MP n q Q re RG rg ri s S SC sc SCN scn sh T* Tc Td TD Tf Tj TJ TL Tm Tr Ts Tw \
+                   Tz v w W W* y ' \"";
+        let junk = "zz Tjj \u{aa} BDCx x1 Q2 *";
+        let data = format!("{} {}", ops, junk);
+        let out = String::from_utf8(reemit(data.as_bytes(), ID, &[]).unwrap()).unwrap();
+        assert_eq!(
+            out.split_whitespace().collect::<Vec<_>>(),
+            ops.split_whitespace().collect::<Vec<_>>()
         );
     }
 }
