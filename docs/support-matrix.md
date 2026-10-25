@@ -16,9 +16,9 @@ Words used with one meaning:
 | Chromium 151.0.7922.34, desktop, macOS arm64 (Playwright headless) | supported | perf budgets (section 5); `pnpm smoke chromium`; `tests/package-consumers/run.sh` (Vite, esbuild, no bundler, at `/` and `/app/`); `tests/browser/run.sh` (CSP, offline, full flow) | one machine (Apple M4, 24 GB) |
 | WebKit 26.5, desktop engine (Playwright) | supported as an engine, **not as Safari** | perf budgets (section 5); `pnpm smoke webkit`; `tests/browser/run.sh` | Playwright WebKit is not Safari evidence. Under Playwright, `page.reload()` while offline with a service worker fails, so the offline spec stops the origin instead (`docs/deployment.md`) |
 | Firefox 153.0, desktop (Playwright) | functional only | `tests/browser/run.sh`: CSP policy, prepared offline, only-own-origin requests, missing-asset errors, full open/extract/render/redact/export flow | no perf numbers, no budgets, no `pnpm smoke firefox`, package consumers run in chromium only |
-| Safari on macOS (real) | not established | none | needs a real Safari run |
-| Safari on iPhone and iPad (real devices) | **not established, pending NEW-64 (owner device access NEW-22)** | none. No iOS Simulator on the build Mac | memory ceiling, worker lifetime, wasm limits on iOS are unknown; mobile default `Limits` stay undecided (spec 17.4) |
-| Chrome on Android (real device) | **not established, pending NEW-64 (owner device access NEW-22)** | none. No Android emulator on the build Mac | same as above |
+| Safari on macOS (real) | functional, through HDDN | live and local real-Safari checks of HDDN on the owner's documents: open, find, edit (inline bold/italic, select-all retype), redact, export (`docs/support/device-evidence.md`) | manual checks, no perf numbers, no budgets |
+| Safari on iPhone and iPad (real devices) | functional, through HDDN (owner report, NEW-64) | the owner ran the HDDN phone/tablet checklist on hddn.app (Foliark 0.1.4) and reported every step working (`docs/support/device-evidence.md`) | device models and OS/browser versions not recorded; no timings; memory ceiling, worker lifetime and wasm limits on iOS unmeasured; mobile default `Limits` stay undecided (spec 17.4) |
+| Chrome on Android (real device) | functional, through HDDN (owner report, NEW-64) | same report | same as above |
 | Windows, Linux, other Chromium-based browsers | not established | none | |
 | Browser version floors | not measured | only the versions above were run | The wasm needs SIMD, bulk memory, sign extension, mutable globals, reference types and multivalue (`scripts/build-wasm.sh`). No older browser was tested, so no minimum version is promised |
 
@@ -114,7 +114,7 @@ a re-render within the 16 MiB per-document image cache is cheap, an evicted one 
 
 ## 6. Limits and what is not established
 
-- Mobile: every iPhone, iPad and Android row above, mobile default `Limits`, memory ceilings and thermal behaviour: not established (NEW-64, NEW-22).
+- Mobile: the owner's phone and tablet checks passed through HDDN (NEW-64), but device models and versions were not recorded. Mobile default `Limits`, memory ceilings, timings and thermal behaviour are not established.
 - Documents: the corpus is 80 small synthetic and HDDN cases (39 manifest fixtures plus 41 adversarial) and 7 synthetic scan fixtures. No real-world document set has been run, and the speed numbers are not a promise for large or unusual files.
 - Default limits (`docs/spec/v1.md` section 9): 64 MiB input, 1000 pages, 50 Mpx per render, 256 MiB output, 4 open documents. Over a limit is `LIMIT_EXCEEDED` with no output.
 - Independent proof used one PDF renderer (MuPDF) for pixels and PyMuPDF/pypdf/pikepdf for structure; none is a certificate that a redacted file is private.

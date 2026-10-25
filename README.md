@@ -7,7 +7,7 @@
 
 <p align="center"><b>A headless PDF engine in Rust and WebAssembly. Extract, search, render, edit, redact and sanitize PDFs in the browser. The document never leaves the device.</b></p>
 
-> **Status:** [`@zilijonas/foliark`](https://www.npmjs.com/package/@zilijonas/foliark) 0.1.5 release candidate (0.1.4 is the version on npm; 0.1.2 to 0.1.4 read, edit and redact PDFs written by iOS (Quartz) and Word that showed no text, `<?>` in the editor, refused edits or a refused redaction on pages with combining marks; 0.1.4 also stops edits from erasing untouched glyphs in Word PDFs and keeps a paragraph's heading and body styles inside the margin; 0.1.4 keeps inline bold, italic, size and colour of unchanged words and reports a paragraph's style segments; 0.1.5 gives text retyped over a selection one look). Licensed AGPL-3.0-only plus separate commercial licensing (see [License](#license)). Exact bytes and checks: [docs/release/candidate.md](docs/release/candidate.md). Real phones and tablets are not yet tested (see the support matrix).
+> **Status:** [`@zilijonas/foliark`](https://www.npmjs.com/package/@zilijonas/foliark) 0.1.6 release candidate (0.1.5 is the version on npm; 0.1.2 to 0.1.4 read, edit and redact PDFs written by iOS (Quartz) and Word that showed no text, `<?>` in the editor, refused edits or a refused redaction on pages with combining marks; 0.1.4 also stops edits from erasing untouched glyphs in Word PDFs and keeps a paragraph's heading and body styles inside the margin; 0.1.4 keeps inline bold, italic, size and colour of unchanged words and reports a paragraph's style segments; 0.1.5 gives text retyped over a selection one look; 0.1.6 lets a one-line paragraph use the room beside it and keeps the editor face to what the page drew). Licensed AGPL-3.0-only plus separate commercial licensing (see [License](#license)). Exact bytes and checks: [docs/release/candidate.md](docs/release/candidate.md). Real phones and tablets are not yet tested (see the support matrix).
 
 Foliark is a TypeScript SDK (`@zilijonas/foliark`) over a Rust engine compiled to WebAssembly. It runs in a worker, fetches only its own
 `.wasm` and worker script, and refuses what it cannot do safely with a typed `FoliarkError` instead of degrading quietly.
@@ -58,13 +58,13 @@ The full matrix, each row with its evidence, is [docs/support-matrix.md](docs/su
 
 ## Quick start
 
-Install the exact version from npm, or build the tarball from the matching source tag `v0.1.5` ([docs/deployment.md](docs/deployment.md) covers hosting, CSP and offline use):
+Install the exact version from npm, or build the tarball from the matching source tag `v0.1.6` ([docs/deployment.md](docs/deployment.md) covers hosting, CSP and offline use):
 
 ```sh
-npm install @zilijonas/foliark@0.1.5 --save-exact
+npm install @zilijonas/foliark@0.1.6 --save-exact
 # or from source:
 scripts/build-wasm.sh && pnpm build:sdk && tests/package-consumers/pack.sh dist-pkg
-npm install ./dist-pkg/zilijonas-foliark-0.1.5.tgz
+npm install ./dist-pkg/zilijonas-foliark-0.1.6.tgz
 ```
 
 Start the engine in its own worker (both URLs are explicit, nothing is fetched until you call it):

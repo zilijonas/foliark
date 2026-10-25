@@ -91,7 +91,13 @@ fn longer_text_still_does_not_fit() {
     for (r, text, needed, max) in [
         (PARAGRAPH, "ALPHA BRAVO DELTA ECHOS GOLFS HOTEL LIMA", 4, 3),
         (PARAGRAPH, "ALPHA BRAVOS DELTA ECHOS GOLFS HOTEL", 4, 3),
-        (WORD, "KILOS", 3, 2),
+        // A lone word beside text may use the room up to it (ADR 0011 amendment), not more.
+        (
+            WORD,
+            "KILOS ALPHA BRAVO DELTA ECHOS GOLFS HOTEL LIMA MIKES",
+            3,
+            2,
+        ),
     ] {
         let p = e.layout_edit(&doc, 0, vec![r], text, None, false).unwrap();
         assert!(!p.fits, "{text}: {p:?}");

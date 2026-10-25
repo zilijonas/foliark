@@ -211,12 +211,18 @@ pub fn repair(program: &[u8], family: &str, bold: bool, pairs: &[(u32, u32)]) ->
     if pairs.is_empty() || pairs.len() > 8000 {
         return None;
     }
+    // The program's cmap is kept only when it is exactly the evidence. One that also maps characters the
+    // document never drew with this font (a Word subset keeps every slot, outlines emptied) would make the
+    // browser draw them blank instead of falling back, while the layout sets them in a registered font.
     let agrees = FontRef::new(program).ok().is_some_and(|f| {
         let map = f.charmap();
         tables.contains_key(b"cmap")
             && pairs
                 .iter()
                 .all(|&(c, g)| map.map(u32::from(c)).map(|x| x.to_u32()) == Some(u32::from(g)))
+            && map
+                .mappings()
+                .all(|(c, _)| pairs.binary_search_by_key(&c, |p| u32::from(p.0)).is_ok())
     });
     if !agrees {
         tables.insert(*b"cmap", cmap_format4(&pairs));
@@ -264,6 +270,21 @@ mod tests {
             assert_eq!(be16(sub, 10), Some(es), "entrySelector for {segs}");
             assert_eq!(be16(sub, 12), Some(rs), "rangeShift for {segs}");
         }
+    }
+
+    #[test]
+    fn cmap_maps_only_what_the_document_drew() {
+        // A full program whose own cmap agrees with the evidence (`A`) but also maps `x`: a Word subset keeps
+        // every slot. The face must not claim `x`, or the browser draws it blank instead of falling back.
+        let program = std::fs::read(SANS).unwrap();
+        let own = FontRef::new(&program).unwrap().charmap();
+        let a = own.map('A').unwrap().to_u32();
+        assert!(own.map('x').is_some(), "control: the program maps x itself");
+        let out = repair(&program, "Liberation Sans", false, &[(0x41, a)]).unwrap();
+        let map = FontRef::new(&out).unwrap().charmap();
+        assert_eq!(map.map('A').map(|g| g.to_u32()), Some(a));
+        assert_eq!(map.map('x'), None);
+        assert_eq!(map.mappings().count(), 1);
     }
 
     #[test]
