@@ -1,16 +1,16 @@
 # Release candidate: @zilijonas/foliark 0.1.5 (NEW-115/116: retyped text takes one look)
 
-Qualified on 2026-10-25 on the owner's Mac mini (same toolchain as 0.1.0). Engine change versus 0.1.4 (`CHANGELOG.md`, ADR 0013): text typed over a selection in a paragraph with inline bold or italic text takes one look, the first replaced character's, instead of splitting across looks; words the user keeps keep theirs (NEW-115). No API change. Not published by an agent: the owner publishes this exact tarball (`npm publish`, local). Source correspondence: tag `v0.1.5` on the commit that carries this record; the tarball was built from the source commit below, and the record commit differs from it only by documentation. `tools/release/dry-run.sh` reads the first recorded sha256 in this file, so the 0.1.5 hash stays in this section, above the 0.1.4 record. `release/0.1.5` is `fix/retype-one-look` (`main` at 0.1.4 plus the NEW-115 fix). No budget was re-based: wasm gzip 2,242,568 B is inside the 0.1.4 cap (2,352,843 B). Real-Safari proof on the owner's IX-966 PDF through local HDDN bound to this build (NEW-116) is pending and recorded separately.
+Qualified on 2026-10-25 on the owner's Mac mini (same toolchain as 0.1.0). Engine change versus 0.1.4 (`CHANGELOG.md`, ADR 0013): text typed over a selection in a paragraph with inline bold or italic text takes one look, the first replaced character's, instead of splitting across looks; words the user keeps keep theirs (NEW-115). The writer also refuses an empty name with `MALFORMED_PDF` instead of writing an ambiguous one (regression `tests/regressions/roundtrip-2.pdf`, NEW-117). No API change. Not published by an agent: the owner publishes this exact tarball (`npm publish`, local). Source correspondence: tag `v0.1.5` on the commit that carries this record; the tarball was built from the source commit below, and the record commit differs from it only by documentation. `tools/release/dry-run.sh` reads the first recorded sha256 in this file, so the 0.1.5 hash stays in this section, above the 0.1.4 record. `release/0.1.5` is `fix/retype-one-look` (`main` at 0.1.4 plus the NEW-115 fix and the NEW-117 writer fix). The first cut was built on `c8358d9` (tarball `48ea7b0e...`, the real-Safari proof ran on that build); the writer change landed afterwards, so the candidate was re-cut and re-qualified on `2414943` and this record replaces it. No budget was re-based: wasm gzip 2,242,612 B is inside the 0.1.4 cap (2,352,843 B). Real-Safari proof on the owner's IX-966 PDF through local HDDN bound to this build (NEW-116) is pending and recorded separately.
 
 | | |
 |---|---|
 | file | `dist-pkg/zilijonas-foliark-0.1.5.tgz` (gitignored) |
-| sha256 | `48ea7b0eb804d1890ba3e6ba1d384d921b1216e391c9c6e6fc2c2b2dbdf3701f` |
-| size | 3,455,747 B, 282 entries (same entry list as 0.1.4) |
-| built from | foliark `c8358d9` (`chore(release): bump ... 0.1.5`, clean tree before and after); `scripts/build-wasm.sh && pnpm build:sdk && tests/package-consumers/pack.sh dist-pkg`; packing twice gave the same sha256 |
-| wasm | `wasm/foliark_wasm_bg.wasm` sha256 `a8cffa985ca66da198faad1960d476e464f5e5e30b66261b12e2687a7ea590e7`, 5,880,620 B raw, 2,242,568 B gzip -9 (0.1.4: `26b4f593...`, 5,876,192 B, 2,240,802 B) |
+| sha256 | `7d0f4653ff115a596f30bc55677decd14f7bdf7cea116e3dd1d22326c5e819fa` |
+| size | 3,455,792 B, 282 entries (same entry list as 0.1.4) |
+| built from | foliark `2414943` (`fix(writer): refuse an empty name ... (NEW-117)`, clean tree before and after); `scripts/build-wasm.sh && pnpm build:sdk && tests/package-consumers/pack.sh dist-pkg`; packing twice gave the same sha256 |
+| wasm | `wasm/foliark_wasm_bg.wasm` sha256 `a8e31b17669453753e0a740c8ba5ff287d09c8a6238fdd77ae80926a9dbbef64`, 5,880,636 B raw, 2,242,612 B gzip -9 (0.1.4: `26b4f593...`, 5,876,192 B, 2,240,802 B) |
 
-Checks on `c8358d9` (each stage through `~/ai/bin/memory-queue`, `-j 2` for cargo; after the first build attempt was yielded to another chat's request and later attempts hit the wait limit, the stages from TS parity to budgets ran as one supervised chain, each step stopping the chain on failure; fuzz smoke self-queued, run unwrapped):
+Checks on `2414943` (each stage through `~/ai/bin/memory-queue`, `-j 2` for cargo; after the first build attempt was yielded to another chat's request and later attempts hit the wait limit, the stages from TS parity to budgets ran as one supervised chain, each step stopping the chain on failure; fuzz smoke self-queued, run unwrapped, passed 7/7 on this commit):
 
 | Check | Command | Exit | Result |
 |---|---|---|---|
@@ -25,7 +25,7 @@ Checks on `c8358d9` (each stage through `~/ai/bin/memory-queue`, `-j 2` for carg
 | package consumers | `tests/package-consumers/run.sh` | 0 | 6 builds ok, 0 external requests |
 | oracle controls | `tests/oracles/.venv/bin/python tests/oracles/controls.py` | 0 | leaky caught 30/30, safe passed 14/14; fidelity fail cases caught 7/7, pass 3/3 |
 | acceptance | `SKIP_BUILD=1 tests/integration/acceptance/run.sh` | 0 | 88 cases, 528 results: SAFE 433, EXPLAINED 35, REFUSED 60; negative controls 125, missed 0; cancellation 27 attempts, 0 findings |
-| fuzz smoke | `FUZZ_SECS=30 tools/fuzz-smoke/run.sh` | not run | deferred: the first attempt was stopped by a pressure emergency (swapout 33,648 pages/6 s, another chat's load), the second never got the heavy slot; no code under `fuzz/` changed since 0.1.4, but run it before publishing |
+| fuzz smoke | `FUZZ_SECS=30 tools/fuzz-smoke/run.sh` | 0 | 7 targets x 30 s, all clean, on `2414943`; the fuzz build is now capped at two jobs (`CARGO_BUILD_JOBS=2`, `1cee996`): full-parallel sanitizer builds had caused the memory emergencies |
 | budgets | `node --test tools/bench/check-budgets.test.mjs`; fresh `sdk.mjs --extended` x2 + `scans-sdk.mjs` (chromium) through `check-budgets.mjs` | 0, 0 | 40 ok, 38 webkit skipped, 0 failing |
 | notices | `node scripts/gen-notices.mjs --check` | 0 | up to date |
 | licences | `cargo deny check licenses bans sources` | 0 | ok (no RustSec advisory check run) |
