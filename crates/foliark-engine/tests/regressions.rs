@@ -97,7 +97,15 @@ fn regressions_have_typed_results() {
         let name = path.file_name().unwrap().to_string_lossy().into_owned();
         let data = std::fs::read(&path).unwrap();
         match path.extension().and_then(|e| e.to_str()) {
-            Some("pdf") => pdf(&data),
+            Some("pdf") => {
+                pdf(&data);
+                if name == "roundtrip-2.pdf" {
+                    // An empty name cannot be written unambiguously: refused, never emitted.
+                    let doc = open(&data, true).unwrap();
+                    let e = Writer::new(doc.reader(), tight()).write().unwrap_err();
+                    assert_eq!(e.code, ErrorCode::MalformedPdf);
+                }
+            }
             Some("bin") if name.starts_with("content_reemit-") => {
                 // Ambiguous damaged inline images are refused, never written.
                 let refused = content(&data);

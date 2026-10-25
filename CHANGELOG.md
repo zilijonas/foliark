@@ -2,6 +2,16 @@
 
 All notable changes to `@zilijonas/foliark` (named `@foliark/sdk` before 0.1.0 was cut; that name was never published). Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: `docs/release/process.md` (semver; 0.x may break with an entry here).
 
+## [Unreleased]
+
+## [0.1.5] - 2026-10-25
+
+Retyping over a selection gives the new text one look. Source: tag `v0.1.5`. Tarball and hashes: `docs/release/candidate.md`.
+
+### Fixed
+- Retyping over a selection in a paragraph with inline bold or italic text could split the typed words across looks: select all and type a sentence gave a regular first word and italic next words; select from a bold word to the end gave a bold word and an italic rest. The edit lined single spaces up as if they were shared words, so each typed word took the look of whichever old word its space landed on. Text typed over text now takes one look (the first replaced character's); words you kept keep theirs (ADR 0013) (NEW-115).
+- A file with an empty name (a bare `/`) in a dictionary the export keeps, such as a font resource key, was written so the output read back as a different, incomplete dictionary and only reopened with repair. Export now refuses such a file with `MALFORMED_PDF` (found by fuzzing; 0.1.4 has the same defect) (NEW-117).
+
 ## [0.1.4] - 2026-10-24
 
 Editing a paragraph keeps the bold, italic, size and colour of the words you did not touch, and apps can read a paragraph's styles before the user edits it. Source: tag `v0.1.4`. Tarball and hashes: `docs/release/candidate.md`.

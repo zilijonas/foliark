@@ -177,13 +177,13 @@ fn editing_inside_a_bold_term_keeps_it_bold() {
 }
 
 #[test]
-fn an_edit_across_a_run_boundary_keeps_each_side_and_a_new_word_takes_the_body() {
-    // One replaced span from inside the bold term into the regular word after it, plus a new
-    // word between them; the text re-wraps onto the next rows.
+fn an_edit_across_a_run_boundary_keeps_each_side_word_for_word() {
+    // A replaced span from inside the bold term into the regular word after it, as many words
+    // as before (ADR 0013, NEW-115): each new word takes the look of the one it replaces.
     edit_keeps_runs(
         "Owner is one",
-        "Owners now be one",
-        &MARKED.replace("*Owner* is", "*Owners* now be"),
+        "Owners be one",
+        &MARKED.replace("*Owner* is", "*Owners* be"),
     );
 }
 
@@ -317,7 +317,7 @@ fn prepare_and_preview_report_each_character_s_look() {
 
     let edited = text
         .replace("which", "whose")
-        .replace("Owner is", "Owners now be");
+        .replace("Owner is", "Owners be");
     let p = e
         .layout_edit(&doc, 0, vec![BLOCK], &edited, None, false)
         .unwrap();
@@ -325,6 +325,6 @@ fn prepare_and_preview_report_each_character_s_look() {
         markup(&edited, &p.styles, &info.looks),
         MARKED
             .replace("which", "whose")
-            .replace("*Owner* is", "*Owners* now be")
+            .replace("*Owner* is", "*Owners* be")
     );
 }

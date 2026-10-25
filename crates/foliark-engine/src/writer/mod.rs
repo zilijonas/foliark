@@ -403,6 +403,16 @@ impl<'d> Writer<'d> {
     }
 }
 
+/// pdf-writer pads a token only after a regular byte, and an empty name ends in the `/`
+/// delimiter: `/` then `1` would be written `/1`, a different name. The graph keeps no empty
+/// names, so one is refused rather than written ambiguously or dropped.
+fn name(n: &[u8]) -> Result<Name<'_>, PdfError> {
+    if n.is_empty() {
+        return Err(err(ErrorCode::MalformedPdf, "empty name"));
+    }
+    Ok(Name(n))
+}
+
 fn put(obj: Obj<'_>, v: &Val) -> Result<(), PdfError> {
     match v {
         Val::Null => obj.primitive(Null),
@@ -410,7 +420,7 @@ fn put(obj: Obj<'_>, v: &Val) -> Result<(), PdfError> {
         Val::Int(i) => obj.primitive(*i),
         Val::Real(f) => obj.primitive(*f),
         Val::Str(s) => obj.primitive(Str(s)),
-        Val::Name(n) => obj.primitive(Name(n)),
+        Val::Name(n) => obj.primitive(name(n)?),
         Val::Ref(r) => obj.primitive(*r),
         Val::Arr(items) => {
             let mut a = obj.array();
@@ -421,7 +431,7 @@ fn put(obj: Obj<'_>, v: &Val) -> Result<(), PdfError> {
         Val::Dict(entries) => {
             let mut d = obj.dict();
             for (k, x) in entries {
-                put(d.insert(Name(k)), x)?;
+                put(d.insert(name(k)?), x)?;
             }
         }
         Val::Src(_) | Val::New(_) => {
