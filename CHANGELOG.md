@@ -4,6 +4,10 @@ All notable changes to `@zilijonas/foliark` (named `@foliark/sdk` before 0.1.0 w
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-10-25
+
+Editing a one-line paragraph beside other text, and typed characters the page never drew. Source: tag `v0.1.6`. Tarball and hashes: `docs/release/candidate.md`.
+
 ### Changed
 - A one-line paragraph with other text beside it (a table header with its neighbour column) now has `ParagraphInfo.wrapWidth` up to one space short of that text instead of its own width, so typing a longer header uses the free room before wrapping. A wrapped paragraph keeps the width it wraps at, and a line never reaches into the next column (ADR 0011 amendment) (NEW-119).
 
