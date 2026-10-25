@@ -13,6 +13,8 @@ if [ -z "${FOLIARK_FUZZ_QUEUED:-}" ] && [ -x ~/ai/bin/memory-queue ]; then
     --label 'foliark fuzz-smoke' --need-gb 4 --restartable --wait 1800 -- "$0" "$@"
 fi
 source ~/.cargo/env 2>/dev/null || true
+# Sanitizer builds of every crate at full parallelism page the Mac mini out (twice an emergency stop); two jobs fit.
+export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-2}"
 cd "$root" || exit 2
 targets=("$@")
 [ ${#targets[@]} -gt 0 ] || targets=(open page_model extract render roundtrip content_reemit geometry)
