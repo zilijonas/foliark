@@ -6,7 +6,10 @@
 //! that is neither Image nor Form, a font Subtype we do not know, a stream where a plain
 //! value belongs) is a typed `MALFORMED_PDF` refusal, never a silent skip. Direct values are
 //! copied; indirect values in plain positions are inlined; dangling references are errors.
-use super::{Extra, NewStream, Owner, PageFonts, Redirects, Spans, Val, content, err, err_obj};
+use super::{
+    Extra, Link, LinkTarget, NewStream, Owner, PageFonts, Redirects, Spans, Val, content, err,
+    err_obj,
+};
 use crate::limits::{self, Budget};
 use crate::reader::{self, object_id};
 use foliark_model::{ErrorCode, Limits, ObjectId, PdfError};
@@ -434,6 +437,8 @@ pub(crate) struct Walk<'a> {
     pub preserve: bool,
     /// Store identical objects once (`Writer::keep_duplicates` turns it off).
     pub dedupe: bool,
+    /// Hyperlinks to write into their pages' `/Annots` (`Writer::set_links`).
+    pub links: &'a [Link],
     /// Page and page tree objects of the input -> their output reference.
     page_refs: HashMap<ObjectId, Ref>,
     pages_ref: Option<Ref>,
@@ -481,6 +486,7 @@ impl<'a> Walk<'a> {
             encoded: &NO_ENCODED,
             preserve: false,
             dedupe: true,
+            links: &[],
             page_refs: HashMap::new(),
             pages_ref: None,
             info: None,
@@ -1199,6 +1205,10 @@ impl<'a> Walk<'a> {
                     }
                 }
             }
+            let annots = self.link_annots(i, &refs)?;
+            if !annots.is_empty() {
+                e.push((b"Annots".to_vec(), Val::Arr(annots)));
+            }
             let mut parts = Vec::new();
             if self.preserve {
                 for (k, m) in raw.entries() {
@@ -1263,6 +1273,58 @@ impl<'a> Walk<'a> {
             super::shrink::shrink(&mut self.nodes, &mut refs, self.dedupe)?;
         }
         Ok(refs)
+    }
+
+    /// One fresh annotation object per kept link of `page`, from the allowlist of ADR 0014:
+    /// nothing of the input annotation is copied. A destination names its page by output ref.
+    fn link_annots(&mut self, page: usize, pages: &[Ref]) -> Result<Vec<Val>, PdfError> {
+        let num = |v: f64| Val::Real(v as f32);
+        let mut out = Vec::new();
+        let links = self.links;
+        for l in links.iter().filter(|l| l.page == page) {
+            let mut e: Entries = vec![
+                (b"Type".to_vec(), name_val(b"Annot")),
+                (b"Subtype".to_vec(), name_val(b"Link")),
+                (
+                    b"Rect".to_vec(),
+                    Val::Arr(l.rect.iter().map(|v| num(*v)).collect()),
+                ),
+            ];
+            if !l.quad_points.is_empty() {
+                let q = l.quad_points.iter().map(|v| num(*v)).collect();
+                e.push((b"QuadPoints".to_vec(), Val::Arr(q)));
+            }
+            let zero = Val::Int(0);
+            e.push((b"Border".to_vec(), Val::Arr(vec![zero; 3])));
+            if let Some(h) = l.highlight {
+                e.push((b"H".to_vec(), name_val(&[h])));
+            }
+            match &l.target {
+                LinkTarget::Uri(uri) => e.push((
+                    b"A".to_vec(),
+                    Val::Dict(vec![
+                        (b"S".to_vec(), name_val(b"URI")),
+                        (b"URI".to_vec(), Val::Str(uri.clone())),
+                    ]),
+                )),
+                LinkTarget::Dest { page, view, args } => {
+                    let target = pages
+                        .get(*page)
+                        .ok_or_else(|| err(ErrorCode::Internal, "link destination page"))?;
+                    let mut d = vec![Val::Ref(*target), name_val(view.as_bytes())];
+                    d.extend(args.iter().map(|a| a.map_or(Val::Null, num)));
+                    e.push((b"Dest".to_vec(), Val::Arr(d)));
+                }
+            }
+            let id = self.alloc()?;
+            self.push(Node {
+                id,
+                val: Val::Dict(e),
+                data: None,
+            })?;
+            out.push(Val::Ref(id));
+        }
+        Ok(out)
     }
 
     /// Preserve mode: the catalog with every entry of the input's (the page tree is ours), the

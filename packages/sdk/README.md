@@ -93,6 +93,8 @@ Image-only export burns the redactions into pixels:
 const flat = await doc.export(await doc.prepareExport({ mode: "raster", policy: { raster: { acknowledgeLosses: true, scale: 2 } } }));
 ```
 
+Native export removes hyperlinks by default; `policy: { links: "keep" }` keeps `http`, `https`, `mailto` and in-document links that no redaction touches or spells (`plan.report.kept.links`; the rest are `LINKS_REMOVED`).
+
 Already running your own dedicated worker with its own recovery? Use the in-worker entry. Same API and errors, no second worker, and your worker supervises hangs and must be replaced after `onReset`:
 
 ```ts

@@ -7,9 +7,9 @@
   "python": "3.9"
  },
  "counts": {
-  "total": 47,
+  "total": 48,
   "hddn": 20,
-  "generated": 27,
+  "generated": 28,
   "byFeature": {
    "actualtext": 1,
    "additional-actions": 1,
@@ -43,13 +43,14 @@
    "javascript": 2,
    "jpeg": 1,
    "ligature": 1,
-   "link": 1,
+   "link": 2,
    "malformed": 2,
    "malformed-xref": 1,
    "many-pages": 1,
    "metadata": 2,
    "mixed-style-paragraph": 2,
-   "multi-page": 3,
+   "multi-page": 4,
+   "named-destination": 1,
    "non-bmp": 2,
    "ocg": 2,
    "ocr-layer": 1,
@@ -1840,6 +1841,65 @@
       ],
       "text": "KEEP_PUBLIC_ANNOT"
      }
+    ]
+   }
+  },
+  {
+   "id": "links-keep",
+   "path": "generated/links-keep.pdf",
+   "sha256": "a098cd4c4d0a7078f0837983a94d2d7e15c4e3ca4da92991862499adf7d2fb6a",
+   "bytes": 2464,
+   "pages": 2,
+   "features": [
+    "link",
+    "named-destination",
+    "multi-page"
+   ],
+   "origin": "tests/fixtures/generators/generate.py",
+   "license": "synthetic, generated (original)",
+   "deterministic": true,
+   "expected": {
+    "behavior": "seven links, SECRET_LINKTOKEN redacted; policy links keep writes back only the https link and the GoTo (as an explicit /Dest); mailto and percent-encoded URI carry the token, one link covers the region, javascript: and Launch are never kept",
+    "mustRemove": [
+     "SECRET_LINKTOKEN",
+     "SECRET_LINK_NOTE",
+     "SECRET_LINK_NAME",
+     "SECRET_LINK_AUTHOR",
+     "SECRET_GOTO_NOTE",
+     "javascript:app.alert",
+     "calc.exe"
+    ],
+    "mustKeepText": [
+     "KEEP_PUBLIC_LINKS",
+     "KEEP_PUBLIC_PAGE_TWO"
+    ],
+    "regions": [
+     {
+      "kind": "sensitive",
+      "page": 0,
+      "rectTopLeft": [
+       20,
+       88.8,
+       143.2,
+       103.5
+      ],
+      "text": "SECRET_LINKTOKEN"
+     },
+     {
+      "kind": "public",
+      "page": 0,
+      "rectTopLeft": [
+       20,
+       28.8,
+       150.9,
+       43.5
+      ],
+      "text": "KEEP_PUBLIC_LINKS"
+     }
+    ],
+    "keptLinks": [
+     "https://example.com/public",
+     "chapter2 -> page 1 (explicit /Dest)"
     ]
    }
   },

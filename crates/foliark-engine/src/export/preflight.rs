@@ -9,7 +9,7 @@
 use crate::redaction::plan::{PagePlan, RedactionPlan};
 use crate::sanitize::{interactive, visibility};
 use foliark_model::{
-    ErrorCode, ErrorDetails, ExportMode, ExportPolicy, PdfError, SignedInputPolicy,
+    ErrorCode, ErrorDetails, ExportMode, ExportPolicy, LinkPolicy, PdfError, SignedInputPolicy,
 };
 
 /// One reason a stage cannot run. `InvalidArgument` + `feature` is the engine's convention for
@@ -115,6 +115,8 @@ pub fn policy_hash(mode: ExportMode, p: &ExportPolicy) -> String {
     );
     if mode == ExportMode::Raster {
         s += &format!("|{}|{:?}", p.raster.acknowledge_losses, p.raster.scale);
+    } else if p.links == LinkPolicy::Keep {
+        s += "|keepLinks";
     }
     let h = s.bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| {
         (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)

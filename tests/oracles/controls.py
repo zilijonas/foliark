@@ -342,6 +342,26 @@ FCASES = [
 ]
 
 
+# ---- NEW-124 / ADR 0014: kept hyperlinks. The page shows SECRET_LINKTOKEN at (20,300), redacted: display region [15,85,160,110]. ----
+LINK_REG = {"page": 0, "rect": [15, 85, 160, 110]}
+LINKS = {"links": {"tokens": ["secret_linktoken"], "regions": [LINK_REG]}}
+
+
+def link_pdf(*links):
+    """Page 3 0 R with `links` (annotation dictionary bodies) as objects 6...; text only where the redaction was."""
+    objs = {6 + n: l for n, l in enumerate(links)}
+    return simple(text(20, 360, "KEEP_PUBLIC_TEXT"), objs, page_extra="/Annots [%s]" % " ".join("%d 0 R" % k for k in objs))
+
+
+def lk(rect, action, extra=""):
+    """An allowlisted link body; `extra` adds keys."""
+    return "<< /Type /Annot /Subtype /Link /Rect [%s] /Border [0 0 0] %s %s >>" % (rect, action, extra)
+
+
+OK_URI = "/A << /S /URI /URI (https://example.com/public) >>"
+OK_DEST = "/Dest [3 0 R /XYZ 0 400 null]"
+SAFE_RECT = "20 355 160 375"
+HIT_RECT = "15 290 160 315"
 S = {"forbidden": [SECRET]}
 IMG = {"image_regions": [{"page": 0, "rect": IMG_RECT}]}
 # name, builder, spec, codes that MUST appear (leaky) / None (safe), codes that must NOT appear[, substring a finding must contain]
@@ -370,6 +390,19 @@ CASES = [
     ("never silent: corrupt flate", gen.corrupt_flate, {}, {"DECODE"}, set()),
     ("never silent: unsupported filter", leak_bogus_filter, {}, {"UNSUPPORTED"}, set()),
     ("never silent: decode cap", leak_bomb, {"cap": 1_000_000}, {"CAP"}, set()),
+    # NEW-124: a kept link must not point at, cover or spell what a redaction removed, and is written from an allowlist.
+    ("leaky: link over a redaction region", lambda: link_pdf(lk(HIT_RECT, OK_URI)), LINKS, {"LINK_REGION"}, set()),
+    ("leaky: link whose QuadPoints meet the region", lambda: link_pdf(lk(SAFE_RECT, OK_URI, "/QuadPoints [20 310 150 310 20 292 150 292]")), LINKS, {"LINK_REGION"}, set()),
+    ("leaky: mailto holding the redacted token", lambda: link_pdf(lk(SAFE_RECT, "/A << /S /URI /URI (mailto:SECRET_LINKTOKEN@example.org) >>")), LINKS, {"LINK_TOKEN"}, set()),
+    ("leaky: https URI holding the token percent-encoded", lambda: link_pdf(lk(SAFE_RECT, "/A << /S /URI /URI (https://example.org/?q=secret%5Flinktoken) >>")), LINKS, {"LINK_TOKEN"}, set()),
+    ("leaky: javascript: URI", lambda: link_pdf(lk(SAFE_RECT, "/A << /S /URI /URI (javascript:app.alert\\(1\\)) >>")), LINKS, {"LINK_SCHEME"}, set()),
+    ("leaky: Launch action", lambda: link_pdf(lk(SAFE_RECT, "/A << /S /Launch /F (calc.exe) >>")), LINKS, {"LINK_ACTION"}, set()),
+    ("leaky: URI action with /Next", lambda: link_pdf(lk(SAFE_RECT, "/A << /S /URI /URI (https://example.com/a) /Next << /S /Launch /F (x) >> >>")), LINKS, {"LINK_ACTION"}, set()),
+    ("leaky: link with an extra /Contents key", lambda: link_pdf(lk(SAFE_RECT, OK_URI, "/Contents (note)")), LINKS, {"LINK_KEY"}, set()),
+    ("leaky: destination that is not a page of the file", lambda: link_pdf(lk(SAFE_RECT, "/Dest [4 0 R /Fit]")), LINKS, {"LINK_DEST"}, set()),
+    ("leaky: named destination left in the output", lambda: link_pdf(lk(SAFE_RECT, "/Dest /chapter2")), LINKS, {"LINK_DEST"}, set()),
+    ("leaky: non-link annotation kept", lambda: link_pdf("<< /Type /Annot /Subtype /Text /Rect [20 355 40 375] >>"), LINKS, {"LINK_SUBTYPE"}, set()),
+    ("safe: https link and explicit /Dest clear of the region", lambda: link_pdf(lk(SAFE_RECT, OK_URI), lk("20 200 100 220", OK_DEST)), LINKS, None, set()),
     ("safe: public-only page", safe_clean, S, None, set()),
     ("safe: Quartz font page, secret not shown", gen.quartz_type0_empty_tounicode, {"forbidden": ["SECRET_NOT_SHOWN"]}, None, set()),
     ("safe: combining-mark page, secret not shown", gen.quartz_type0_combining_marks, {"forbidden": ["SECRET_NOT_SHOWN"]}, None, set()),

@@ -274,7 +274,7 @@ fn axis(alo: f64, ahi: f64, blo: f64, bhi: f64) -> bool {
     }
 }
 
-fn overlap(a: B, b: B) -> bool {
+pub(crate) fn overlap(a: B, b: B) -> bool {
     axis(a[0], a[2], b[0], b[2]) && axis(a[1], a[3], b[1], b[3])
 }
 

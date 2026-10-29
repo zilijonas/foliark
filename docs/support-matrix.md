@@ -69,7 +69,7 @@ Each class is removed and reported, or refused. Evidence is `strict-native.md` (
 | Info and XMP metadata, PieceInfo, private keys | supported (removed) | `METADATA_REMOVED` |
 | Embedded files, /AF | supported (removed) | `ATTACHMENTS_REMOVED` |
 | JavaScript, OpenAction, AA, all actions | supported (removed) | `SCRIPTS_REMOVED` |
-| Annotations | supported (flatten with appearance, or remove) | `ANNOTATIONS_FLATTENED`, `ANNOTATIONS_REMOVED`, `LINKS_REMOVED` |
+| Annotations | supported (flatten with appearance, or remove); links removed, or with `links: 'keep'` (native) written back when safe (ADR 0014) | `ANNOTATIONS_FLATTENED`, `ANNOTATIONS_REMOVED`, `LINKS_REMOVED`, `report.kept.links` |
 | AcroForm and widgets | supported (appearances flattened, values removed); a value without a usable appearance is refused | `FORMS_FLATTENED`; `FORM_APPEARANCE_MISSING {fields}`, `XFA_UNSUPPORTED` (engine tests `sanitize_interactive.rs`; no manifest fixture, no independent oracle) |
 | Optional content | supported (default configuration flattened, `/VE` And/Not evaluated, hidden layers removed) | `LAYERS_FLATTENED`; `OPTIONAL_CONTENT_UNSUPPORTED` when visibility cannot be evaluated (no manifest fixture) |
 | Thumbnails, outlines, page labels, structure tree, ActualText/Alt, output intents, viewer preferences | supported (removed) | `thumbnails`, `OUTLINES_REMOVED`, `PAGE_LABELS_REMOVED`, `ACCESSIBILITY_REMOVED`, `PDFA_CLAIM_REMOVED` |
