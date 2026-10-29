@@ -1,3 +1,42 @@
+# Release candidate: @zilijonas/foliark 0.2.0 (NEW-124/122: opt-in `links: 'keep'`, writer operator match)
+
+Qualified on 2026-10-29 on the owner's Mac mini (same toolchain as 0.1.0). Changes versus 0.1.6 (`CHANGELOG.md`, ADR 0014, spec): additive API `ExportPolicy.links: 'remove' | 'keep'` (default `'remove'`, output unchanged); with `'keep'` native export writes back `http`, `https`, `mailto` and in-output page-jump links that cannot reveal redacted content, each dropped link counted as `LINKS_REMOVED`, `report.kept.links` for the kept (NEW-124); the writer checks content-stream operators with a match, re-emitting junk-token streams 2x faster, operator set unchanged (NEW-122). Not published by an agent: the owner publishes this exact tarball (`npm publish`, local). Source correspondence: tag `v0.2.0` on the commit that carries this record; the tarball was built from the source commit below, and the record commit differs from it only by documentation. `tools/release/dry-run.sh` reads the first recorded sha256 in this file, so the 0.2.0 hash stays in this section, above the 0.1.6 record. `feat/keep-links` is `main` (`0cfdcfb`: 0.1.6 plus NEW-122) plus NEW-124 (`4ed36eb`, `a084c45`) plus the bump. No budget was re-based: wasm gzip 2,254,043 B is inside the 0.1.4 cap (2,352,843 B). HDDN does not use `links` yet.
+
+| | |
+|---|---|
+| file | `dist-pkg/zilijonas-foliark-0.2.0.tgz` (gitignored) |
+| sha256 | `93ef86bb68201064acab76e8924357c3b5042f954c8b62e32e82c8bdc23291d6` |
+| size | 3,468,038 B, 284 entries (0.1.6: 282; the two new are `dist/generated/LinkPolicy.js` and `.d.ts`) |
+| built from | foliark `8c445ec` (`chore(release): bump ... 0.2.0`, clean tree before and after); `scripts/build-wasm.sh && pnpm build:sdk && tests/package-consumers/pack.sh dist-pkg`; packing twice gave the same sha256 |
+| wasm | `wasm/foliark_wasm_bg.wasm` sha256 `68dd740011cf6356d67a5b58bcddd16db0d8b10cf2dd382575419a1e9465a5c7`, 5,910,644 B raw, 2,254,043 B gzip -9 (0.1.6: `e4e75f18...`, 5,881,270 B, 2,242,850 B) |
+
+Checks on `8c445ec` (run directly, no memory queue: the owner waived it for this session; `CARGO_BUILD_JOBS=2`, one heavy command at a time, one browser engine at a time, Vitest `--maxWorkers=1 --no-file-parallelism`; fuzz smoke with `FOLIARK_FUZZ_QUEUED=1`):
+
+| Check | Command | Exit | Result |
+|---|---|---|---|
+| format, lint | `cargo fmt --check`; `cargo clippy --workspace --all-targets --locked -- -D warnings` | 0, 0 | |
+| Rust tests | `cargo test --workspace --locked --no-fail-fast` | 0 | 444 passed, 0 failed, 3 ignored over 60 targets, including `strict_native` |
+| wasm and SDK build | `scripts/build-wasm.sh && pnpm build:sdk` | 0 | sha256 above |
+| TS parity | `scripts/check-ts-parity.sh` | 0 | in sync (93 files) |
+| SDK tests | `pnpm --filter @zilijonas/foliark exec vitest run --maxWorkers=1 --no-file-parallelism` | 0 | 89 passed (12 files), including the `links: 'keep'` pass-through in `export.spec.ts` |
+| smoke | `pnpm smoke chromium`, `pnpm smoke webkit` | 0, 0 | |
+| browser specs | `tests/browser/run.sh --project=<engine> --workers=1`, once per engine | 0, 0, 0 | 33 passed (11 each in chromium, firefox, webkit) |
+| pack x2 | `tests/package-consumers/pack.sh dist-pkg` | 0, 0 | identical sha256 |
+| package consumers | `tests/package-consumers/run.sh` | 0 | 6 builds ok, 0 external requests |
+| oracle controls | `tests/oracles/.venv/bin/python tests/oracles/controls.py` | 0 | leaky caught 41/41, safe passed 15/15 (0.1.6: 30/30, 14/14; the link controls are new); fidelity fail cases caught 7/7, pass 3/3 |
+| acceptance | `SKIP_BUILD=1 tests/integration/acceptance/run.sh` | 0 | 89 cases, 534 results: SAFE 439, EXPLAINED 35, REFUSED 60; negative controls 127, missed 0; cancellation 27 attempts, 0 findings |
+| fuzz smoke | `FOLIARK_FUZZ_QUEUED=1 FUZZ_SECS=30 tools/fuzz-smoke/run.sh` | 0 | 7 targets x 30 s, all clean |
+| budgets | `node --test tools/bench/check-budgets.test.mjs`; fresh `sdk.mjs --extended` x2 + `scans-sdk.mjs` (chromium) through `check-budgets.mjs` | 0, 0 | 5 unit tests pass; 40 ok, 38 webkit skipped, 0 failing |
+| notices | `node scripts/gen-notices.mjs --check` | 0 | up to date |
+| licences | `cargo deny check licenses bans sources` | 0 | ok (no RustSec advisory check run) |
+| export size | `cargo build --release -p foliark-engine --example export_size`; `tools/bench/export-size.py --check` | 0, 0 | Foliark <= PyMuPDF on every exportable fixture |
+| release dry run | `tools/release/dry-run.sh` | 0 | tarball bytes equal the recorded sha256, manifest 0.2.0, 284 entries, notices, SBOM (102 components), `SHA256SUMS`, package README names tag `v0.2.0`, `npm publish --dry-run` against an unreachable registry |
+
+Owner publish command, from the repository root (after the `v0.2.0` tag exists on the record commit; rebuild with the commands above if the tarball is gone and compare the sha256):
+`npm publish ./dist-pkg/zilijonas-foliark-0.2.0.tgz --access public`
+
+---
+
 # Release candidate: @zilijonas/foliark 0.1.6 (NEW-119/120: editable block widths, editor face)
 
 Qualified on 2026-10-25 on the owner's Mac mini (same toolchain as 0.1.0). Engine changes versus 0.1.5 (`CHANGELOG.md`, ADR 0011 amendment, spec 6.1): a one-line paragraph with other text beside it (a table header next to its neighbour column) gets `ParagraphInfo.wrapWidth` up to one space short of that text, instead of the width of its own line (NEW-119); the editor face maps only characters the page drew with that font, so a typed letter the subset lacks is no longer drawn as a missing glyph (NEW-120). No API change. Not published by an agent: the owner publishes this exact tarball (`npm publish`, local). Source correspondence: tag `v0.1.6` on the commit that carries this record; the tarball was built from the source commit below, and the record commit differs from it only by documentation. `tools/release/dry-run.sh` reads the first recorded sha256 in this file, so the 0.1.6 hash stays in this section, above the 0.1.5 record. `release/0.1.6` is `main` (0.1.5, `f14ee07`) plus the NEW-64 docs, `fix/edit-blocks` (NEW-119) and `fix/missing-glyph` (NEW-120). No budget was re-based: wasm gzip 2,242,850 B is inside the 0.1.4 cap (2,352,843 B). Real-Safari proof on local HDDN bound to this build (NEW-121) is pending and recorded separately.
