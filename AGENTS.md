@@ -6,7 +6,7 @@ Canonical for Claude Code and Codex (`CLAUDE.md` only imports this file). Read i
 
 Headless Rust/WASM PDF SDK for redacting, editing and sanitizing PDFs in the browser, offline and on mobile, with typed refusals instead of silent fallbacks. First consumer: HDDN (the owner's private app, a separate repo), replacing Pyodide + PyMuPDF.
 
-Status: `@zilijonas/foliark` 0.1.6 on npm (release record `docs/release/candidate.md`), HDDN production on 0.1.6 since 2026-10-25 (first Foliark release in production 2026-10-23) (`docs/integration/hddn-acceptance.md`). License: AGPL-3.0-only plus separate commercial licensing (`LICENSING.md`, `COMMERCIAL-LICENSING.md`). External code contributions are not accepted (`CONTRIBUTING.md`); only the owner and agents acting for the owner commit. Security reports: `SECURITY.md`. Board: Workbench project `NEW` (section 8).
+Status: `@zilijonas/foliark` 0.1.6 on npm, 0.2.0 release candidate (release record `docs/release/candidate.md`), HDDN production on 0.1.6 since 2026-10-25 (first Foliark release in production 2026-10-23) (`docs/integration/hddn-acceptance.md`). License: AGPL-3.0-only plus separate commercial licensing (`LICENSING.md`, `COMMERCIAL-LICENSING.md`). External code contributions are not accepted (`CONTRIBUTING.md`); only the owner and agents acting for the owner commit. Security reports: `SECURITY.md`. Board: Workbench project `NEW` (section 8).
 
 ## 2. Architecture
 
@@ -52,6 +52,7 @@ Documents:
   - [0011](docs/adr/0011-unchanged-text-fits.md) unchanged text fits its edit box (budget measured by the layout); decomposed-cluster fallback
   - [0012](docs/adr/0012-edit-style-segments.md) an edit keeps each style segment (bold heading, regular body) as its own; box measured in the page's fonts
   - [0013](docs/adr/0013-edit-inline-runs.md) an edit keeps inline bold/italic runs: looks carried through a word diff, one layout with per-run fonts, caller font per run's weight/style or `EDIT_NO_FONT`
+  - [0014](docs/adr/0014-keep-links.md) `links: 'keep'` (opt-in, native): safe URI/GoTo links written fresh, none over or spelling a redaction
 
 ## 3. Commands
 

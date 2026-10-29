@@ -154,6 +154,10 @@ fn merge_contents(nodes: &mut Vec<Node>, pages: &[Ref]) -> Result<(), PdfError> 
     Ok(())
 }
 
+fn is_link(v: &Val) -> bool {
+    matches!(v, Val::Dict(e) if e.iter().any(|(k, x)| k == b"Subtype" && *x == Val::Name(b"Link".to_vec())))
+}
+
 fn dedupe(nodes: &mut Vec<Node>, pages: &[Ref]) {
     let pages: HashSet<i32> = pages.iter().map(|p| p.get()).collect();
     let mut to: HashMap<i32, i32> = HashMap::new();
@@ -161,7 +165,8 @@ fn dedupe(nodes: &mut Vec<Node>, pages: &[Ref]) {
         let mut seen: HashMap<(String, u64), Vec<usize>> = HashMap::new();
         let mut dups = HashSet::new();
         for (i, n) in nodes.iter().enumerate() {
-            if pages.contains(&n.id.get()) {
+            // A page's own link annotation (ADR 0014) is never shared with another page.
+            if pages.contains(&n.id.get()) || is_link(&n.val) {
                 continue;
             }
             let mut v = n.val.clone();

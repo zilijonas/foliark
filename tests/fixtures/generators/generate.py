@@ -133,6 +133,34 @@ def annot_appearance():
     return simple(text(20, 360, "KEEP_PUBLIC_ANNOT"), {6: ann, 7: ap, 8: link}, page_extra="/Annots [6 0 R 8 0 R]")
 
 
+def links_keep():
+    """Two pages; page 0 carries seven links. SECRET_LINKTOKEN is the redaction target (NEW-124)."""
+    def link(rect, action, extra=""):
+        return "<< /Type /Annot /Subtype /Link /Rect [%s] /Border [0 0 1] %s %s >>" % (rect, action, extra)
+    uri = lambda u: "/A << /S /URI /URI (%s) /IsMap false >>" % u
+    objs = {
+        1: "<< /Type /Catalog /Pages 2 0 R /Names << /Dests 8 0 R >> >>",
+        2: "<< /Type /Pages /Kids [3 0 R 6 0 R] /Count 2 >>",
+        3: "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 %d %d] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> "
+           "/Annots [9 0 R 10 0 R 11 0 R 12 0 R 13 0 R 14 0 R 15 0 R] >>" % (W, H),
+        4: stream("", text(20, 360, "KEEP_PUBLIC_LINKS") + text(20, 300, "SECRET_LINKTOKEN") + text(20, 250, "mailto") + text(20, 220, "script")
+                  + text(20, 190, "launch") + text(20, 160, "chapter") + text(20, 130, "encoded"), True),
+        5: "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        6: "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 %d %d] /Contents 7 0 R /Resources << /Font << /F1 5 0 R >> >> >>" % (W, H),
+        7: stream("", text(20, 360, "KEEP_PUBLIC_PAGE_TWO"), True),
+        8: "<< /Names [(chapter2) [6 0 R /XYZ 0 400 null]] >>",
+        # kept: https, with keys the writer must not copy
+        9: link("20 355 160 375", uri("https://example.com/public"), "/Contents (SECRET_LINK_NOTE) /NM (SECRET_LINK_NAME) /T (SECRET_LINK_AUTHOR)"),
+        10: link("20 245 140 262", uri("mailto:SECRET_LINKTOKEN@example.org")),  # token of the redacted text
+        11: link("15 295 200 315", uri("https://example.com/over")),  # over the redaction region
+        12: link("20 215 140 232", uri("javascript:app.alert(1)")),
+        13: link("20 185 140 202", "/A << /S /Launch /F (calc.exe) >>"),
+        14: link("20 155 140 172", "/A << /S /GoTo /D (chapter2) >>", "/Contents (SECRET_GOTO_NOTE)"),  # kept, as an explicit /Dest
+        15: link("20 125 140 142", uri("https://example.org/?q=secret%5Flinktoken")),  # token, percent-encoded
+    }
+    return build(objs)[0]
+
+
 def mixed_regions():
     """Text, image, vector and Form secrets on one page, each under its own region; public text and a public image bar stay."""
     img = stream("/Type /XObject /Subtype /Image /Width 64 /Height 32 /ColorSpace /DeviceRGB /BitsPerComponent 8", _bar_image(b"\xb4\x14\x14"), True)
@@ -616,6 +644,12 @@ FIXTURES = {
                          {"behavior": "FreeText with /AP /N plus URI link; flatten drops /Contents /NM /T and the link",
                           "mustRemove": ["SECRET_ANNOT_CONTENTS", "SECRET_ANNOT_NAME", "SECRET_ANNOT_AUTHOR", "SECRET_ANNOT_TEXT", "SECRET_LINK_URI"], "mustKeepText": ["KEEP_PUBLIC_ANNOT"],
                          "regions": [{"kind": "sensitive", "page": 0, "rectTopLeft": [20, 80, 200, 120], "text": "annot rect"}, R(20, 360, "KEEP_PUBLIC_ANNOT", kind="public")]}, {}),
+    "links-keep": (links_keep, ["link", "named-destination", "multi-page"],
+                   {"behavior": "seven links, SECRET_LINKTOKEN redacted; policy links keep writes back only the https link and the GoTo (as an explicit /Dest); mailto and percent-encoded URI carry the token, one link covers the region, javascript: and Launch are never kept",
+                    "mustRemove": ["SECRET_LINKTOKEN", "SECRET_LINK_NOTE", "SECRET_LINK_NAME", "SECRET_LINK_AUTHOR", "SECRET_GOTO_NOTE", "javascript:app.alert", "calc.exe"],
+                    "mustKeepText": ["KEEP_PUBLIC_LINKS", "KEEP_PUBLIC_PAGE_TWO"],
+                    "regions": [R(20, 300, "SECRET_LINKTOKEN"), R(20, 360, "KEEP_PUBLIC_LINKS", kind="public")],
+                    "keptLinks": ["https://example.com/public", "chapter2 -> page 1 (explicit /Dest)"]}, {}),
     "mixed-regions": (mixed_regions, ["text", "image", "vector", "form-xobject"],
                       {"behavior": "text, image pixels, a vector rectangle and Form text each under a region; public text and the gray image bar stay",
                        "mustRemove": ["SECRET_MIXED_TEXT", "SECRET_MIXED_FORM"], "mustKeepText": ["KEEP_PUBLIC_MIXED"],

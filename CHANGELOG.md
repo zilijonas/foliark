@@ -4,6 +4,16 @@ All notable changes to `@zilijonas/foliark` (named `@foliark/sdk` before 0.1.0 w
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-29
+
+Opt-in link keeping on export, and a faster writer. Source: tag `v0.2.0`. Tarball and hashes: `docs/release/candidate.md`.
+
+### Added
+- `ExportPolicy.links: 'remove' | 'keep'` (default `'remove'`, output unchanged). With `'keep'`, native export writes back hyperlinks that cannot reveal redacted content: `http`, `https` and `mailto` URIs and jumps to a page of the output (named destinations become explicit), written fresh from an allowlist. A link is dropped if a redaction region or an edited paragraph meets its rectangle or quads, its URI spells redacted text, or its action is anything else (JavaScript, Launch, GoToR, SubmitForm, `/Next`, ...). `report.kept.links` counts the kept; `LINKS_REMOVED` counts the rest and is reported only when one was dropped. Raster export still removes links (ADR 0014) (NEW-124).
+
+### Changed
+- The writer checks each content-stream operator with a match instead of scanning a slice per token: re-emitting a stream of millions of junk tokens took 360-460 ms and now takes 155-220 ms. The operator set is unchanged (NEW-122).
+
 ## [0.1.6] - 2026-10-25
 
 Editing a one-line paragraph beside other text, and typed characters the page never drew. Source: tag `v0.1.6`. Tarball and hashes: `docs/release/candidate.md`.

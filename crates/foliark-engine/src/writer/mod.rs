@@ -61,6 +61,31 @@ pub struct NewStream {
     pub data: Vec<u8>,
 }
 
+/// A hyperlink the export keeps (ADR 0014), already validated by [`crate::sanitize::links`]. The
+/// writer emits it fresh, never from the input dictionary: only the keys below exist.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Link {
+    pub page: usize,
+    /// User space `[x0, y0, x1, y1]`.
+    pub rect: [f64; 4],
+    /// Empty, or a multiple of 8 numbers.
+    pub quad_points: Vec<f64>,
+    /// `/H`: one of `N I O P`.
+    pub highlight: Option<u8>,
+    pub target: LinkTarget,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum LinkTarget {
+    Uri(Vec<u8>),
+    /// An explicit destination: output page index, view name (`XYZ`, `Fit`, ...), its arguments.
+    Dest {
+        page: usize,
+        view: &'static str,
+        args: Vec<Option<f64>>,
+    },
+}
+
 /// XObject resources added (name, object) and dropped (name).
 pub(crate) type XObjectEdits = (Vec<(Vec<u8>, Val)>, Vec<Vec<u8>>);
 
@@ -107,6 +132,7 @@ pub struct Writer<'d> {
     redirects: Redirects,
     layers_resolved: bool,
     preserve: bool,
+    links: Vec<Link>,
 }
 
 /// Resources added per page: (resource name, object).
@@ -131,7 +157,15 @@ impl<'d> Writer<'d> {
             redirects: Redirects::default(),
             layers_resolved: false,
             preserve: false,
+            links: Vec::new(),
         }
+    }
+
+    /// Write these hyperlinks as the only entries of their pages' `/Annots` (ADR 0014). Without
+    /// this the allowlist writer drops every annotation.
+    pub fn set_links(&mut self, links: Vec<Link>) -> &mut Self {
+        self.links = links;
+        self
     }
 
     /// Preserve mode (spec §8.3): the same writer without the allowlist. Everything reachable
@@ -352,6 +386,7 @@ impl<'d> Writer<'d> {
         walk.encoded = &self.encoded;
         walk.preserve = self.preserve;
         walk.dedupe = self.dedupe;
+        walk.links = &self.links;
         let pages = walk.build(
             &self.appended,
             [&self.page_fonts, &self.page_xobjects],

@@ -1,6 +1,6 @@
 {
   "name": "@zilijonas/foliark",
-  "version": "0.1.6",
+  "version": "0.2.0",
   "description": "Rust/WebAssembly PDF SDK for the browser: extract text, render, edit, redact and sanitize PDFs offline. A PyMuPDF alternative. AGPL-3.0.",
   "type": "module",
   "license": "AGPL-3.0-only",

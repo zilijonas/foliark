@@ -101,6 +101,17 @@ describe("text redaction and sanitized native export", () => {
     expect((await doc.extractText(0)).pageIndex).toBe(0);
   });
 
+  it("policy.links 'keep' reaches the engine: safe links are written back and counted, the default removes them all", async () => {
+    const f = await client();
+    const doc = await f.open(fixture("generated/links-keep.pdf"));
+    const dropped = (r: { losses: { code: string; count: number }[] }) => r.losses.find((l) => l.code === "LINKS_REMOVED")?.count ?? 0;
+    const none = await doc.prepareExport({ mode: "native" });
+    expect([none.report.kept.links, dropped(none.report)]).toEqual([0, 7]);
+    const keep = await doc.prepareExport({ mode: "native", policy: { links: "keep" } });
+    expect([keep.report.kept.links, dropped(keep.report)]).toEqual([5, 2]); // javascript: and Launch never stay
+    expect(keep.policyHash).not.toBe(none.policyHash);
+  });
+
   it("a raster export succeeds where native refuses, keeps the page geometry and has no text layer", async () => {
     const f = await client();
     const bytes0 = fixture("generated/ocg-hidden-text.pdf");

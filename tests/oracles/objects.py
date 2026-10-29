@@ -12,6 +12,8 @@ Every decode problem, unsupported filter or unsupported geometry is a finding, n
 import json
 import math
 import re
+import unicodedata
+import urllib.parse
 import subprocess
 import sys
 import zlib
@@ -340,6 +342,8 @@ def check(path, spec):
     # (f) vector paths inside display-space rects
     for r in spec.get("vector_regions", []):
         F += vector_region(doc, r)
+    if spec.get("links"):
+        F += link_check(pdf, doc, spec)
     # (g) per-occurrence reachability and stale resources (Form clones)
     for r in spec.get("occurrences", []):
         F += occurrence_leaks(pdf, r, cap)
@@ -560,6 +564,67 @@ def vector_region(doc, r):
             continue
         F.append("VECTOR_REGION: page %d path #%d %s bounds %s fill %s stroke %s remains inside region %s" % (
             r["page"], d["seqno"], d["type"], tuple(round(v, 2) for v in d["rect"]), d.get("fill"), d.get("color"), r["rect"]))
+    return F
+
+
+LINK_KEYS = {"/Type", "/Subtype", "/Rect", "/QuadPoints", "/Border", "/H", "/A", "/Dest"}
+LINK_SCHEMES = ("http:", "https:", "mailto:")
+LINK_VIEWS = {"/XYZ", "/Fit", "/FitH", "/FitV", "/FitR", "/FitB", "/FitBH", "/FitBV"}
+
+
+def _norm(s):
+    return unicodedata.normalize("NFC", s).lower()
+
+
+def link_check(pdf, doc, spec):
+    """ADR 0014. Every annotation of the output is a /Link written from the allowlist: only allowlisted keys, an /A that is
+    exactly a URI action (http, https, mailto; printable ASCII, 2048 bytes at most) or an explicit /Dest naming a page of this
+    file, no URI holding a token of the redacted text (spec["links"]["tokens"], percent-decoded, NFC, lowercased), and no
+    /Rect or quad meeting a redaction region (spec["links"]["regions"], display space)."""
+    L, F = spec["links"], []
+    pages = {pg.obj.objgen for pg in pdf.pages}
+    toks = [_norm(t) for t in L.get("tokens", [])]
+    for i, pg in enumerate(pdf.pages):
+        fpg = doc[i]
+        regs = [unrot(fpg, r["rect"]) for r in L.get("regions", []) if r["page"] == i]
+        for n, a in enumerate(pg.obj.get("/Annots", [])):
+            where = "page %d annotation %d" % (i, n)
+            if str(a.get("/Subtype", "")) != "/Link":
+                F.append("LINK_SUBTYPE: %s is a %s, not a /Link" % (where, a.get("/Subtype")))
+                continue
+            extra = sorted(set(str(k) for k in a.keys()) - LINK_KEYS)
+            if extra:
+                F.append("LINK_KEY: %s carries %s" % (where, ",".join(extra)))
+            act = a.get("/A")
+            if act is not None:
+                if sorted(str(k) for k in act.keys()) != ["/S", "/URI"] or str(act.get("/S")) != "/URI":
+                    F.append("LINK_ACTION: %s action is not a plain URI action (%s)" % (where, ",".join(str(k) for k in act.keys())))
+                    continue
+                raw = bytes(act["/URI"])
+                if len(raw) > 2048 or not all(0x21 <= c <= 0x7E for c in raw) or not raw.lower().startswith(tuple(x.encode() for x in LINK_SCHEMES)):
+                    F.append("LINK_SCHEME: %s URI %r is not a printable http, https or mailto URI" % (where, raw[:60]))
+                dec = raw.decode("latin-1")
+                for _ in range(3):
+                    dec = urllib.parse.unquote(dec, errors="replace")
+                for t in toks:
+                    if t in _norm(dec):
+                        F.append("LINK_TOKEN: %s URI holds redacted text %r" % (where, t))
+            elif "/Dest" in a:
+                d = a["/Dest"]
+                ok = d._type_code == T.array and len(d) >= 2 and d[0].is_indirect and d[0].objgen in pages and str(d[1]) in LINK_VIEWS
+                if not ok:
+                    F.append("LINK_DEST: %s /Dest is not an explicit destination on a page of this file" % where)
+            else:
+                F.append("LINK_ACTION: %s has neither /A nor /Dest" % where)
+            shapes = [[float(v) for v in a["/Rect"]]]
+            qp = [float(v) for v in a.get("/QuadPoints", [])]
+            shapes += [qp[k:k + 8] for k in range(0, len(qp) - len(qp) % 8, 8)]
+            for sh in shapes:
+                xs, ys = sh[0::2], sh[1::2]
+                r = (fitz.Rect(min(xs), min(ys), max(xs), max(ys)) * fpg.transformation_matrix).normalize()
+                for g in regs:
+                    if r.x0 < g.x1 and g.x0 < r.x1 and r.y0 < g.y1 and g.y0 < r.y1:
+                        F.append("LINK_REGION: %s overlaps redaction region %s" % (where, tuple(round(v, 1) for v in g)))
     return F
 
 

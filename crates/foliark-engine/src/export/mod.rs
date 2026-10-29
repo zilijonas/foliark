@@ -28,12 +28,12 @@ use crate::redaction::plan::{RedactionPlan, bounds_of, glyph_boxes, text_coverag
 use crate::redaction::text::num;
 use crate::redaction::{Executed, execute, image};
 use crate::sanitize::document::scan;
-use crate::sanitize::{interactive, prune, resources, text_semantics, visibility};
-use crate::writer::Writer;
+use crate::sanitize::{interactive, links, prune, resources, text_semantics, visibility};
+use crate::writer::{Link, Writer};
 use foliark_model::{
     Capabilities, Capability, CapabilityReason, CapabilityStatus, EditsReport, ErrorCode,
-    ExportMode, ExportPolicy, ExportReport, ExtractOptions, Flattened, KeptReport, Limits, Loss,
-    LossCode, PdfError, Point, Rect, RedactionReport, SanitizedItem,
+    ExportMode, ExportPolicy, ExportReport, ExtractOptions, Flattened, KeptReport, Limits,
+    LinkPolicy, Loss, LossCode, PdfError, Point, Rect, RedactionReport, SanitizedItem,
 };
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -327,14 +327,37 @@ fn remap(committed: &Committed, doc: &Document, staged: &Document) -> Result<Com
 
 /// Stage 6: the written file without the resource entries no surviving content uses (ADR 0007),
 /// by a second write of the file read back. The count is the entries dropped.
-fn drop_unused(bytes: Vec<u8>, limits: &Limits) -> Result<(Vec<u8>, u32), PdfError> {
+fn drop_unused(
+    bytes: Vec<u8>,
+    limits: &Limits,
+    links: &[Link],
+) -> Result<(Vec<u8>, u32), PdfError> {
     let out = Document::open_with_limits(bytes.clone(), None, false, limits.clone())?;
     let mut w = Writer::new(out.reader(), limits.clone());
+    // This write is a fresh graph too: the kept links go in again (their pages keep their index).
+    w.set_links(links.to_vec());
     let n = prune::unused(out.reader(), &mut w)?;
     if n == 0 {
         return Ok((bytes, 0));
     }
     Ok((w.write()?, n))
+}
+
+/// Every region that takes content out, per page, in display space: as requested and as grown to
+/// whole clusters, images and vectors (what a link must not overlap, ADR 0014).
+fn link_regions(committed: &Committed, applied: &[AppliedRedaction]) -> BTreeMap<usize, Vec<Rect>> {
+    let mut out: BTreeMap<usize, Vec<Rect>> = BTreeMap::new();
+    for r in &committed.redactions {
+        out.entry(r.page_index as usize)
+            .or_default()
+            .extend(r.regions.iter().copied());
+    }
+    for a in applied {
+        out.entry(a.page_index as usize)
+            .or_default()
+            .extend(a.effective.iter().copied());
+    }
+    out
 }
 
 /// Run the native pipeline for `doc`, the working copy at `binding`.
@@ -403,14 +426,28 @@ pub fn prepare(
     for (page, ops) in fills(doc, committed)? {
         w.append_page_content(page as usize, ops.as_bytes())?;
     }
-    let (bytes, unused) = drop_unused(w.write()?, limits)?;
+    let applied = applied(&plan, committed)?;
+    let links = if policy.links == LinkPolicy::Keep {
+        links::keep(
+            reader,
+            doc,
+            &link_regions(committed, &applied),
+            &committed.edits,
+        )?
+    } else {
+        Vec::new()
+    };
+    w.set_links(links.clone());
+    let (bytes, unused) = drop_unused(w.write()?, limits, &links)?;
     let pages = doc.page_count();
     let invisible = verify(&bytes, pages, committed, limits)?;
-    let applied = applied(&plan, committed)?;
 
     let mut removed = removals.removed;
     for (item, n) in [
-        (SanitizedItem::Annotations, inter.annotations),
+        (
+            SanitizedItem::Annotations,
+            inter.annotations - links.len() as u32,
+        ),
         (SanitizedItem::Widgets, inter.widgets),
         (SanitizedItem::OcgContent, vis.hidden_ops + inter.oc_hidden),
         (SanitizedItem::OffPage, vis.off_page_ops),
@@ -438,7 +475,7 @@ pub fn prepare(
             );
         }
     };
-    add(LossCode::LinksRemoved, inter.links);
+    add(LossCode::LinksRemoved, inter.links - links.len() as u32);
     add(LossCode::AnnotationsFlattened, flat_annots);
     add(LossCode::AnnotationsRemoved, inter.removed_visible);
     add(LossCode::FormsFlattened, flat_widgets);
@@ -526,6 +563,7 @@ pub fn prepare(
         },
         kept: KeptReport {
             invisible_text_clusters: invisible,
+            links: links.len() as u32,
             fonts_with_glyph_inventory: inventory,
         },
         losses,

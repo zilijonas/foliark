@@ -776,6 +776,17 @@ pub enum AnnotationPolicy {
     Remove,
 }
 
+/// Native export only (ADR 0014): `Keep` writes a hyperlink back, fresh from an allowlist, when it
+/// cannot reveal redacted content; raster export removes every link either way.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum LinkPolicy {
+    #[default]
+    Remove,
+    Keep,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -820,6 +831,7 @@ impl Default for RasterPolicy {
 #[ts(export)]
 pub struct ExportPolicy {
     pub annotations: AnnotationPolicy,
+    pub links: LinkPolicy,
     pub signed_input: SignedInputPolicy,
     pub invisible_text: InvisibleTextPolicy,
     pub raster: RasterPolicy,
@@ -933,6 +945,9 @@ pub struct EditsReport {
 #[ts(export)]
 pub struct KeptReport {
     pub invisible_text_clusters: u32,
+    /// Hyperlinks written back under `policy.links: 'keep'` (ADR 0014); the rest are in
+    /// `LINKS_REMOVED`.
+    pub links: u32,
     pub fonts_with_glyph_inventory: Vec<String>,
 }
 
