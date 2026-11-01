@@ -78,8 +78,26 @@ fn without_language_escapes(s: &str) -> String {
     out
 }
 
-fn bidi(c: char) -> bool {
-    matches!(c, '\u{200e}'..='\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}')
+/// Characters that draw nothing: controls (Cc), format characters (Cf: bidi marks, zero-width
+/// joiners and spaces, soft hyphen, BOM, tags U+E0000-E007F, ...), private use (Co),
+/// noncharacters and variation selectors. They could carry or split a redacted token unseen,
+/// and `objects.py` rejects Cc and Cf in Info text. Unassigned code points (Cn) other than the
+/// noncharacters pass: there is no Unicode table here.
+fn invisible(c: char) -> bool {
+    let u = c as u32;
+    c.is_control()
+        || matches!(u,
+            0xad | 0x600..=0x605 | 0x61c | 0x6dd | 0x70f | 0x890..=0x891 | 0x8e2 | 0x180e
+            | 0x200b..=0x200f | 0x202a..=0x202e | 0x2060..=0x2064 | 0x2066..=0x206f | 0xfeff
+            | 0xfff9..=0xfffb | 0x110bd | 0x110cd | 0x13430..=0x1343f | 0x1bca0..=0x1bca3
+            | 0x1d173..=0x1d17a | 0xe0000..=0xe007f)
+        // Variation selectors.
+        || matches!(u, 0x180b..=0x180d | 0x180f | 0xfe00..=0xfe0f | 0xe0100..=0xe01ef)
+        // Private use.
+        || matches!(u, 0xe000..=0xf8ff | 0xf0000..=0xffffd | 0x100000..=0x10fffd)
+        // Noncharacters.
+        || matches!(u, 0xfdd0..=0xfdef)
+        || u & 0xfffe == 0xfffe
 }
 
 /// The normalized text of a raw Info string, or `None` when it is empty, too long or does not
@@ -97,9 +115,12 @@ fn text(raw: &[u8]) -> Option<String> {
     } else {
         pdfdoc(raw)
     };
+    // Stripped before NFC: a mark left next to its base once a joiner goes composes with it.
     let clean: String = decoded
+        .chars()
+        .filter(|c| !invisible(*c))
+        .collect::<String>()
         .nfc()
-        .filter(|c| !c.is_control() && !bidi(*c))
         .collect();
     let clean = clean.trim();
     (!clean.is_empty() && clean.chars().count() <= MAX_CHARS).then(|| clean.to_owned())

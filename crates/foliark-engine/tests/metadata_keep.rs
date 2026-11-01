@@ -36,10 +36,17 @@ fn keep() -> ExportPolicy {
 
 /// Info with a UTF-16 title (`Café Ltd`), a custom key and `Trapped`; XMP as object 7.
 fn input() -> Vec<u8> {
-    let info = "<< /Title <FEFF00430061006600E9004C00740064> /Author (Marta Jones) \
-        /Subject (Confidential memo) /Keywords (alpha beta) /Creator (Writer) /Producer (Tool 1.0) \
+    input_with("<FEFF00430061006600E9004C00740064>", "(Confidential memo)")
+}
+
+/// [`input`] with another Title and Subject (PDF string syntax).
+fn input_with(title: &str, subject: &str) -> Vec<u8> {
+    let info = format!(
+        "<< /Title {title} /Author (Marta Jones) \
+        /Subject {subject} /Keywords (alpha beta) /Creator (Writer) /Producer (Tool 1.0) \
         /CreationDate (D:20240102030405+02'00') /ModDate (D:20240102030406Z) \
-        /Custom (SECRET_CUSTOM_VALUE) /Trapped /False >>";
+        /Custom (SECRET_CUSTOM_VALUE) /Trapped /False >>"
+    );
     let xmp = stream(
         "/Type /Metadata /Subtype /XML",
         "<x:xmpmeta>SECRET_XMP_BODY</x:xmpmeta>",
@@ -279,4 +286,29 @@ fn raster_export_never_writes_info() {
     let (plan, out) = export(ExportMode::Raster, None, keep());
     assert_eq!(info(&out, "raster.pdf"), (vec![], vec![], false));
     assert!(plan.report.kept.metadata.is_empty());
+}
+
+#[test]
+fn format_characters_are_stripped_before_the_leak_check() {
+    // Title: "Re: Mar<ZWSP>ta Jo<WJ>nes <tag J>"; Subject: "Memo<BOM><tag A><tag B> <SHY>".
+    let bytes = input_with(
+        "<FEFF00520065003A0020004D00610072200B007400610020004A006F2060006E006500730020DB40DC4A>",
+        "<FEFF004D0065006D006FFEFFDB40DC41DB40DC42002000AD>",
+    );
+    let mut e = engine();
+    let (doc, _) = e.open(bytes, None, false).unwrap();
+    let t = e.apply_changes(&doc, redact_jones());
+    assert!(run(&mut e, t).unwrap().accepted);
+    let t = e.prepare_export(&doc, ExportMode::Native, keep());
+    let plan = run(&mut e, t).unwrap();
+    let out = e.take_export(&doc, &plan.plan_id).unwrap();
+    let (keys, values, _) = info(&out, "format-chars.pdf");
+    // The zero-width-split name spells the redacted "Jones" once stripped: Title goes too.
+    assert!(!keys.contains(&"Title".to_owned()), "{keys:?}");
+    let subject = keys
+        .iter()
+        .position(|k| k == "Subject")
+        .expect("Subject kept");
+    assert_eq!(values[subject], "Memo");
+    oracle("format-chars.pdf", &out, &["Jones"]);
 }
