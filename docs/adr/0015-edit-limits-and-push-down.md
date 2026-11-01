@@ -52,6 +52,7 @@ HDDN sample (expected; NEW-129's fixture confirms it): 7 characters added to lin
 - `reflowSoftMask`: a moved item is drawn under an ExtGState soft mask;
 - `reflowPattern`: a moved item is painted with a pattern colour (pattern space is anchored to the parent's default space, so `cm` would slide the shape over its pattern);
 - `reflowSharedContent`: a stream that would get `cm` is drawn by another page or another occurrence;
+- `reflowBackground` (0.3.1, NEW-136): a container of the paragraph and the moved items (it stays) can carry information: anything but a uniform-colour painted path, so an image (inline or not), a shading, a pattern fill, text, or any item under a soft mask, including one drawn by a Form. Moved text would leave its picture (OCR text off its scan) and a redaction mapped with the move would leave the pixels under its old place uncovered. A frame or a solid background rectangle carries nothing beyond its colour, so a translated redaction over it exposes nothing, and it may stay.
 - `reflowAnnotation`: a non-Link annotation, any widget, or a Link only partly over moved content meets the moved area.
 A plain overflow of the bound has no `feature`.
 
@@ -75,6 +76,7 @@ ChangeResult.remap: PageShift[]   // ordered old -> new steps for overlays (reda
 - The edit's own removed glyphs neither move nor stay, so a `BT … ET` holding the paragraph and moved lines below it moves as one leaf. Annotation appearances are judged by their `/Rect`, clip-only paths by the clip rule.
 - A Link moves when its rectangle meets moved items and no fixed one (a background that contains it does not count); one given as a direct dictionary in `/Annots` refuses `reflowAnnotation`.
 - `reflowPattern` also covers a shading drawn inside a moved Form (conservative: `cm` around the `Do` would be exact there).
+- A line step under 0.5 pt (a zero- or hidden-size font) has no push-down (`pushDown: null`, plain `EDIT_NO_FIT`), and `pushDown.maxLines` adds at most 64 lines to `maxWrapLines`, so the budget search is bounded (0.3.1).
 - `EditPreview.maxLines` and the refusal's `maxLines` are `ParagraphInfo.pushDown.maxLines` (else `maxWrapLines`); `pushDown` is the largest `k` whose `plan` passes for `1..=k`, computed only by `prepareParagraph`.
 
 ## Redactions (privacy-critical)

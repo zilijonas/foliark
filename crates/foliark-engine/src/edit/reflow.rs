@@ -38,6 +38,13 @@ const SOFT_MASK: &str = "reflowSoftMask";
 const PATTERN: &str = "reflowPattern";
 const SHARED_CONTENT: &str = "reflowSharedContent";
 const ANNOTATION: &str = "reflowAnnotation";
+const BACKGROUND: &str = "reflowBackground";
+
+/// The smallest line step push-down moves by: below it the paragraph has no usable lines (a
+/// zero-size or hidden-size font) and the budget search would not end.
+const MIN_STEP: f64 = 0.5;
+/// The most lines `budget` adds.
+const MAX_LINES: u32 = 64;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Kind {
@@ -504,6 +511,14 @@ impl<'a> Reflow<'a> {
             }
             if bi[1] < self.cut - EPS && bi[3] > self.cut + EPS {
                 if contains(bi, sel) && contains(bi, region) {
+                    // A container stays. One that can carry information (an image, a shading,
+                    // a pattern, text, anything under a soft mask) refuses: moved text would
+                    // leave its picture (OCR off its scan), and a redaction mapped with the
+                    // move would leave the pixels under its old place uncovered. A uniform
+                    // colour path (a frame, a panel) shows nothing a moved redaction could miss.
+                    if !self.plain(i) {
+                        return Err(Some(BACKGROUND));
+                    }
                     limit = limit.min(bi[3]);
                 } else {
                     return Err(Some(STRADDLE));
@@ -752,12 +767,28 @@ impl<'a> Reflow<'a> {
         [left.min(x0), top, right.max(x1), bottom]
     }
 
-    /// `ParagraphInfo.pushDown`: the most lines push-down allows at `maxWrapWidth`.
+    /// A painted path in one uniform colour: not a pattern, not under a soft mask.
+    fn plain(&self, i: usize) -> bool {
+        let model = &self.p.model;
+        let loc = model.items[i].loc;
+        matches!(&model.items[i].kind, ItemKind::Path(p) if !p.clip_only)
+            && !model.soft_masked.contains(&i)
+            && !model
+                .diagnostics
+                .iter()
+                .any(|d| d.kind == DiagnosticKind::PatternNotDescended && d.loc == Some(loc))
+    }
+
+    /// `ParagraphInfo.pushDown`: the most lines push-down allows at `maxWrapWidth`, at most
+    /// [`MAX_LINES`] more.
     pub fn budget(&self) -> Option<PushDown> {
         let info = &self.p.info;
+        if info.line_step.is_nan() || info.line_step < MIN_STEP {
+            return None;
+        }
         let mut best = None;
         let mut k = 1;
-        while f64::from(k) * info.line_step <= self.p.limits.page_h {
+        while k <= MAX_LINES && f64::from(k) * info.line_step <= self.p.limits.page_h {
             let Ok(m) = self.plan(f64::from(k) * info.line_step) else {
                 break;
             };
@@ -773,6 +804,9 @@ impl<'a> Reflow<'a> {
     /// The push for `needed` lines (more than `maxWrapLines`).
     pub fn push(&self, needed: u32) -> Result<Push, Refusal> {
         let info = &self.p.info;
+        if info.line_step.is_nan() || info.line_step < MIN_STEP {
+            return Err(None);
+        }
         let dy = f64::from(needed - info.max_wrap_lines) * info.line_step;
         // The paragraph's own last line must end above where the moved content starts now.
         let last = info.first_baseline + f64::from(needed - 1) * info.line_step + self.p.descent;

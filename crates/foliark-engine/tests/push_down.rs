@@ -253,8 +253,6 @@ const SEL: Rect = rect(15.0, 30.0, 270.0, 15.0);
 const THREE: &str = "Alpha beta gamma delta\nsecond line\nthird line";
 
 fn page(content: &str, objs: &[String], extra: &str) -> Vec<u8> {
-    let font = "/F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica /FirstChar 0 /LastChar 255 /Widths [256 0 R] >>";
-    let _ = font;
     tiny_pdf(
         "",
         &format!("/Resources << /Font << /F1 5 0 R >> {extra} >>"),
@@ -656,4 +654,90 @@ fn a_kept_link_over_moved_and_redacted_text_is_dropped() {
         &serde_json::json!({ "forbidden": ["center for details"] }),
     );
     assert!(ok, "{log}");
+}
+
+// ---- NEW-136: a container that carries information stays, so nothing moves over it ------------
+
+/// A 30 x 40 gray image of varying samples, drawn over the whole page (a scan).
+fn scan_image() -> String {
+    let data: String = (0..40)
+        .flat_map(|y| (0..30).map(move |x| char::from(0x30 + ((x * 7 + y * 13) % 64) as u8)))
+        .collect();
+    stream(
+        "/Type /XObject /Subtype /Image /Width 30 /Height 40 /ColorSpace /DeviceGray /BitsPerComponent 8",
+        &data,
+    )
+}
+
+/// A scanned-like page: the image, the paragraph, visible lines below with an invisible OCR
+/// line among them, a footer.
+fn scanned() -> Vec<u8> {
+    let ocr = "BT 3 Tr /F1 10 Tf 20 302 Td (Hidden ocr line) Tj ET\n";
+    page(
+        &format!("q 300 0 0 400 0 0 cm /Im1 Do Q\n{PARA}{BELOW}{ocr}{FOOTER}"),
+        &[scan_image()],
+        "/XObject << /Im1 6 0 R >>",
+    )
+}
+
+#[test]
+fn text_over_a_staying_image_refuses_background() {
+    assert_eq!(refusal(scanned()).as_deref(), Some("reflowBackground"));
+    let (mut e, doc) = engine(scanned());
+    let info = e
+        .prepare_paragraph(&doc, 0, vec![SEL], None, false)
+        .unwrap();
+    assert_eq!(info.push_down, None);
+}
+
+#[test]
+fn a_uniform_background_panel_may_stay() {
+    let panel = "1 1 1 rg 0 0 300 400 re f 0 g\n";
+    let (e, doc) = engine(page(&format!("{panel}{PARA}{BELOW}{FOOTER}"), &[], ""));
+    let p = preview(&e, &doc, SEL, THREE, Reflow::PushDown);
+    assert!(p.fits && p.shift.is_some(), "{p:?}");
+}
+
+#[test]
+fn a_redaction_over_a_scan_is_never_moved_off_its_pixels() {
+    // Privacy regression: the redaction lies over moving text and the staying scan. Mapping it
+    // with a push would leave the scan's pixels under its old place uncovered, so the push is
+    // refused and the redaction keeps covering them.
+    let below = rect(15.0, 58.0, 120.0, 30.0);
+    let (mut e, doc) = engine(scanned());
+    let r = changes(&mut e, &doc, None, Some(vec![region("g", below)]));
+    assert!(r.accepted);
+    let r = changes(
+        &mut e,
+        &doc,
+        Some(vec![edit(SEL, THREE, Some(Reflow::PushDown))]),
+        None,
+    );
+    assert!(
+        !r.accepted && r.remap.is_empty() && r.revision == 1,
+        "{r:?}"
+    );
+    let d = r.rejected[0].details.as_ref().unwrap();
+    assert_eq!(d.feature.as_deref(), Some("reflowBackground"));
+    let out = export(&mut e, &doc, LinkPolicy::Remove);
+    let spec = serde_json::json!({
+        "forbidden": ["Below one"],
+        "image_regions": [{"page": 0, "rect": [below.x, below.y, below.x + below.width, below.y + below.height]}],
+    });
+    let (ok, log) = judge("scan-redacted.pdf", &out, &spec);
+    assert!(ok, "{log}");
+}
+
+#[test]
+fn a_zero_size_paragraph_has_no_push_down_and_returns_promptly() {
+    // A 0.001 pt paragraph has a line step far below a usable one.
+    let tiny = "BT /F1 0.001 Tf 20 360 Td (Alpha beta gamma) Tj ET\n";
+    let (mut e, doc) = engine(page(&format!("{tiny}{BELOW}{FOOTER}"), &[], ""));
+    let start = std::time::Instant::now();
+    let info = e
+        .prepare_paragraph(&doc, 0, vec![rect(15.0, 35.0, 270.0, 10.0)], None, false)
+        .unwrap();
+    assert!(info.line_step < 0.01, "{info:?}");
+    assert_eq!(info.push_down, None);
+    assert!(start.elapsed().as_secs() < 5);
 }

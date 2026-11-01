@@ -128,6 +128,14 @@ def safe_redact_text():
     return out(d)
 
 
+def leak_image_redaction_shifted():
+    """NEW-136: text over a staying scan moved 30 pt and its redaction was mapped with it; the image's pixels under the
+    redaction's original place are left uncovered."""
+    d, p = page(img=True, secret=False)
+    redact(d, p, [IMG_RECT[0], IMG_RECT[1] + 30, IMG_RECT[2], IMG_RECT[3] + 30], fitz.PDF_REDACT_IMAGE_PIXELS)
+    return out(d)
+
+
 def safe_redact_image():
     d, p = page(img=True, secret=False)
     redact(d, p, IMG_RECT, fitz.PDF_REDACT_IMAGE_PIXELS)
@@ -407,6 +415,7 @@ CASES = [
     ("leaky: secret only in unused Form XObject", leak_unused_form, {"forbidden": ["SECRET_UNUSED_FORM"]}, {"STREAM"}, {"TEXT_PYPDF", "TEXT_FITZ"}),
     ("leaky: secret in hidden OCG", gen.ocg_hidden, {"forbidden": ["SECRET_HIDDEN_OCG"]}, {"STREAM", "FEATURE"}, set()),
     ("leaky: image pixels under overlay", leak_image_under_overlay, IMG, {"IMAGE_REGION"}, set()),
+    ("leaky: redaction moved off a staying scan", leak_image_redaction_shifted, IMG, {"IMAGE_REGION"}, set()),
     # NEW-100: glyphs only their font program's cmap names (iOS Quartz Type0, ToUnicode maps nothing); both extractors miss them.
     ("leaky: secret in a font whose ToUnicode maps nothing", gen.quartz_type0_empty_tounicode, {"forbidden": [gen.QUARTZ_SECRET]}, {"TEXT_GLYPH"}, {"TEXT_FITZ"}),
     ("leaky: secret word carrying zero-width combining marks", gen.quartz_type0_combining_marks, {"forbidden": [gen.MARKS_SECRET]}, {"TEXT_GLYPH"}, {"TEXT_FITZ"}),
