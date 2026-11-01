@@ -1,9 +1,9 @@
 //! Redaction planning (spec §4, §5; NEW-32): what a committed redaction list takes out of the
 //! working copy, classified and disclosed before export. Display space throughout.
 mod common;
-use common::{Font, pdf_bytes};
+use common::{Font, pdf_bytes, run};
 use foliark_engine::redaction::plan::{ClusterReason, RedactionPlan, VectorClass, VectorKind};
-use foliark_engine::{Binding, BoxTask, Committed, Document, Engine, Step, StoredRedaction};
+use foliark_engine::{Binding, Committed, Document, Engine, StoredRedaction};
 use foliark_model::{
     ChangeSet, ErrorCode, Limits, LossCode, PdfError, Rect, Redaction, SearchOptions, SharedKind,
 };
@@ -16,14 +16,6 @@ const R: fn(f64, f64, f64, f64) -> Rect = |x, y, width, height| Rect {
     width,
     height,
 };
-
-fn run<T>(e: &mut Engine, mut task: BoxTask<T>) -> Result<T, PdfError> {
-    loop {
-        if let Step::Done(v) = task.step(e, 1000)? {
-            return Ok(v);
-        }
-    }
-}
 
 fn apply(e: &mut Engine, doc: &str, base: u32, list: Vec<Redaction>) -> Result<(), PdfError> {
     let task = e.apply_changes(

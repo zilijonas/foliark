@@ -2,11 +2,11 @@
 //! straddle a commit, cached layouts survive only commits that cannot change text, and the layout
 //! cache stays under its byte cap without changing any result.
 mod common;
-use common::{Font, pdf_bytes};
-use foliark_engine::{Applied, BoxTask, Document, EditApplier, EditContext, Engine, Step};
+use common::{Font, pdf_bytes, run};
+use foliark_engine::{Applied, Document, EditApplier, EditContext, Engine, Step};
 use foliark_model::{
-    ChangeSet, ErrorCode, ExtractOptions, Limits, PdfError, Rect, Redaction, RejectedChange,
-    SearchOptions, TextEdit,
+    ChangeSet, ErrorCode, ExtractOptions, Limits, Rect, Redaction, RejectedChange, SearchOptions,
+    TextEdit,
 };
 
 const PAGES: [&str; 3] = [
@@ -19,14 +19,6 @@ fn open(e: &mut Engine) -> String {
     e.open(pdf_bytes(&PAGES, &Font::default(), 0), None, false)
         .unwrap()
         .0
-}
-
-fn run<T>(e: &mut Engine, mut task: BoxTask<T>) -> Result<T, PdfError> {
-    loop {
-        if let Step::Done(v) = task.step(e, 1_000_000)? {
-            return Ok(v);
-        }
-    }
 }
 
 fn commit(e: &mut Engine, doc: &str, cs: ChangeSet) {
