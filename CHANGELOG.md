@@ -5,7 +5,7 @@ All notable changes to `@zilijonas/foliark` (named `@foliark/sdk` before 0.1.0 w
 ## [Unreleased]
 
 ### Added
-- Default font-match rules for Roboto, Open Sans, Lato, Noto Serif, Noto Sans, DejaVu Sans and EB Garamond, used when the family is registered; Verdana, Tahoma and Garamond prefer DejaVu Sans or EB Garamond and keep their Liberation fallback (ADR 0015) (NEW-131).
+- Default font-match rules for Roboto, Open Sans, Lato, Noto Serif, Noto Sans, DejaVu Sans and EB Garamond, used when the family is registered; Verdana, Tahoma and Garamond prefer DejaVu Sans or EB Garamond and keep their Liberation fallback (ADR 0017) (NEW-131).
 
 ## [0.2.0] - 2026-10-29
 

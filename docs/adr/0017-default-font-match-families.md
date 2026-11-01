@@ -1,4 +1,4 @@
-# ADR 0015: default font-match rules for more OFL families (NEW-131)
+# ADR 0017: default font-match rules for more OFL families (NEW-131)
 
 Status: Accepted, 2026-11-01. Amends spec 6.4 rung 3 (`DEFAULT_FONT_MATCH`; frozen: a change needs an ADR).
 
