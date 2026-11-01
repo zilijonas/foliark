@@ -1,3 +1,42 @@
+# Release candidate: @zilijonas/foliark 0.3.1 (NEW-136: push-down background refusal, Info format characters, bounded push-down budget)
+
+Qualified on 2026-11-01 on the owner's Mac mini (same toolchain as 0.1.0). Fixes from an independent review of 0.3.0, before HDDN adopts it (`CHANGELOG.md` [0.3.1], ADRs 0015 to 0017, spec §12): push-down refuses `EDIT_NO_FIT` with the new feature `reflowBackground` when the paragraph and the moved lines sit on a staying image, shading, pattern, text or soft-masked container (a scan with OCR text), so a mapped redaction can no longer leave the image's pixels under its old place uncovered (privacy); `pushDown` has no budget for a line step under 0.5 pt and adds at most 64 lines (`prepareParagraph` could spin); kept Info text drops format, private-use, noncharacter and variation-selector code points before the leak check; ADR 0016/0017 wording. No API shape changes. Not published by an agent: the owner publishes this exact tarball (`npm publish`, local). Source correspondence: tag `v0.3.1` on the commit that carries this record; the tarball was built from the source commit below, and the record commit differs from it only by documentation. `tools/release/dry-run.sh` reads the first recorded sha256 in this file, so the 0.3.1 hash stays in this section, above the 0.3.0 record. The source commit is `claude/teo-f3fix` = `claude/text-edit-overhaul` `4e5b1de` (the 0.3.0 record) plus the NEW-136 commits. No budget was re-based: wasm gzip 2,283,543 B is inside the 0.1.4 cap (2,352,843 B); paragraph prepare 7.4 ms median, inside its 12 ms budget. HDDN production is unchanged by this record.
+
+| | |
+|---|---|
+| file | `dist-pkg/zilijonas-foliark-0.3.1.tgz` (gitignored). The file the owner publishes is `/Users/agent/ai/repos/foliark/dist-pkg/zilijonas-foliark-0.3.1.tgz`, a copy of the `f3fix` worktree pack (same sha256) |
+| sha256 | `6ac10d7079c90c6472c34359b52bb1ce98f4ee0a463ccde87a3a63a792f71f7c` |
+| size | 3,499,419 B, 292 entries (0.3.0: 292) |
+| built from | foliark `facec69` (`test(metadata): drop a useless conversion clippy flags`, clean tree before and after); `scripts/build-wasm.sh && pnpm build:sdk && tests/package-consumers/pack.sh <dir>`; packed three times (two temp dirs and the worktree `dist-pkg`), identical sha256 |
+| wasm | `wasm/foliark_wasm_bg.wasm` sha256 `30536a56a4e0ae34d37c76ca3c036446fd8cb75173c1da45c73714e851f3f546`, 5,991,012 B raw, 2,283,543 B gzip -9 (0.3.0: `b0150e22...`, 5,993,040 B, 2,284,589 B) |
+
+Checks on `facec69` (one supervised sequential chain through `~/ai/bin/memory-queue`, `CARGO_BUILD_JOBS=2`, one browser engine at a time, Vitest `--maxWorkers=1 --no-file-parallelism`; a first attempt was deferred by the queue for another session's job and rerun from the start; fuzz smoke self-queued, run unwrapped):
+
+| Check | Command | Exit | Result |
+|---|---|---|---|
+| format, lint | `cargo fmt --check`; `cargo clippy --workspace --all-targets --locked -- -D warnings` | 0, 0 | |
+| Rust tests | `cargo test --workspace --locked --no-fail-fast` | 0 | 490 passed, 0 failed, 3 ignored, including `strict_native` and the new `push_down`/`metadata_keep` cases |
+| licences, advisories | `cargo deny check licenses bans sources`; `cargo deny check advisories` | 0, 0 | bans ok, licenses ok, sources ok; advisories ok |
+| wasm and SDK build | `pnpm install --frozen-lockfile`; `scripts/build-wasm.sh && pnpm build:sdk` | 0, 0, 0 | sha256 above |
+| TS parity | `scripts/check-ts-parity.sh` | 0 | in sync (97 files) |
+| SDK tests | `pnpm --filter @zilijonas/foliark exec vitest run --maxWorkers=1 --no-file-parallelism` | 0 | 91 passed (13 files) |
+| oracle controls | `tests/oracles/.venv/bin/python tests/oracles/controls.py` | 0 | leaky caught 48/48 (new: a redaction moved off a staying scan, IMAGE_REGION), safe passed 17/17; fidelity 7/7, 3/3; shift 17/17 |
+| acceptance | `SKIP_BUILD=1 tests/integration/acceptance/run.sh` | 0 | 94 cases, 564 results: SAFE 462, EXPLAINED 47, REFUSED 55; negative controls 129, missed 0; cancellation 27 attempts, 0 findings |
+| smoke | `pnpm smoke chromium`, `pnpm smoke webkit` | 0, 0 | |
+| browser specs | `tests/browser/run.sh --project=<engine> --workers=1`, once per engine | 0, 0, 0 | 33 passed (11 each) |
+| pack x3 | `tests/package-consumers/pack.sh <dir>` | 0, 0, 0 | identical sha256 |
+| package consumers | `tests/package-consumers/run.sh` | 0 | 6 builds ok |
+| budgets | `node --test tools/bench/check-budgets.test.mjs`; fresh `sdk.mjs --extended` x2 + `scans-sdk.mjs` (chromium) through `check-budgets.mjs` | 0, 0 | 40 ok, 38 webkit skipped, 0 failing |
+| notices | `node scripts/gen-notices.mjs --check` | 0 | up to date |
+| export size | `cargo build --release -p foliark-engine --example export_size`; `tools/bench/export-size.py --check` | 0, 0 | Foliark <= PyMuPDF on every exportable fixture |
+| fuzz smoke | `FUZZ_SECS=30 tools/fuzz-smoke/run.sh` | 0 | 7 targets x 30 s, all clean |
+| release dry run | `tools/release/dry-run.sh` | 0 | tarball bytes equal the recorded sha256, manifest 0.3.1, 292 entries, notices, SBOM (102 components), `SHA256SUMS`, package README names tag `v0.3.1`, `npm publish --dry-run` against an unreachable registry |
+
+Owner publish command, from the repository root `/Users/agent/ai/repos/foliark` (after the `v0.3.1` tag exists on the record commit; rebuild with the commands above if the tarball is gone and compare the sha256):
+`npm publish ./dist-pkg/zilijonas-foliark-0.3.1.tgz --access public`
+
+---
+
 # Release candidate: @zilijonas/foliark 0.3.0 (NEW-128 to NEW-135: edit limits from page evidence, opt-in push-down, metadata keep, font-match families)
 
 Qualified on 2026-11-01 on the owner's Mac mini (same toolchain as 0.1.0). Changes versus 0.2.0 (`CHANGELOG.md`, ADRs 0015 to 0017, spec): additive API, every option off by default so default output is unchanged: `ParagraphInfo.maxWrapWidth`/`maxWrapLines` and `EditPreview.wrapWidth`, an extended wrap width read from the page (a longer edit that refused `EDIT_NO_FIT` for width now fits; `maxLines` can shrink where a path, image or frame lies below) (NEW-129); `TextEdit.reflow: 'pushDown'`, `layoutEdit` option, `ParagraphInfo.pushDown`, `EditPreview.shift`/`reflowBlocked`, and `ChangeResult.remap` with redactions and later edits mapped through the shifts (NEW-132, NEW-133); `ExportPolicy.metadata: 'keep'` and `report.kept.metadata` (NEW-134); default font-match rules for Roboto, Open Sans, Lato, Noto Serif, Noto Sans, DejaVu Sans and EB Garamond (NEW-131); a style segment right of the paragraph's left edge is laid out from the selection's edge (HDDN-201). Not published by an agent: the owner publishes this exact tarball (`npm publish`, local, as for 0.2.0). Source correspondence: tag `v0.3.0` on the commit that carries this record; the tarball was built from the source commit below, and the record commit differs from it only by documentation. `tools/release/dry-run.sh` reads the first recorded sha256 in this file, so the 0.3.0 hash stays in this section, above the 0.2.0 record. The source commit is `claude/teo-f8` (the `claude/text-edit-overhaul` batch tip, `719dc07`) plus the docs commit, the bump and a test-only fix (see below). No budget was re-based: wasm gzip 2,284,589 B is inside the 0.1.4 cap (2,352,843 B), 97.1 percent of it, so the next wasm growth needs a recorded decision. Paragraph prepare (push-down and wrap-limit evidence) moved from a frozen 5.6 ms to 8.7 ms median, inside its 12 ms budget. HDDN is not changed by this release: production is on 0.1.6 per `docs/integration/hddn-acceptance.md` (HDDN `main`'s lockfile already resolves 0.2.0; its deployment is not recorded here).
