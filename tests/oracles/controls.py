@@ -45,6 +45,20 @@ def redact(doc, pg, rect, images=fitz.PDF_REDACT_IMAGE_NONE):
     pg.apply_redactions(images=images)
 
 
+# NEW-133 (ADR 0015): a push-down moved the secret line 30 pt down. A redaction stated in base coordinates must be mapped
+# through the shift; one left at its old rectangle removes nothing and the moved secret leaks.
+SHIFT_OLD = [15, 84, 250, 104]  # display rect of the secret line before the push (baseline 100)
+
+
+def pushed_secret(rect):
+    d = fitz.open()
+    pg = d.new_page(width=300, height=400)
+    pg.insert_text((20, 60), "KEEP_PUBLIC_TEXT", fontsize=14)
+    pg.insert_text((20, 130), SECRET, fontsize=14)  # was at baseline 100 before the push
+    redact(d, pg, rect)
+    return out(d)
+
+
 def leak_overlay():
     d, p = page()
     p.draw_rect(fitz.Rect(15, 285, 200, 305), color=(0, 0, 0), fill=(0, 0, 0))
@@ -383,6 +397,8 @@ def leak_info_custom_key():
 
 # name, builder, spec, codes that MUST appear (leaky) / None (safe), codes that must NOT appear[, substring a finding must contain]
 CASES = [
+    ("leaky: push-down moved the secret, redaction stayed at the old rect", lambda: pushed_secret(SHIFT_OLD), S, {"TEXT_PYPDF", "TEXT_FITZ", "STREAM"}, set()),
+    ("safe: redaction mapped through the push-down shift", lambda: pushed_secret([15, 114, 250, 134]), S, None, set()),
     ("leaky: black rect over live text", leak_overlay, S, {"TEXT_PYPDF", "TEXT_FITZ", "STREAM"}, set()),
     ("leaky: /Info title", leak_info, {"forbidden": ["SECRET_META_TITLE"]}, {"FEATURE", "STRING"}, set()),
     ("leaky: XMP packet", leak_xmp, {"forbidden": ["SECRET_XMP_BODY"]}, {"FEATURE", "STREAM"}, set()),
