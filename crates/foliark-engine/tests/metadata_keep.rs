@@ -55,7 +55,7 @@ fn input_with(title: &str, subject: &str) -> Vec<u8> {
         "/Metadata 7 0 R",
         "/Resources << /Font << /F1 5 0 R >> >>",
         "BT /F1 12 Tf 20 370 Td (Confidential) Tj ET BT /F1 12 Tf 20 340 Td (Marta Jones) Tj ET",
-        &[info.into(), xmp],
+        &[info, xmp],
     );
     // The trailer follows the xref table: naming /Info there moves no offset.
     String::from_utf8_lossy(&pdf)
