@@ -60,6 +60,7 @@ fn editing_the_note_keeps_it_on_its_line_inside_the_right_edge_and_the_body_as_i
                 rects: vec![BLOCK],
                 text,
                 font: None,
+                reflow: None,
             }]),
             redactions: None,
         },
