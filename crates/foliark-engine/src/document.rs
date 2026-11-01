@@ -11,7 +11,7 @@ use crate::engine::not_built;
 use crate::text::{ClusterId, TextIndex, TextLayout};
 use foliark_model::{
     ChangeResult, ChangeSet, DocumentInfo, EditLayout, ErrorCode, ErrorDetails, FontMatchRule,
-    Limits, PdfError, Rect, Redaction, RejectedChange, TextEdit,
+    Limits, PageShift, PdfError, Rect, Redaction, RejectedChange, TextEdit,
 };
 use foliark_text::Registry;
 use std::collections::{BTreeSet, HashSet};
@@ -61,13 +61,72 @@ pub struct Applied {
     pub bytes: Vec<u8>,
     /// One per edit that was laid out.
     pub layouts: Vec<EditLayout>,
+    /// One per edit, in order: the push-down it made (ADR 0015). Missing entries are `None`.
+    pub shifts: Vec<Option<PageShift>>,
 }
 
+/// A committed edit's id and the push-down it made (ADR 0015).
+pub type Prior = (String, Option<PageShift>);
+
 /// What an applier reads from the engine besides the document.
+#[derive(Clone, Copy)]
 pub struct EditContext<'a> {
     pub limits: &'a Limits,
     pub fonts: &'a Registry,
     pub font_match: &'a [FontMatchRule],
+    /// The committed edit list's ids and push-downs: the frames its rects were given in.
+    pub prior: &'a [Prior],
+}
+
+/// ADR 0015: the steps from the frame after the shifts `from` to the frame after `to`. Their
+/// common prefix cancels; the rest of `from` is undone last first (the region it moved to goes
+/// back by `-dy`), then the rest of `to` is applied.
+pub(crate) fn steps(from: &[PageShift], to: &[PageShift]) -> Vec<PageShift> {
+    let same = from.iter().zip(to).take_while(|(a, b)| a == b).count();
+    let undo = from[same..].iter().rev().map(|s| PageShift {
+        region: Rect {
+            y: s.region.y + s.dy,
+            ..s.region
+        },
+        dy: -s.dy,
+        ..*s
+    });
+    undo.chain(to[same..].iter().copied()).collect()
+}
+
+/// `r` (display space, page `page`) through `steps`: moved with a step whose region holds it,
+/// left where it is outside the region, `None` when the region cuts it.
+pub(crate) fn map_rect(page: u32, mut r: Rect, steps: &[PageShift]) -> Option<Rect> {
+    const EPS: f64 = 0.01;
+    for s in steps.iter().filter(|s| s.page_index == page) {
+        let g = s.region;
+        let inside = r.x >= g.x - EPS
+            && r.y >= g.y - EPS
+            && r.x + r.width <= g.x + g.width + EPS
+            && r.y + r.height <= g.y + g.height + EPS;
+        let apart = r.x >= g.x + g.width
+            || r.x + r.width <= g.x
+            || r.y >= g.y + g.height
+            || r.y + r.height <= g.y;
+        if inside {
+            r.y += s.dy;
+        } else if !apart {
+            return None;
+        }
+    }
+    Some(r)
+}
+
+/// A target a push-down step cuts (ADR 0015): `INVALID_ARGUMENT` with `feature`.
+pub(crate) fn shifted(feature: &str, page: u32) -> PdfError {
+    PdfError::with(
+        ErrorCode::InvalidArgument,
+        ErrorDetails {
+            feature: Some(feature.into()),
+            pages: Some(vec![page]),
+            ..Default::default()
+        },
+    )
 }
 
 /// The seam [`crate::edit::ParagraphApplier`] fills: replay `edits` from `source` in array order
@@ -130,6 +189,8 @@ pub(crate) struct Session {
     pub(crate) info: DocumentInfo,
     pub(crate) revision: u32,
     pub(crate) committed: Committed,
+    /// The push-down each committed edit made, in edit order (ADR 0015).
+    shifts: Vec<Option<PageShift>>,
     /// Committed edits whose layout used a font other than the source's (`edits.approximate`).
     pub(crate) approximate: u32,
     /// Lazily built page layouts, byte-bounded and bound to `revision` (spec §4).
@@ -156,6 +217,7 @@ impl Session {
             info,
             revision: 0,
             committed: Committed::default(),
+            shifts: Vec::new(),
             approximate: 0,
         }
     }
@@ -314,6 +376,15 @@ impl Session {
 
         let mut working = None;
         let mut layouts = Vec::new();
+        let mut shifts = Vec::new();
+        let prior: Vec<Prior> = (self.committed.edits.iter())
+            .zip(&self.shifts)
+            .map(|(e, s)| (e.id.clone(), *s))
+            .collect();
+        let ctx = &EditContext {
+            prior: &prior,
+            ..*ctx
+        };
         if let Some(list) = edits.as_ref().filter(|l| !l.is_empty())
             && rejected.is_empty()
         {
@@ -327,10 +398,20 @@ impl Session {
                     }
                     working = Some(doc);
                     layouts = a.layouts;
+                    shifts = (0..list.len())
+                        .map(|k| a.shifts.get(k).copied().flatten())
+                        .collect();
                 }
                 Err(rs) => rejected.extend(rs),
             }
         }
+        // ADR 0015: what moves from the old working copy to the new one. Redactions are stated
+        // in the old one's coordinates and follow it there.
+        let flat = |l: &[Option<PageShift>]| l.iter().flatten().copied().collect::<Vec<_>>();
+        let remap = match replaced {
+            true => steps(&flat(&self.shifts), &flat(&shifts)),
+            false => Vec::new(),
+        };
         // A new working copy renumbers objects, so every stored must-remove id must be found
         // again in it (spec §4); one that cannot be is refused, never dropped.
         if replaced && rejected.is_empty() && (self.working.is_some() || working.is_some()) {
@@ -339,7 +420,7 @@ impl Session {
                 .unwrap_or_else(|| self.committed.redactions.clone());
             let old = self.working.as_ref().unwrap_or(&self.source);
             let new = working.as_ref().unwrap_or(&self.source);
-            rejected.extend(reresolve(&mut self.index, old, new, &mut list));
+            rejected.extend(reresolve(&mut self.index, old, new, &mut list, &remap));
             redactions = Some(list);
         }
         if !rejected.is_empty() {
@@ -349,6 +430,7 @@ impl Session {
                 rejected,
                 changed_pages: Vec::new(),
                 layouts: Vec::new(),
+                remap: Vec::new(),
             });
         }
 
@@ -379,6 +461,7 @@ impl Session {
         }
         if replaced {
             self.approximate = layouts.iter().filter(|l| l.approximate).count() as u32;
+            self.shifts = shifts;
         }
         self.committed = next;
         self.revision = revision;
@@ -390,6 +473,7 @@ impl Session {
             rejected: Vec::new(),
             changed_pages: changed.into_iter().collect(),
             layouts,
+            remap,
         })
     }
 }
@@ -416,6 +500,7 @@ fn remap(
     old: &Document,
     new: &Document,
     r: &StoredRedaction,
+    steps: &[PageShift],
 ) -> Result<Vec<ClusterId>, PdfError> {
     let internal = || PdfError::new(ErrorCode::Internal);
     let before = index.layout(old, r.page_index, false)?;
@@ -432,6 +517,21 @@ fn remap(
         })
         .collect::<Option<_>>()
         .ok_or_else(internal)?;
+    // ADR 0015: each glyph box where the push-downs put it.
+    let wanted: Vec<(&String, [f64; 4])> = wanted
+        .into_iter()
+        .map(|(text, [x, y, width, height])| {
+            let b = Rect {
+                x: *x,
+                y: *y,
+                width: *width,
+                height: *height,
+            };
+            let m = map_rect(r.page_index, b, steps)
+                .ok_or_else(|| shifted("redactionTargetShifted", r.page_index))?;
+            Ok((text, [m.x, m.y, m.width, m.height]))
+        })
+        .collect::<Result<_, PdfError>>()?;
     let after = new.text_layout(r.page_index as usize, false)?;
     let have = glyphs(&after);
     let mut taken = vec![false; have.len()];
@@ -440,7 +540,7 @@ fn remap(
         .map(|(text, b)| {
             let j = (0..have.len()).find(|&j| {
                 !taken[j]
-                    && have[j].0 == *text
+                    && have[j].0 == **text
                     && have[j].1.iter().zip(b).all(|(x, y)| (x - y).abs() < 0.05)
             })?;
             taken[j] = true;
@@ -459,20 +559,38 @@ fn remap(
         })
 }
 
-/// Re-resolve every text redaction of `list` against `new`; one rejection per redaction whose
-/// clusters are not all there (an edit removed or moved the text it targets).
+/// Re-resolve every redaction of `list` against `new`: its regions through the push-down
+/// `steps` (ADR 0015), a text redaction's clusters found again. One rejection per redaction a
+/// step cuts or whose clusters are not all there (an edit removed or moved the text it targets).
 fn reresolve(
     index: &mut TextIndex,
     old: &Document,
     new: &Document,
     list: &mut [StoredRedaction],
+    steps: &[PageShift],
 ) -> Vec<RejectedChange> {
     let mut rejected = Vec::new();
-    for r in list.iter_mut().filter(|r| !r.must_remove.is_empty()) {
-        match remap(index, old, new, r) {
-            Ok(ids) => r.must_remove = ids,
-            Err(e) => rejected.push(reject(&r.id, e)),
+    for r in list.iter_mut() {
+        let regions: Option<Vec<Rect>> = (r.regions.iter())
+            .map(|g| map_rect(r.page_index, *g, steps))
+            .collect();
+        let Some(regions) = regions else {
+            rejected.push(reject(
+                &r.id,
+                shifted("redactionTargetShifted", r.page_index),
+            ));
+            continue;
+        };
+        if !r.must_remove.is_empty() {
+            match remap(index, old, new, r, steps) {
+                Ok(ids) => r.must_remove = ids,
+                Err(e) => {
+                    rejected.push(reject(&r.id, e));
+                    continue;
+                }
+            }
         }
+        r.regions = regions;
     }
     rejected
 }

@@ -20,7 +20,7 @@
 //! Every edit is evaluated and every failure is reported; one failure rejects the whole list and
 //! nothing is kept.
 use super::preview::{Planned, plan_edit};
-use crate::document::{Applied, EditApplier, EditContext};
+use crate::document::{Applied, EditApplier, EditContext, map_rect, shifted, steps};
 use crate::reader::object_id;
 use crate::redaction::plan::RedactionPlan;
 use crate::redaction::text::redact_text;
@@ -31,8 +31,8 @@ use crate::writer::text::{PlanFonts, SourceFonts, emit_plan};
 use crate::writer::{Val, Writer};
 use crate::{Binding, Committed, Document, StoredRedaction};
 use foliark_model::{
-    EditLayout, ErrorCode, ErrorDetails, ObjectId, PdfError, Rect, RejectedChange, RunSource,
-    TextEdit,
+    EditLayout, ErrorCode, ErrorDetails, ObjectId, PageShift, PdfError, Rect, RejectedChange,
+    RunSource, TextEdit,
 };
 use foliark_text::FontFace;
 use hayro::hayro_syntax::object::{Dict, MaybeRef, Object};
@@ -69,11 +69,36 @@ impl EditApplier for ParagraphApplier {
         let mut rejected = Vec::new();
         let mut state: Option<Document> = None;
         let mut bytes = Vec::new();
+        let mut shifts = Vec::new();
         for (n, e) in edits.iter().enumerate() {
             let doc = state.as_ref().unwrap_or(source);
+            // ADR 0015: the rects are in the frame of the committed list (after its edits before
+            // this one, or after all of them for a new id); map them to the frame after the new
+            // edits before this one.
+            let from: Vec<PageShift> = match ctx.prior.iter().position(|p| p.0 == e.id) {
+                Some(j) => ctx.prior[..j].iter().filter_map(|p| p.1).collect(),
+                None => ctx.prior.iter().filter_map(|p| p.1).collect(),
+            };
+            let done: Vec<PageShift> = shifts.iter().flatten().copied().collect();
+            let to_frame = steps(&from, &done);
+            let mapped: TextEdit;
+            let e = match (e.rects.iter())
+                .map(|r| map_rect(e.page_index, *r, &to_frame))
+                .collect::<Option<Vec<_>>>()
+            {
+                Some(rects) if to_frame.is_empty() || rects == e.rects => e,
+                Some(rects) => {
+                    mapped = TextEdit { rects, ..e.clone() };
+                    &mapped
+                }
+                None => {
+                    rejected.push(reject(e, shifted("editTargetShifted", e.page_index)));
+                    continue;
+                }
+            };
             // A failed edit is skipped so the ones after it are still judged; the result is
             // then a rejection of the whole list anyway.
-            let (out, layout) = match apply_one(doc, n, e, ctx) {
+            let (out, layout, shift) = match apply_one(doc, n, e, ctx) {
                 Ok(done) => done,
                 Err(err) => {
                     rejected.push(reject(e, err));
@@ -81,6 +106,7 @@ impl EditApplier for ParagraphApplier {
                 }
             };
             layouts.push(layout);
+            shifts.push(shift);
             if n + 1 < edits.len() {
                 match Document::open_with_limits(out.clone(), None, false, ctx.limits.clone()) {
                     Ok(next) => state = Some(next.with_cancel(source.cancel_handle())),
@@ -93,7 +119,11 @@ impl EditApplier for ParagraphApplier {
             bytes = out;
         }
         if rejected.is_empty() {
-            Ok(Applied { bytes, layouts })
+            Ok(Applied {
+                bytes,
+                layouts,
+                shifts,
+            })
         } else {
             Err(rejected)
         }
@@ -148,7 +178,7 @@ fn apply_one(
     n: usize,
     e: &TextEdit,
     ctx: &EditContext<'_>,
-) -> Result<(Vec<u8>, EditLayout), PdfError> {
+) -> Result<(Vec<u8>, EditLayout, Option<PageShift>), PdfError> {
     let page = e.page_index as usize;
     let reflow = e.reflow.unwrap_or_default();
     let Planned {
@@ -266,5 +296,5 @@ fn apply_one(
         let ops = emit_plan(&plan, &fonts, &sources, geometry.display_to_user.0)?;
         w.append_page_content(page, &ops)?;
     }
-    Ok((w.write()?, plan.edit_layout(&e.id)))
+    Ok((w.write()?, plan.edit_layout(&e.id), push.map(|p| p.shift)))
 }

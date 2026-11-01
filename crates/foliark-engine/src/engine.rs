@@ -465,6 +465,7 @@ impl Engine {
             limits: &self.limits,
             fonts: &self.fonts,
             font_match: &self.font_match,
+            prior: &[],
         };
         let mut p = layout_edit(
             s.doc(),
@@ -494,6 +495,7 @@ impl Engine {
                 limits: &e.limits,
                 fonts: &e.fonts,
                 font_match: &e.font_match,
+                prior: &[],
             };
             let result = s.apply(changes, &ctx, &*e.applier)?;
             if result.accepted {

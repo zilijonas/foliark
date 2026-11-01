@@ -70,6 +70,7 @@ impl EditApplier for Swap {
     ) -> Result<Applied, Vec<RejectedChange>> {
         let page = "BT /F1 10 Tf 1 0 0 1 100 200 Tm (zzz) Tj ET";
         Ok(Applied {
+            shifts: Vec::new(),
             bytes: pdf_bytes(&[page, page, page], &Font::default(), 0),
             layouts: vec![],
         })

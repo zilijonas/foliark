@@ -246,6 +246,7 @@ impl EditApplier for Edited {
         _: &EditContext<'_>,
     ) -> Result<Applied, Vec<RejectedChange>> {
         Ok(Applied {
+            shifts: Vec::new(),
             bytes: pdf_bytes(&[EDITED], &Font::default(), 0),
             layouts: vec![],
         })

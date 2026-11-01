@@ -117,6 +117,54 @@ pub(crate) struct Reflow<'a> {
     /// Drawn items at or below the cut, by top.
     below: Vec<usize>,
     cut: f64,
+    /// The page's annotations: the indirect object (`None` for a direct dictionary), the
+    /// display bounds of `/Rect`, whether it is a Link.
+    annots: Vec<(Option<ObjectId>, B, bool)>,
+}
+
+/// Every annotation of page `page` with a readable `/Rect`.
+fn annotations(doc: &Document, page: usize, u2d: &Matrix) -> Vec<(Option<ObjectId>, B, bool)> {
+    let reader = doc.reader();
+    let Ok(p) = reader.page(page) else {
+        return Vec::new();
+    };
+    let Some(list) = p.raw().get::<Array<'_>>("Annots") else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for entry in list.raw_iter() {
+        let (id, dict) = match entry {
+            MaybeRef::Ref(r) => (
+                Some(object_id(r)),
+                reader.pdf().xref().get::<Dict<'_>>(r.into()),
+            ),
+            MaybeRef::NotRef(Object::Dict(d)) => (None, Some(d)),
+            MaybeRef::NotRef(_) => (None, None),
+        };
+        let Some(dict) = dict else { continue };
+        let Some([x0, y0, x1, y1]) = dict
+            .get::<Array<'_>>("Rect")
+            .and_then(|a| numbers(&a))
+            .and_then(|v| <[f64; 4]>::try_from(v).ok())
+        else {
+            continue;
+        };
+        let corners = [(x0, y0), (x1, y1), (x0, y1), (x1, y0)].map(|c| transform(u2d, c));
+        let r = corners.iter().fold(
+            [
+                f64::INFINITY,
+                f64::INFINITY,
+                f64::NEG_INFINITY,
+                f64::NEG_INFINITY,
+            ],
+            |r, &(x, y)| [r[0].min(x), r[1].min(y), r[2].max(x), r[3].max(y)],
+        );
+        let link = dict
+            .get::<Name<'_>>("Subtype")
+            .is_some_and(|n| n.as_str() == "Link");
+        out.push((id, r, link));
+    }
+    out
 }
 
 fn overlaps(a: B, b: B) -> bool {
@@ -380,7 +428,9 @@ impl<'a> Reflow<'a> {
                     .map(|(_, s)| s.obj),
             )
             .collect();
+        let annots = annotations(doc, page, &model.geometry.user_to_display);
         Ok(Self {
+            annots,
             doc,
             page,
             p,
@@ -559,6 +609,7 @@ impl<'a> Reflow<'a> {
             self.clips_allow(u, &items, dy)?;
         }
         let links = self.links(&moving, region, dy)?;
+        let region = self.band(&moving, &links, region, limit - dy);
         Ok(Moved {
             dy,
             region,
@@ -636,48 +687,8 @@ impl<'a> Reflow<'a> {
     /// the moved area (before or after the move) refuses.
     fn links(&self, moving: &HashSet<usize>, region: B, dy: f64) -> Result<Vec<ObjectId>, Refusal> {
         let area = union(region, down(region, dy));
-        let reader = self.doc.reader();
-        let Ok(page) = reader.page(self.page) else {
-            return Ok(Vec::new());
-        };
-        let Some(list) = page.raw().get::<Array<'_>>("Annots") else {
-            return Ok(Vec::new());
-        };
-        let u2d = &self.p.model.geometry.user_to_display;
         let mut out = Vec::new();
-        for entry in list.raw_iter() {
-            let (id, dict) = match entry {
-                MaybeRef::Ref(r) => (
-                    Some(object_id(r)),
-                    reader.pdf().xref().get::<Dict<'_>>(r.into()),
-                ),
-                MaybeRef::NotRef(Object::Dict(d)) => (None, Some(d)),
-                MaybeRef::NotRef(_) => (None, None),
-            };
-            let Some(dict) = dict else { continue };
-            let Some([x0, y0, x1, y1]) = dict
-                .get::<Array<'_>>("Rect")
-                .and_then(|a| numbers(&a))
-                .and_then(|v| <[f64; 4]>::try_from(v).ok())
-            else {
-                continue;
-            };
-            let corners = [(x0, y0), (x1, y1), (x0, y1), (x1, y0)].map(|c| transform(u2d, c));
-            let r = corners.iter().fold(
-                [
-                    f64::INFINITY,
-                    f64::INFINITY,
-                    f64::NEG_INFINITY,
-                    f64::NEG_INFINITY,
-                ],
-                |r, &(x, y)| [r[0].min(x), r[1].min(y), r[2].max(x), r[3].max(y)],
-            );
-            if !overlaps(r, area) {
-                continue;
-            }
-            let link = dict
-                .get::<Name<'_>>("Subtype")
-                .is_some_and(|n| n.as_str() == "Link");
+        for &(id, r, link) in self.annots.iter().filter(|a| overlaps(a.1, area)) {
             let meets = |moved: bool| {
                 (0..self.bounds.len()).any(|i| {
                     self.class[i] == Class::Drawn
@@ -692,6 +703,53 @@ impl<'a> Reflow<'a> {
             }
         }
         Ok(out)
+    }
+
+    /// The step's region (ADR 0015): the band around the moved items `tight` that holds nothing
+    /// that stays. Up to the lowest bottom of what stays above in the column (the paragraph's own
+    /// glyphs included), down to `floor` (where the moved block may reach without passing the
+    /// bound) or what stays below, sideways to the nearest item beside it that stays, else the
+    /// page edge. Annotations that do not move stay. A redaction or an overlay a little larger
+    /// than the moved content then still lies inside it and maps instead of refusing.
+    fn band(&self, moving: &HashSet<usize>, links: &[ObjectId], tight: B, floor: f64) -> B {
+        let sel = self.sel();
+        let items = (0..self.bounds.len())
+            .filter(|&i| {
+                matches!(self.class[i], Class::Drawn | Class::Removed) && !moving.contains(&i)
+            })
+            .map(|i| self.bounds[i]);
+        let annots = (self.annots.iter())
+            .filter(|a| a.0.is_none_or(|id| !links.contains(&id)))
+            .map(|a| a.1);
+        let stays: Vec<B> = items
+            .chain(annots)
+            .filter(|s| !(contains(*s, sel) && contains(*s, tight)))
+            .collect();
+        let (x0, x1) = (tight[0], tight[2]);
+        let (mut top, mut bottom) = (f64::NEG_INFINITY, tight[3].max(floor));
+        for s in stays.iter().filter(|s| s[2] > x0 && s[0] < x1) {
+            if s[3] <= tight[1] + EPS {
+                top = top.max(s[3]);
+            } else if s[1] >= tight[3] - EPS {
+                bottom = bottom.min(s[1]);
+            }
+        }
+        let top = if top.is_finite() {
+            top.min(tight[1])
+        } else {
+            tight[1]
+        };
+        let bottom = bottom.max(tight[3]);
+        let beside = stays.iter().filter(|s| s[1] < bottom && s[3] > top);
+        let left = (beside.clone())
+            .filter(|s| s[2] <= x0 + EPS)
+            .map(|s| s[2])
+            .fold(0.0, f64::max);
+        let right = beside
+            .filter(|s| s[0] >= x1 - EPS)
+            .map(|s| s[0])
+            .fold(self.p.model.geometry.width, f64::min);
+        [left.min(x0), top, right.max(x1), bottom]
     }
 
     /// `ParagraphInfo.pushDown`: the most lines push-down allows at `maxWrapWidth`.

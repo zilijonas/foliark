@@ -745,6 +745,9 @@ pub struct ChangeResult {
     pub rejected: Vec<RejectedChange>,
     pub changed_pages: Vec<u32>,
     pub layouts: Vec<EditLayout>,
+    /// ADR 0015: the push-down steps from the previous working copy to this one, in order; map an
+    /// overlay (a redaction box, a highlight) through them. Empty when nothing moved.
+    pub remap: Vec<PageShift>,
 }
 
 /// One line of an [`EditPreview`]: `text` is the normalized text it shows, `x` the origin of its

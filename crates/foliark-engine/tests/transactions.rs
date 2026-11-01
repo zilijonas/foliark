@@ -331,6 +331,7 @@ impl EditApplier for Swap {
             &[page, page]
         };
         Ok(Applied {
+            shifts: Vec::new(),
             bytes: pdf_bytes(pages, &Font::default(), 0),
             layouts: vec![],
         })

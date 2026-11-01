@@ -7,7 +7,7 @@ use common::{fixture, python, run, stream, tiny_pdf, tmp};
 use foliark_engine::{Document, Engine};
 use foliark_model::{
     ChangeResult, ChangeSet, EditPreview, ErrorCode, ExportMode, ExportPolicy, ExtractOptions,
-    FontSource, FontStyle, Limits, LinkPolicy, PageShift, Rect, Reflow, TextEdit,
+    FontSource, FontStyle, Limits, LinkPolicy, PageShift, Rect, Redaction, Reflow, TextEdit,
 };
 
 fn engine(bytes: Vec<u8>) -> (Engine, String) {
@@ -308,10 +308,8 @@ fn a_frame_around_paragraph_and_content_stays_and_bounds_the_push() {
         .prepare_paragraph(&doc, 0, vec![SEL], None, false)
         .unwrap();
     let push = info.push_down.unwrap();
-    // "Below two" ends near display 86; the frame's bottom (150) bounds the push.
-    let dy = f64::from(push.max_lines - info.max_wrap_lines) * info.line_step;
-    let room = 150.5 - (push.region.y + push.region.height + dy);
-    assert!(room >= 0.0 && room < info.line_step, "{push:?}");
+    // "Below two" ends near display 86 and the frame at 150.5: five 12 pt steps fit, six do not.
+    assert_eq!(push.max_lines, info.max_wrap_lines + 5, "{push:?}");
     assert!(commit(&mut e, &doc, vec![edit(SEL, THREE, Some(Reflow::PushDown))]).accepted);
     let out = export(&mut e, &doc, LinkPolicy::Remove);
     let moved = Document::open(out, None).unwrap();
@@ -398,4 +396,264 @@ fn hddn_sample_paragraph_gains_two_lines_with_push_down() {
     );
     let r = commit(&mut e, &doc, vec![edit(sel, &text, Some(Reflow::PushDown))]);
     assert!(r.accepted, "{:?}", r.rejected);
+}
+
+// ---- NEW-133: redactions and later edits through push-down shifts (privacy-critical) ----------
+// Redactions are stated in base-revision coordinates; when an edit list moves content, the engine
+// maps every stored and new redaction through `ChangeResult.remap`. The exports are judged by
+// `objects.py`; each test also shows the oracle catches the redaction left at its old rectangle.
+
+fn changes(
+    e: &mut Engine,
+    doc: &str,
+    edits: Option<Vec<TextEdit>>,
+    redactions: Option<Vec<Redaction>>,
+) -> ChangeResult {
+    let t = e.apply_changes(
+        doc,
+        ChangeSet {
+            base_revision: e.revision(doc).unwrap(),
+            text_edits: edits,
+            redactions,
+        },
+    );
+    run(e, t).unwrap()
+}
+
+fn region(id: &str, r: Rect) -> Redaction {
+    Redaction::Region {
+        id: id.into(),
+        page_index: 0,
+        rect: r,
+        fill: None,
+    }
+}
+
+fn edit_id(id: &str, r: Rect, text: &str) -> TextEdit {
+    TextEdit {
+        id: id.into(),
+        ..edit(r, text, Some(Reflow::PushDown))
+    }
+}
+
+fn judge(name: &str, bytes: &[u8], spec: &serde_json::Value) -> (bool, String) {
+    let (p, s) = (
+        tmp("push-down", name),
+        tmp("push-down", &format!("{name}.json")),
+    );
+    std::fs::write(&p, bytes).unwrap();
+    std::fs::write(&s, spec.to_string()).unwrap();
+    python(&[
+        "tests/oracles/objects.py",
+        p.to_str().unwrap(),
+        "--spec",
+        s.to_str().unwrap(),
+    ])
+}
+
+fn shifted_by(r: Rect, dy: f64) -> Rect {
+    Rect { y: r.y + dy, ..r }
+}
+
+const THANKS: Rect = rect(60.0, 190.0, 480.0, 14.0);
+/// The Email line of the letter (moves), in base coordinates, with some padding.
+const EMAIL: Rect = rect(60.0, 216.0, 200.0, 16.0);
+const EMAIL_SECRET: &str = "petraitis@example";
+
+#[test]
+fn a_region_redaction_follows_the_content_a_later_push_down_moves() {
+    let input = fixture("generated/push-letter.pdf");
+    let spec = serde_json::json!({ "forbidden": [EMAIL_SECRET] });
+    let (mut e, doc) = engine(input.clone());
+    let r = changes(&mut e, &doc, None, Some(vec![region("g", EMAIL)]));
+    assert!(r.accepted && r.remap.is_empty(), "{r:?}");
+    let p = preview(&e, &doc, THANKS, LETTER, Reflow::PushDown);
+    let r = changes(
+        &mut e,
+        &doc,
+        Some(vec![edit(THANKS, LETTER, Some(Reflow::PushDown))]),
+        None,
+    );
+    assert!(r.accepted, "{:?}", r.rejected);
+    assert_eq!(r.remap, vec![p.shift.unwrap()]);
+    let out = export(&mut e, &doc, LinkPolicy::Remove);
+    let (ok, log) = judge("region-mapped.pdf", &out, &spec);
+    assert!(ok, "the moved secret survived its mapped redaction: {log}");
+
+    // Control: the same redaction left at its old rectangle over the moved page leaks.
+    let (mut e, doc) = engine(input);
+    changes(
+        &mut e,
+        &doc,
+        Some(vec![edit(THANKS, LETTER, Some(Reflow::PushDown))]),
+        None,
+    );
+    assert!(changes(&mut e, &doc, None, Some(vec![region("g", EMAIL)])).accepted);
+    let (ok, _) = judge(
+        "region-unmapped.pdf",
+        &export(&mut e, &doc, LinkPolicy::Remove),
+        &spec,
+    );
+    assert!(!ok, "the oracle missed a redaction left behind");
+}
+
+#[test]
+fn text_and_signature_redactions_in_base_coordinates_remove_the_moved_content() {
+    let input = fixture("generated/push-letter.pdf");
+    let base = Document::open(input.clone(), None).unwrap();
+    let text = base
+        .extract_text(0, &ExtractOptions::default())
+        .unwrap()
+        .text;
+    let at = text.find("612 34567").unwrap() as u32;
+    let phone = Redaction::Text {
+        id: "t".into(),
+        page_index: 0,
+        start: at,
+        end: at + 9,
+        fill: None,
+    };
+    // The stroked Bezier signature under the sign-off, with padding.
+    let sig = rect(60.0, 352.0, 100.0, 42.0);
+    let black = |id: &str, r: Rect| Redaction::Region {
+        id: id.into(),
+        page_index: 0,
+        rect: r,
+        fill: Some(Some([0.0; 3])),
+    };
+    let (mut e, doc) = engine(input.clone());
+    let r = changes(
+        &mut e,
+        &doc,
+        Some(vec![edit(THANKS, LETTER, Some(Reflow::PushDown))]),
+        Some(vec![phone.clone(), black("s", sig)]),
+    );
+    assert!(r.accepted, "{:?}", r.rejected);
+    let dy = r.remap[0].dy;
+    let moved = shifted_by(sig, dy);
+    let spec = serde_json::json!({
+        "forbidden": ["34567"],
+        "vector_regions": [{"page": 0, "fill": [0, 0, 0],
+            "rect": [moved.x, moved.y, moved.x + moved.width, moved.y + moved.height]}],
+    });
+    let (ok, log) = judge(
+        "text-sig-mapped.pdf",
+        &export(&mut e, &doc, LinkPolicy::Remove),
+        &spec,
+    );
+    assert!(ok, "moved content survived: {log}");
+
+    // Control: the signature redaction drawn at the old place after the push leaves it whole.
+    let (mut e, doc) = engine(input);
+    changes(
+        &mut e,
+        &doc,
+        Some(vec![edit(THANKS, LETTER, Some(Reflow::PushDown))]),
+        None,
+    );
+    changes(&mut e, &doc, None, Some(vec![black("s", sig)]));
+    let (ok, log) = judge(
+        "sig-unmapped.pdf",
+        &export(&mut e, &doc, LinkPolicy::Remove),
+        &spec,
+    );
+    assert!(!ok && log.contains("VECTOR_REGION"), "{log}");
+}
+
+#[test]
+fn a_redaction_the_shift_cuts_is_refused_and_nothing_changes() {
+    let (mut e, doc) = engine(fixture("generated/push-letter.pdf"));
+    // From the edited paragraph into the Email line below it.
+    let cut = rect(60.0, 190.0, 300.0, 40.0);
+    assert!(changes(&mut e, &doc, None, Some(vec![region("g", cut)])).accepted);
+    let r = changes(
+        &mut e,
+        &doc,
+        Some(vec![edit(THANKS, LETTER, Some(Reflow::PushDown))]),
+        None,
+    );
+    assert!(!r.accepted && r.remap.is_empty());
+    assert_eq!(r.revision, 1);
+    let d = r.rejected[0].details.as_ref().unwrap();
+    assert_eq!(r.rejected[0].id, "g");
+    assert_eq!(r.rejected[0].code, ErrorCode::InvalidArgument);
+    assert_eq!(d.feature.as_deref(), Some("redactionTargetShifted"));
+    assert_eq!(d.pages, Some(vec![0]));
+}
+
+#[test]
+fn a_re_edit_that_changes_dy_remaps_redactions_and_later_edits() {
+    let input = fixture("generated/push-letter.pdf");
+    let (mut e, doc) = engine(input);
+    let a = |text: &str| edit_id("a", THANKS, text);
+    assert!(changes(&mut e, &doc, Some(vec![a(LETTER)]), None).accepted);
+    // In the frame after edit a (13.2 down): "Kind regards," and the Email line.
+    let kind = rect(60.0, 344.0, 200.0, 14.0);
+    let b = edit_id("b", kind, "Best wishes,");
+    let email = shifted_by(EMAIL, 13.2);
+    let r = changes(&mut e, &doc, Some(vec![a(LETTER), b.clone()]), None);
+    assert!(r.accepted && r.remap.is_empty(), "{r:?}");
+    assert!(changes(&mut e, &doc, None, Some(vec![region("g", email)])).accepted);
+
+    // Edit a now needs two more lines: 26.4 down. b's rect and the redaction follow.
+    let longer = format!("{LETTER}\nWe will write again when it is done.");
+    let r = changes(&mut e, &doc, Some(vec![a(&longer), b.clone()]), None);
+    assert!(r.accepted, "{:?}", r.rejected);
+    assert_eq!(r.remap.len(), 2);
+    assert!((r.remap[0].dy + 13.2).abs() < 1e-9 && (r.remap[1].dy - 26.4).abs() < 1e-9);
+    let t = e.extract_text(&doc, 0, ExtractOptions::default());
+    let text = run(&mut e, t).unwrap().text;
+    assert!(
+        text.contains("Best wishes,") && !text.contains("Kind regards"),
+        "{text}"
+    );
+    let out = export(&mut e, &doc, LinkPolicy::Remove);
+    let spec = serde_json::json!({ "forbidden": [EMAIL_SECRET] });
+    let (ok, log) = judge("re-edit.pdf", &out, &spec);
+    assert!(ok, "{log}");
+
+    // A new edit whose rect the undone shift cuts is refused.
+    let c = edit_id("c", rect(60.0, 180.0, 300.0, 50.0), "x");
+    let r = changes(&mut e, &doc, Some(vec![a(LETTER), b, c]), None);
+    assert!(!r.accepted);
+    let c = r.rejected.iter().find(|x| x.id == "c").expect("c refused");
+    let d = c.details.as_ref().unwrap();
+    assert_eq!(d.feature.as_deref(), Some("editTargetShifted"));
+    assert_eq!(
+        (d.edit_id.as_deref(), d.pages.clone()),
+        (Some("c"), Some(vec![0]))
+    );
+}
+
+#[test]
+fn a_kept_link_over_moved_and_redacted_text_is_dropped() {
+    let input = fixture("generated/push-link-below.pdf");
+    let sel = rect(60.0, 100.0, 480.0, 40.0);
+    let text = "Your plan renews on the first of the month and the new price applies from that \
+        date. It takes effect from the first of next month, and every invoice after that shows \
+        the new amount next to the old one. Please keep this notice with your contract papers, \
+        and write to us if anything in it looks wrong to you. Thank you for staying with us. Our \
+        team reads every message and answers within two working days, also during the holidays, \
+        and keeps a copy of every answer for you. If you moved recently, tell us your new address \
+        so the next letters reach you, and check that your phone number is still right.";
+    // The "Visit our help center" line, base coordinates.
+    let visit = rect(60.0, 163.0, 200.0, 12.0);
+    let (mut e, doc) = engine(input);
+    assert!(changes(&mut e, &doc, None, Some(vec![region("g", visit)])).accepted);
+    let r = changes(
+        &mut e,
+        &doc,
+        Some(vec![edit(sel, text, Some(Reflow::PushDown))]),
+        None,
+    );
+    assert!(r.accepted, "{:?}", r.rejected);
+    assert!(r.remap[0].dy > 20.0, "{:?}", r.remap);
+    let out = export(&mut e, &doc, LinkPolicy::Keep);
+    assert!(!common::has(&out, "example.com/help") && common::has(&out, "example.com/terms"));
+    let (ok, log) = judge(
+        "link-redacted.pdf",
+        &out,
+        &serde_json::json!({ "forbidden": ["center for details"] }),
+    );
+    assert!(ok, "{log}");
 }
