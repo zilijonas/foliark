@@ -20,6 +20,8 @@ pub(super) struct Planned {
     pub text: String,
     pub at16: u32,
     pub laid: Laid,
+    /// The width `laid` used: the paragraph's `wrapWidth`, or `maxWrapWidth` (ADR 0015).
+    pub wrap_width: f64,
     /// The look of every character of the whole text (ADR 0013), as UTF-16 spans.
     pub styles: Vec<StyleSpan>,
 }
@@ -171,23 +173,34 @@ pub(super) fn plan_edit(
             ..ladder
         }
     });
-    let laid = layout_runs(
-        &part,
-        &LayoutParams {
-            font_size: info.font_size,
-            wrap_width: info.wrap_width,
-            max_lines: info.max_lines,
-            line_step: info.line_step,
-            first_baseline: info.first_baseline,
-            origin_x: info.origin_x,
-        },
-        &runs,
-    )?;
+    // ADR 0015: the stable width first; the extended one only when the text does not fit it.
+    // Either way preview and commit read this one decision (ADR 0004).
+    let lay = |wrap_width: f64, max_lines: u32| {
+        layout_runs(
+            &part,
+            &LayoutParams {
+                font_size: info.font_size,
+                wrap_width,
+                max_lines,
+                line_step: info.line_step,
+                first_baseline: info.first_baseline,
+                origin_x: info.origin_x,
+            },
+            &runs,
+        )
+    };
+    let mut wrap_width = info.wrap_width;
+    let mut laid = lay(wrap_width, info.max_lines)?;
+    if !laid.fits() && info.max_wrap_width > wrap_width {
+        wrap_width = info.max_wrap_width;
+        laid = lay(wrap_width, info.max_wrap_lines)?;
+    }
     Ok(Planned {
         prepared,
         text: part,
         at16,
         laid,
+        wrap_width,
         styles,
     })
 }
@@ -207,6 +220,7 @@ pub fn layout_edit(
         text,
         at16,
         laid,
+        wrap_width,
         styles,
     } = plan_edit(doc, page, rects, font, text, ctx)?;
     let text16: Vec<u16> = text.encode_utf16().collect();
@@ -248,6 +262,7 @@ pub fn layout_edit(
         lines,
         needed_lines: laid.needed_lines(),
         max_lines: laid.max_lines,
+        wrap_width,
         fits: laid.fits(),
         approximate: layout.approximate,
         runs: layout.runs,

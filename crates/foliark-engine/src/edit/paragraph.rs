@@ -1,9 +1,11 @@
 //! `prepareParagraph` (spec §6.1, §6.2, §6.4): which clusters a paragraph edit selects, the
 //! fixed budget around them (wrap width, line count, height) and the font it will use.
 //! Everything is in display space and computed from the page as it is, never from the edit.
+use super::limits::{Evidence, Limits, limits};
 use super::runs::carry;
 use crate::Document;
 use crate::interpret::{GlyphItem, ItemKind, SemanticPage};
+use crate::redaction::plan::painted_bounds;
 use crate::text::{ClusterId, SourceFontFace, TextLayout};
 use foliark_model::{
     Cluster, EditorFace, ErrorCode, ErrorDetails, FontMatchRule, FontResolution, FontRule,
@@ -605,29 +607,6 @@ impl Document {
             .filter(|c| c.flags & INVISIBLE == 0)
             .map(|c| bounds(&c.quad))
             .collect();
-        let nearest = others
-            .iter()
-            .filter(|w| w[0] > x1 && w[1] < y1 && w[3] > top)
-            .map(|w| w[0])
-            .fold(f64::INFINITY, f64::min);
-        let beside = nearest.is_finite();
-        let wrap_right = if beside {
-            x1
-        } else {
-            visible.iter().map(|b| b[2]).fold(x1, f64::max)
-        };
-        let below = others
-            .iter()
-            .filter(|w| w[1] >= last_baseline && w[2] > x0 && w[0] < wrap_right)
-            .map(|w| w[1])
-            .fold(f64::INFINITY, f64::min);
-        let bottom_limit = if below.is_finite() {
-            below
-        } else {
-            let margin = visible.iter().map(|b| b[1]).fold(f64::INFINITY, f64::min);
-            (model.geometry.height - margin).max(y1)
-        };
-
         let parts: Option<Vec<Part>> = (!sel.iter().any(|&i| clusters[i].flags & UNMAPPED != 0))
             .then(|| {
                 rows.iter()
@@ -685,17 +664,36 @@ impl Document {
             .map_or(size * 0.28, |g| g.iter().map(|g| g.x_advance).sum());
         let (resolution, face) = describe(style, primary, source, registry, editor_face);
 
+        let items = painted_bounds(&model);
+        let lim = limits(&Evidence {
+            sel: sel_bounds,
+            last_baseline,
+            descent,
+            space,
+            page: (model.geometry.width, model.geometry.height),
+            words: &others,
+            items: &items,
+            text: &visible,
+        });
+        let Limits {
+            nearest_word,
+            wrap_right,
+            ..
+        } = lim;
+        let bottom_limit = lim.bottom_limit(wrap_right);
         // ADR 0011 amendment: a lone line has no wrap width of its own, so beside other text it
         // may grow up to a space short of it. A wrapped paragraph keeps the width it wraps at.
-        let room = if rows.len() == 1 && beside {
-            (nearest - space).max(wrap_right)
+        let room = if rows.len() == 1 && nearest_word.is_finite() {
+            (nearest_word - space).max(wrap_right)
         } else {
             wrap_right
         };
-        let max_lines = ((bottom_limit + 0.1 - first_baseline - descent) / line_step)
-            .floor()
-            .max(-1.0) as i64
-            + 1;
+        let lines_in = |bottom: f64| {
+            ((bottom + 0.1 - first_baseline - descent) / line_step)
+                .floor()
+                .max(-1.0) as i64
+                + 1
+        };
         let (original, text_looks) = match parts.as_deref() {
             Some(p) => {
                 let (t, l) = original_text(p, space, ' ', main_index);
@@ -828,6 +826,11 @@ impl Document {
         let runs = original
             .as_deref()
             .map_or(Vec::new(), |t| style_spans(t, &text_looks));
+        // ADR 0015: the stable width as before; the extended one only where the page has room.
+        // Both budgets keep the lines the paragraph has now (ADR 0011).
+        let wrap_width = (room - x0).max(measured);
+        let max_wrap_width = wrap_width.max(lim.max_wrap_right - x0);
+        let budget = |bottom: f64| lines_in(bottom).max(rows.len() as i64) as u32;
         let info = ParagraphInfo {
             doc_id: String::new(),
             revision: 0,
@@ -849,10 +852,11 @@ impl Document {
             serif: style.flags.serif,
             mono: style.flags.mono,
             mixed_style: mixed,
-            wrap_width: (room - x0).max(measured),
+            wrap_width,
+            max_wrap_width,
             max_height: bottom_limit - top,
-            // The lines the paragraph has now are always there to use.
-            max_lines: max_lines.max(rows.len() as i64) as u32,
+            max_lines: budget(bottom_limit),
+            max_wrap_lines: budget(lim.bottom_limit(x0 + max_wrap_width)),
             original_text: original,
             font: resolution,
             editor_face: face,

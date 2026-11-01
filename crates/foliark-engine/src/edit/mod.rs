@@ -1,6 +1,7 @@
 //! Paragraph editing (spec §6): selection, metrics and fixed surrounding-content budgets, and
 //! applying an edit as removal of the selected text plus a planned layout drawn on top.
 mod apply;
+mod limits;
 mod paragraph;
 mod preview;
 mod runs;

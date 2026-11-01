@@ -519,6 +519,10 @@ pub struct ParagraphInfo {
     pub wrap_width: f64,
     pub max_height: f64,
     pub max_lines: u32,
+    /// ADR 0015's extended width (never below `wrapWidth`), used only when the text does not fit
+    /// `wrapWidth`, and its line budget.
+    pub max_wrap_width: f64,
+    pub max_wrap_lines: u32,
     pub original_text: Option<String>,
     pub font: FontResolution,
     #[ts(optional = nullable)]
@@ -743,7 +747,11 @@ pub struct EditPreview {
     pub font_size: f64,
     pub lines: Vec<PreviewLine>,
     pub needed_lines: u32,
+    /// The budget of the width the layout used.
     pub max_lines: u32,
+    /// The width the chosen layout used (ADR 0015): `wrapWidth`, or `maxWrapWidth` when the text
+    /// needed it.
+    pub wrap_width: f64,
     /// False: `applyChanges` would refuse with `EDIT_NO_FIT`.
     pub fits: bool,
     pub approximate: bool,

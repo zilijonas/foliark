@@ -200,7 +200,7 @@ const isEditLayout = shape({
 const isEditPreview = shape({
   docId: isStr, revision: isU32, fontRegistryVersion: isU32, fontSize: isNum,
   lines: arrayOf(shape({ text: isStr, baseline: isNum, x: isNum, width: isNum })),
-  neededLines: isU32, maxLines: isU32, fits: isBool, approximate: isBool, runs: arrayOf(isLayoutRun), fingerprint: isStr,
+  neededLines: isU32, maxLines: isU32, wrapWidth: isNum, fits: isBool, approximate: isBool, runs: arrayOf(isLayoutRun), fingerprint: isStr,
   glyphs: opt(arrayOf(shape({ line: isU32, font: isStr, gid: isU32, start: isU32, end: isU32, x: isNum, width: isNum }))),
 });
 const isChangeResult = shape({

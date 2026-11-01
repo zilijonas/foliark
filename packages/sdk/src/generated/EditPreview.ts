@@ -15,7 +15,16 @@ revision: number,
 /**
  * Stale once the font registry version differs.
  */
-fontRegistryVersion: number, fontSize: number, lines: Array<PreviewLine>, neededLines: number, maxLines: number, 
+fontRegistryVersion: number, fontSize: number, lines: Array<PreviewLine>, neededLines: number, 
+/**
+ * The budget of the width the layout used.
+ */
+maxLines: number, 
+/**
+ * The width the chosen layout used (ADR 0015): `wrapWidth`, or `maxWrapWidth` when the text
+ * needed it.
+ */
+wrapWidth: number, 
 /**
  * False: `applyChanges` would refuse with `EDIT_NO_FIT`.
  */

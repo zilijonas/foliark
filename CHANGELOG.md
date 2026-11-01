@@ -6,7 +6,11 @@ All notable changes to `@zilijonas/foliark` (named `@foliark/sdk` before 0.1.0 w
 
 ### Added
 - `ExportPolicy.metadata: 'remove' | 'keep'` (default `'remove'`, output unchanged). With `'keep'`, native export writes back the eight standard Info fields (Title, Author, Subject, Keywords, Creator, Producer, CreationDate, ModDate) as one fresh dictionary: text decoded and normalized (NFC, no control or bidi characters, 1024 characters at most), dates rewritten in the `D:` grammar. A field is dropped when it spells text a redaction or an edit took out; custom keys and every XMP packet are always removed. `report.kept.metadata` lists the keys written; `removed.metadata` and `METADATA_REMOVED` count the rest. Raster export never writes Info (ADR 0016) (NEW-134).
+- `ParagraphInfo.maxWrapWidth` and `maxWrapLines`: an extended wrap width and its line budget, read from the page's own evidence (the mirrored left margin, and the nearest word, rule, image or shading to the right; a frame or panel around the paragraph caps it), and `EditPreview.wrapWidth`, the width the layout used. An edit is laid out at `wrapWidth` as before; only when it does not fit does it use `maxWrapWidth`, so text that fit lays out exactly as it did (ADR 0015) (NEW-129).
 - Default font-match rules for Roboto, Open Sans, Lato, Noto Serif, Noto Sans, DejaVu Sans and EB Garamond, used when the family is registered; Verdana, Tahoma and Garamond prefer DejaVu Sans or EB Garamond and keep their Liberation fallback (ADR 0017) (NEW-131).
+
+### Changed
+- Edits that refused `EDIT_NO_FIT` only for lack of width, such as a few added characters on a page whose longest line is the paragraph's own, now fit at `maxWrapWidth`. `ParagraphInfo.maxLines` can be smaller than before where a painted path, an image, a shading or a frame around the paragraph lies below it or contains it: they now bound the lines like text below does, so an edit that needed more lines than that refuses `EDIT_NO_FIT` (ADR 0015) (NEW-129).
 
 ## [0.2.0] - 2026-10-29
 
