@@ -66,7 +66,7 @@ Each class is removed and reported, or refused. Evidence is `strict-native.md` (
 
 | Class | Status | Report |
 |---|---|---|
-| Info and XMP metadata, PieceInfo, private keys | supported (removed) | `METADATA_REMOVED` |
+| Info and XMP metadata, PieceInfo, private keys | supported (removed); with `metadata: 'keep'` (native) the eight standard Info fields are written back unless they spell removed text, XMP still removed (ADR 0016) | `METADATA_REMOVED`, `report.kept.metadata` |
 | Embedded files, /AF | supported (removed) | `ATTACHMENTS_REMOVED` |
 | JavaScript, OpenAction, AA, all actions | supported (removed) | `SCRIPTS_REMOVED` |
 | Annotations | supported (flatten with appearance, or remove); links removed, or with `links: 'keep'` (native) written back when safe (ADR 0014) | `ANNOTATIONS_FLATTENED`, `ANNOTATIONS_REMOVED`, `LINKS_REMOVED`, `report.kept.links` |

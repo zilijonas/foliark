@@ -5,6 +5,7 @@ All notable changes to `@zilijonas/foliark` (named `@foliark/sdk` before 0.1.0 w
 ## [Unreleased]
 
 ### Added
+- `ExportPolicy.metadata: 'remove' | 'keep'` (default `'remove'`, output unchanged). With `'keep'`, native export writes back the eight standard Info fields (Title, Author, Subject, Keywords, Creator, Producer, CreationDate, ModDate) as one fresh dictionary: text decoded and normalized (NFC, no control or bidi characters, 1024 characters at most), dates rewritten in the `D:` grammar. A field is dropped when it spells text a redaction or an edit took out; custom keys and every XMP packet are always removed. `report.kept.metadata` lists the keys written; `removed.metadata` and `METADATA_REMOVED` count the rest. Raster export never writes Info (ADR 0016) (NEW-134).
 - Default font-match rules for Roboto, Open Sans, Lato, Noto Serif, Noto Sans, DejaVu Sans and EB Garamond, used when the family is registered; Verdana, Tahoma and Garamond prefer DejaVu Sans or EB Garamond and keep their Liberation fallback (ADR 0017) (NEW-131).
 
 ## [0.2.0] - 2026-10-29

@@ -93,6 +93,8 @@ Image-only export burns the redactions into pixels:
 const flat = await doc.export(await doc.prepareExport({ mode: "raster", policy: { raster: { acknowledgeLosses: true, scale: 2 } } }));
 ```
 
+Native export removes the Info dictionary and XMP by default; `policy: { metadata: "keep" }` writes back Title, Author, Subject, Keywords, Creator, Producer, CreationDate and ModDate (normalized, and dropped when one spells text a redaction or an edit took out; `plan.report.kept.metadata` lists them). Custom keys and XMP are always removed.
+
 Native export removes hyperlinks by default; `policy: { links: "keep" }` keeps `http`, `https`, `mailto` and in-document links that no redaction touches or spells (`plan.report.kept.links`; the rest are `LINKS_REMOVED`).
 
 Already running your own dedicated worker with its own recovery? Use the in-worker entry. Same API and errors, no second worker, and your worker supervises hangs and must be replaced after `onReset`:
