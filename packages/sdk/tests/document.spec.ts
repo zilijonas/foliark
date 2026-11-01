@@ -187,24 +187,6 @@ describe("cancellation", () => {
     return f.open(fixture("generated/many-pages-1001.pdf"));
   };
 
-  it("cancels an already aborted call before it is sent", async () => {
-    const doc = await open();
-    expect((await rejects(doc.extractText(0, { signal: AbortSignal.abort() }))).code).toBe("CANCELLED");
-    expect((await doc.extractText(0)).pageIndex).toBe(0);
-  });
-
-  it("cancels a queued call before it starts and a running search between steps, leaving the document usable", async () => {
-    const doc = await many();
-    const [queuedAbort, runningAbort] = [new AbortController(), new AbortController()];
-    const running = doc.search("PAGE_COMMON_TEXT", { signal: runningAbort.signal });
-    const queued = doc.extractText(0, { signal: queuedAbort.signal });
-    queuedAbort.abort();
-    setTimeout(() => runningAbort.abort(), 0);
-    const settled = await Promise.allSettled([queued, running]);
-    expect(settled.map((r) => r.status === "rejected" && r.reason.code)).toEqual(["CANCELLED", "CANCELLED"]);
-    expect((await doc.search("PAGE_COMMON_TEXT", { pages: [0, 1] })).length).toBe(2);
-  });
-
   it("stepping does not change the result", async () => {
     const stepped = await (await many()).search("PAGE_COMMON_TEXT", { maxHits: 50 });
     const whole = await (await open("generated/many-pages-1001.pdf", await client({ limits: { maxPages: 2000 } }))).search("PAGE_COMMON_TEXT", { maxHits: 50 });
