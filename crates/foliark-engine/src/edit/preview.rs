@@ -108,7 +108,8 @@ pub(super) fn plan_edit(
         ),
         Some((ids, part, at16)) => {
             // The part's own metrics; looks stay the whole selection's, which `looks` indexes.
-            let own = doc.prepare_clusters(page, &ids, font, ctx.fonts, ctx.font_match)?;
+            let left = whole.info.origin_x;
+            let own = doc.prepare_clusters(page, &ids, left, font, ctx.fonts, ctx.font_match)?;
             let index = own.looks[own.main].index;
             let main = whole.looks.iter().position(|l| l.index == index);
             (

@@ -7,9 +7,9 @@
   "python": "3.9"
  },
  "counts": {
-  "total": 52,
+  "total": 53,
   "hddn": 20,
-  "generated": 32,
+  "generated": 33,
   "byFeature": {
    "actualtext": 1,
    "additional-actions": 1,
@@ -26,7 +26,7 @@
    "deep-form": 1,
    "dimension-bomb": 1,
    "embedded-file": 2,
-   "embedded-font": 10,
+   "embedded-font": 11,
    "empty-tounicode": 3,
    "encrypted": 5,
    "flate-bomb": 1,
@@ -49,7 +49,7 @@
    "malformed-xref": 1,
    "many-pages": 1,
    "metadata": 2,
-   "mixed-style-paragraph": 2,
+   "mixed-style-paragraph": 3,
    "multi-page": 4,
    "named-destination": 1,
    "non-bmp": 2,
@@ -2717,6 +2717,55 @@
        42.5
       ],
       "text": "KEEP_PUBLIC_RUNS"
+     }
+    ]
+   }
+  },
+  {
+   "id": "word-right-note-body",
+   "path": "generated/word-right-note-body.pdf",
+   "sha256": "16e7a84e4dae02e21a60ceff7e0ed004a5ebca0b8323afcdd0ab43cd78ff30fc",
+   "bytes": 3944,
+   "pages": 1,
+   "features": [
+    "embedded-font",
+    "mixed-style-paragraph"
+   ],
+   "origin": "tests/fixtures/generators/generate.py",
+   "license": "synthetic, generated (original)",
+   "deterministic": true,
+   "expected": {
+    "behavior": "Word shape: a right-aligned italic amendment note directly above an indented regular body; editing the note keeps it inside the right edge on one line and the body as it is, and editing the body keeps the note",
+    "mustRemove": [
+     "charlie"
+    ],
+    "mustKeepText": [
+     "KEEP_PUBLIC_NOTE",
+     "KEEP_NOTE_LINE",
+     "Amended"
+    ],
+    "regions": [
+     {
+      "kind": "sensitive",
+      "page": 0,
+      "rectTopLeft": [
+       99,
+       102,
+       136,
+       109
+      ],
+      "text": "charlie"
+     },
+     {
+      "kind": "public",
+      "page": 0,
+      "rectTopLeft": [
+       20,
+       32.0,
+       108.0,
+       42.5
+      ],
+      "text": "KEEP_PUBLIC_NOTE"
      }
     ]
    }

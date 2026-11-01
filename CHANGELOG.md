@@ -12,6 +12,9 @@ All notable changes to `@zilijonas/foliark` (named `@foliark/sdk` before 0.1.0 w
 ### Changed
 - Edits that refused `EDIT_NO_FIT` only for lack of width, such as a few added characters on a page whose longest line is the paragraph's own, now fit at `maxWrapWidth`. `ParagraphInfo.maxLines` can be smaller than before where a painted path, an image, a shading or a frame around the paragraph lies below it or contains it: they now bound the lines like text below does, so an edit that needed more lines than that refuses `EDIT_NO_FIT` (ADR 0015) (NEW-129).
 
+### Fixed
+- Editing a style segment that starts right of the paragraph's left edge (a right-aligned italic amendment note above its body) counted that indent twice: the text the caller sends carries it as leading spaces of the whole paragraph, and the segment was then laid out from its own left edge. The note was drawn that far too far right, or wrapped onto extra lines and refused `EDIT_NO_FIT` where the page leaves little room (9 of 148 segment edits on a 20-page Word file, none now). The segment is now laid out from the selection's left edge (ADR 0012). `lines`, `neededLines` and `maxLines` of a preview are still the changed segment's.
+
 ## [0.2.0] - 2026-10-29
 
 Opt-in link keeping on export, and a faster writer. Source: tag `v0.2.0`. Tarball and hashes: `docs/release/candidate.md`.

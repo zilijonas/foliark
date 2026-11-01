@@ -597,6 +597,35 @@ def word_inline_runs():
                + "BT /FR 5 Tf 20 230 Td (%s) Tj ET\n" % RUNS_KEEP).encode())
     return simple(content, ex, fonts="/F1 5 0 R /FR 6 0 R /FB 9 0 R /FI 12 0 R /FBU 15 0 R")
 
+# Word again (HDDN-201): an amendment note set in italic, right-aligned (a 14-character row ending 3 pt short of the body's right edge,
+# starting 70 pt right of the paragraph's left edge), directly above a regular body whose first row is indented. The same box
+# faces as above (regular 1 em, italic 1.1 em, size 5). The note is its own style segment with its own, far-right left edge
+# (ADR 0012); its text carries that indent as leading spaces of the whole paragraph. A KEEP line below bounds the paragraph.
+NOTE_TEXT = "(Amended text)"
+NOTE_ROWS = ["alphas bravos charlie delta", "foxtrot golf hotels india lima", "mikes oscar papa quebec romeos"]
+NOTE_SECRET, NOTE_KEEP = "charlie", "KEEP_NOTE_LINE"
+
+
+def word_right_note_body():
+    ascii_chars = "".join(chr(c) for c in range(32, 127))
+    cmap = {c: k + 1 for k, c in enumerate(ascii_chars)}
+
+    def face(num, name, adv, flags=32, angle=0):
+        ttf = _box_ttf(len(ascii_chars) + 1, cmap=cmap, blank={1}, adv=adv)
+        return {
+            num: ("<< /Type /Font /Subtype /TrueType /BaseFont /%s /Encoding /WinAnsiEncoding /FirstChar 32 /LastChar 126 "
+                  "/Widths [%s] /FontDescriptor %d 0 R >>" % (name, " ".join([str(adv)] * 95), num + 1)),
+            num + 1: ("<< /Type /FontDescriptor /FontName /%s /Flags %d /FontBBox [50 0 950 800] /ItalicAngle %d /Ascent 800 "
+                      "/Descent -200 /CapHeight 800 /StemV 80 /FontFile2 %d 0 R >>" % (name, flags, angle, num + 2)),
+            num + 2: stream("/Length1 %d" % len(ttf), ttf, flate=True),
+        }
+
+    ex = {**face(6, "AAAAAN+ArialMT", 1000), **face(9, "AAAAAO+Arial-ItalicMT", 1100, flags=96, angle=-12)}
+    body = "".join("BT /FR 5 Tf 1 0 0 1 %d %d Tm (%s) Tj ET\n" % (30 if k == 0 else 20, 293 - 7 * k, r) for k, r in enumerate(NOTE_ROWS))
+    content = (text(20, 360, "KEEP_PUBLIC_NOTE", 10) + ("BT /FI 5 Tf 90 300 Td (%s) Tj ET\n" % NOTE_TEXT + body
+               + "BT /FR 5 Tf 20 250 Td (%s) Tj ET\n" % NOTE_KEEP).encode())
+    return simple(content, ex, fonts="/F1 5 0 R /FR 6 0 R /FI 9 0 R")
+
 # NEW-130: push-down fixtures (ADR 0015). A4 pages of non-embedded Helvetica built from hand-written syntax like every other fixture here
 # (no ReportLab dependency; bytes are deterministic). Each builder can also write the CORRECT output of a push-down by wrapping the
 # pushed groups in a `cm` translation (dy display-space points downward): `dy=18` is a right answer, `still={"sig"}` leaves one group
@@ -869,6 +898,11 @@ FIXTURES = {
                           "mustRemove": [RUNS_SECRET], "mustKeepText": ["KEEP_PUBLIC_RUNS", RUNS_KEEP, "Owner"],
                           "regions": [{"kind": "sensitive", "page": 0, "rectTopLeft": [54, 103, 81, 110], "text": RUNS_SECRET},
                                       R(20, 360, "KEEP_PUBLIC_RUNS", 10, kind="public")]}, {}),
+    "word-right-note-body": (word_right_note_body, ["embedded-font", "mixed-style-paragraph"],
+                             {"behavior": "Word shape: a right-aligned italic amendment note directly above an indented regular body; editing the note keeps it inside the right edge on one line and the body as it is, and editing the body keeps the note",
+                              "mustRemove": [NOTE_SECRET], "mustKeepText": ["KEEP_PUBLIC_NOTE", NOTE_KEEP, "Amended"],
+                              "regions": [{"kind": "sensitive", "page": 0, "rectTopLeft": [99, 102, 136, 109], "text": NOTE_SECRET},
+                                          R(20, 360, "KEEP_PUBLIC_NOTE", 10, kind="public")]}, {}),
 }
 for _id, _mode, _alg in (("encrypted-rc4-40", "RC4_40", "RC4-40"), ("encrypted-rc4-128", "RC4_128", "RC4-128"),
                          ("encrypted-aes-128", "AES_128", "AES-128"), ("encrypted-aes-256", "AES_256", "AES-256")):

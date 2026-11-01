@@ -173,8 +173,15 @@ fn hard_breaks(parts: &[Part]) -> Vec<bool> {
 /// Rows joined by LF at hard breaks and by `soft` (a space) where a line wrapped on its own
 /// ([`hard_breaks`]). A hard line's indent becomes leading spaces. With the page style of each
 /// `char`: a break or an indent the page does not draw is the paragraph's (`main`).
-fn original_text(parts: &[Part], space: f64, soft: char, main: u32) -> (String, Vec<u32>) {
+fn original_text(
+    parts: &[Part],
+    space: f64,
+    soft: char,
+    main: u32,
+    left: Option<f64>,
+) -> (String, Vec<u32>) {
     let x0 = parts.iter().map(|p| p.x0).fold(f64::INFINITY, f64::min);
+    let x0 = left.map_or(x0, |l| l.min(x0));
     let lead = |p: &Part| {
         let n = if space > 0.0 {
             ((p.x0 - x0) / space).round()
@@ -452,20 +459,24 @@ impl Document {
         registry: &Registry,
         font_match: &[FontMatchRule],
     ) -> Result<Prepared, PdfError> {
-        let pick = |l: &TextLayout| select_clusters(l, rects);
+        let pick = |l: &TextLayout| (select_clusters(l, rects), None);
         self.prepare_with(page, pick, font, editor_face, registry, font_match)
     }
 
-    /// [`Document::prepare`] for page clusters `ids` (a segment of an earlier selection).
+    /// [`Document::prepare`] for page clusters `ids` (a segment of an earlier selection). `left`
+    /// is that selection's left edge: indents are counted, and the box starts, from it, as the
+    /// text the caller sends for the whole selection has them.
     pub fn prepare_clusters(
         &self,
         page: usize,
         ids: &[usize],
+        left: f64,
         font: Option<&str>,
         registry: &Registry,
         font_match: &[FontMatchRule],
     ) -> Result<Prepared, PdfError> {
-        self.prepare_with(page, |_| ids.to_vec(), font, false, registry, font_match)
+        let pick = |_: &TextLayout| (ids.to_vec(), Some(left));
+        self.prepare_with(page, pick, font, false, registry, font_match)
     }
 
     /// The paragraph font's object, its glyphs on the page and the face built from them (rung 2).
@@ -500,7 +511,7 @@ impl Document {
     fn prepare_with(
         &self,
         page: usize,
-        pick: impl FnOnce(&TextLayout) -> Vec<usize>,
+        pick: impl FnOnce(&TextLayout) -> (Vec<usize>, Option<f64>),
         font: Option<&str>,
         editor_face: bool,
         registry: &Registry,
@@ -510,7 +521,8 @@ impl Document {
         let layout = TextLayout::build(&model, false)?;
         let clusters = layout.page.clusters.as_deref().unwrap_or_default();
         let styles = &layout.page.styles;
-        let sel = pick(&layout);
+        // The clusters, and the left edge a part of a larger selection counts its indents from.
+        let (sel, left) = pick(&layout);
         if sel.is_empty() {
             return Err(PdfError::new(ErrorCode::EditNoStyle));
         }
@@ -571,6 +583,7 @@ impl Document {
             },
         );
         let [x0, top, x1, y1] = sel_bounds;
+        let x0 = left.map_or(x0, |l| l.min(x0));
         let first_baseline = rows[0].baseline;
         let last_baseline = rows[rows.len() - 1].baseline;
         let mut deltas: Vec<f64> = rows
@@ -696,7 +709,7 @@ impl Document {
         };
         let (original, text_looks) = match parts.as_deref() {
             Some(p) => {
-                let (t, l) = original_text(p, space, ' ', main_index);
+                let (t, l) = original_text(p, space, ' ', main_index, left);
                 (Some(t), l.iter().map(look_of).collect())
             }
             None => (None, Vec::new()),
@@ -740,7 +753,7 @@ impl Document {
                     first_baseline,
                     origin_x: x0,
                 };
-                let (raw, raw_looks) = original_text(p, space, '\n', main_index);
+                let (raw, raw_looks) = original_text(p, space, '\n', main_index, left);
                 let raw_looks: Vec<usize> = raw_looks.iter().map(look_of).collect();
                 let rows = normalize(&raw).ok()?;
                 let row_looks = carry(&raw, &raw_looks, &rows, 0);
