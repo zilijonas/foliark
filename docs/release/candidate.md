@@ -4,7 +4,7 @@ Qualified on 2026-11-01 on the owner's Mac mini (same toolchain as 0.1.0). Chang
 
 | | |
 |---|---|
-| file | `dist-pkg/zilijonas-foliark-0.3.0.tgz` (gitignored; main checkout `/Users/agent/ai/repos/foliark/dist-pkg/`) |
+| file | `dist-pkg/zilijonas-foliark-0.3.0.tgz` (gitignored). The file the owner publishes is `/Users/agent/ai/repos/foliark/dist-pkg/zilijonas-foliark-0.3.0.tgz`; the fresh pack in the `f8` worktree has the same sha256, so the build is reproducible from `a97b749` |
 | sha256 | `c4ccf12725730121a48eb51e04dee87072745abb40798e9e1722abea43e0dd4d` |
 | size | 3,500,475 B, 292 entries (0.2.0: 284) |
 | built from | foliark `a97b749` (`test(links): one spec file per oracle call`, clean tree before and after, on top of `d734f07` `chore(release): bump ... 0.3.0`; that last commit changes a test file only, no packaged file); `scripts/build-wasm.sh && pnpm build:sdk && tests/package-consumers/pack.sh dist-pkg`; packing twice (once into the worktree, once into the main checkout) gave the same sha256 |
@@ -29,9 +29,9 @@ Checks on `a97b749` (each stage through `~/ai/bin/memory-queue` as one supervise
 | budgets | `node --test tools/bench/check-budgets.test.mjs`; fresh `sdk.mjs --extended` x2 + `scans-sdk.mjs` (chromium) through `check-budgets.mjs` | 0, 0 | unit tests pass; 40 ok, 38 webkit skipped, 0 failing |
 | notices | `node scripts/gen-notices.mjs --check` | 0 | up to date |
 | export size | `cargo build --release -p foliark-engine --example export_size`; `tools/bench/export-size.py --check` | 0, 0 | Foliark <= PyMuPDF on every exportable fixture |
-| fuzz smoke | `FUZZ_SECS=30 tools/fuzz-smoke/run.sh` | FUZZ_PENDING | |
-| advisories | `cargo deny check advisories` (`cargo audit` is not installed) | ADV_PENDING | |
-| release dry run | `tools/release/dry-run.sh` | DRY_PENDING | |
+| fuzz smoke | `FUZZ_SECS=30 tools/fuzz-smoke/run.sh` | 0 | 7 targets x 30 s, all clean |
+| advisories | `cargo deny check advisories` (`cargo audit` is not installed) | 0 | advisories ok (RustSec database fetched 2026-11-01, newest entry 2026-10-30) |
+| release dry run | `tools/release/dry-run.sh` | 0 | tarball bytes equal the recorded sha256, manifest 0.3.0, 292 entries, notices, SBOM (102 components), `SHA256SUMS`, package README names tag `v0.3.0`, `npm publish --dry-run` against an unreachable registry |
 
 Owner publish command, from the repository root `/Users/agent/ai/repos/foliark` (after the `v0.3.0` tag exists on the record commit; rebuild with the commands above if the tarball is gone and compare the sha256):
 `npm publish ./dist-pkg/zilijonas-foliark-0.3.0.tgz --access public`
