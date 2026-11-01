@@ -398,22 +398,3 @@ fn an_output_over_the_byte_limit_is_refused_with_no_plan() {
     );
     assert_eq!(e.stats().plan_bytes, 0);
 }
-
-/// `FOLIARK_BENCH_PDF=<file> cargo test --release -p foliark-engine --test raster_export -- --ignored --nocapture`
-#[test]
-#[ignore = "timing probe, not a check"]
-fn bench_raster_export_at_scale_2() {
-    let Ok(path) = std::env::var("FOLIARK_BENCH_PDF") else {
-        return;
-    };
-    let src = std::fs::read(path).unwrap();
-    let t = std::time::Instant::now();
-    let (out, plan) = raster(&src, None, consenting(), Limits::default()).unwrap();
-    eprintln!(
-        "raster bench: {} pages, {} B in -> {} B out, {:.2} s",
-        plan.report.pages,
-        src.len(),
-        out.len(),
-        t.elapsed().as_secs_f64()
-    );
-}

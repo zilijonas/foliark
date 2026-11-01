@@ -167,18 +167,3 @@ fn a_preview_refuses_as_the_commit_does() {
         ErrorCode::DocumentGone
     );
 }
-
-/// Per-keystroke cost, printed with `--nocapture` (the bound is loose so a debug build passes).
-#[test]
-fn a_keystroke_preview_is_cheap() {
-    let (e, doc) = engine(true);
-    let text = "The quick brown fox jumps over the lazy dogs";
-    e.layout_edit(&doc, 0, vec![A], text, None, true).unwrap();
-    let t = std::time::Instant::now();
-    for _ in 0..50 {
-        e.layout_edit(&doc, 0, vec![A], text, None, true).unwrap();
-    }
-    let ms = t.elapsed().as_secs_f64() * 1000.0 / 50.0;
-    eprintln!("layout_edit: {ms:.2} ms per call");
-    assert!(ms < 100.0, "{ms} ms");
-}

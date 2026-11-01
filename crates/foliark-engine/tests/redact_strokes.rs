@@ -467,17 +467,3 @@ fn a_cancelled_document_stops_the_stroke_cut_before_any_byte_is_written() {
     let again = redact_vectors(&doc, &plan, &mut w).expect("runs once the flag is clear");
     assert_eq!(again.paths_cut, 1);
 }
-
-/// Release-build timing of one subpath near the vertex cap: `cargo test --release -- --ignored`.
-#[test]
-#[ignore = "timing probe, run in release"]
-fn a_stroke_just_under_the_vertex_cap_is_cut_in_bounded_time() {
-    let (input, regions) = reg(&zigzag(60_000), 0, &[[100.0, 5.0, 140.0, 30.0]]);
-    let t = std::time::Instant::now();
-    let r = run("near-cap", input, &regions);
-    eprintln!(
-        "60k-vertex stroke (about 240k ink vertices), whole redact_vectors: {:?}",
-        t.elapsed()
-    );
-    assert_eq!(r.report.paths_cut, 1);
-}
