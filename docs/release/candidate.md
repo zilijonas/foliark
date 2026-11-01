@@ -32,6 +32,8 @@ Checks on `facec69` (one supervised sequential chain through `~/ai/bin/memory-qu
 | fuzz smoke | `FUZZ_SECS=30 tools/fuzz-smoke/run.sh` | 0 | 7 targets x 30 s, all clean |
 | release dry run | `tools/release/dry-run.sh` | 0 | tarball bytes equal the recorded sha256, manifest 0.3.1, 292 entries, notices, SBOM (102 components), `SHA256SUMS`, package README names tag `v0.3.1`, `npm publish --dry-run` against an unreachable registry |
 
+Published by the owner on 2026-11-01; the registry's `dist.integrity` (`sha512-+ytinsNQ...85YhMQ==`) equals this tarball. Tag `v0.3.1` is on the record commit `3b239b0`. HDDN production on 0.3.1 since 2026-11-01.
+
 Owner publish command, from the repository root `/Users/agent/ai/repos/foliark` (after the `v0.3.1` tag exists on the record commit; rebuild with the commands above if the tarball is gone and compare the sha256):
 `npm publish ./dist-pkg/zilijonas-foliark-0.3.1.tgz --access public`
 
@@ -71,6 +73,8 @@ Checks on `a97b749` (each stage through `~/ai/bin/memory-queue` as one supervise
 | fuzz smoke | `FUZZ_SECS=30 tools/fuzz-smoke/run.sh` | 0 | 7 targets x 30 s, all clean |
 | advisories | `cargo deny check advisories` (`cargo audit` is not installed) | 0 | advisories ok (RustSec database fetched 2026-11-01, newest entry 2026-10-30) |
 | release dry run | `tools/release/dry-run.sh` | 0 | tarball bytes equal the recorded sha256, manifest 0.3.0, 292 entries, notices, SBOM (102 components), `SHA256SUMS`, package README names tag `v0.3.0`, `npm publish --dry-run` against an unreachable registry |
+
+Published by the owner on 2026-11-01; the registry's `dist.integrity` (`sha512-j+6WWBUE...F+F2Q==`) equals this tarball. Deprecated on npm by the owner the same day in favour of 0.3.1 (push-down over an information-carrying background). Tag `v0.3.0` is on the record commit `4e5b1de`. Never deployed to HDDN.
 
 Owner publish command, from the repository root `/Users/agent/ai/repos/foliark` (after the `v0.3.0` tag exists on the record commit; rebuild with the commands above if the tarball is gone and compare the sha256):
 `npm publish ./dist-pkg/zilijonas-foliark-0.3.0.tgz --access public`

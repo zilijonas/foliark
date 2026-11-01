@@ -6,7 +6,7 @@ Canonical for Claude Code and Codex (`CLAUDE.md` only imports this file). Read i
 
 Headless Rust/WASM PDF SDK for redacting, editing and sanitizing PDFs in the browser, offline and on mobile, with typed refusals instead of silent fallbacks. First consumer: HDDN (the owner's private app, a separate repo), replacing Pyodide + PyMuPDF.
 
-Status: `@zilijonas/foliark` 0.2.0 on npm, 0.3.0 release candidate (release record `docs/release/candidate.md`), HDDN production on 0.1.6 since 2026-10-25 (first Foliark release in production 2026-10-23) (`docs/integration/hddn-acceptance.md`). License: AGPL-3.0-only plus separate commercial licensing (`LICENSING.md`, `COMMERCIAL-LICENSING.md`). External code contributions are not accepted (`CONTRIBUTING.md`); only the owner and agents acting for the owner commit. Security reports: `SECURITY.md`. Board: Workbench project `NEW` (section 8).
+Status: `@zilijonas/foliark` 0.3.1 on npm (0.3.0 deprecated: push-over-scan refusal fixed in 0.3.1; release records `docs/release/candidate.md`, tags `v<version>`), HDDN production on 0.3.1 since 2026-11-01 (first Foliark release in production 2026-10-23) (`docs/integration/hddn-acceptance.md`). License: AGPL-3.0-only plus separate commercial licensing (`LICENSING.md`, `COMMERCIAL-LICENSING.md`). External code contributions are not accepted (`CONTRIBUTING.md`); only the owner and agents acting for the owner commit. Security reports: `SECURITY.md`. Board: Workbench project `NEW` (section 8).
 
 ## 2. Architecture
 
@@ -107,7 +107,8 @@ Process:
 Git, push, publish:
 - Commit on the branch you were given. Conventional commits, `type(scope): summary (TASK-ID)`, one logical change per commit, body says why, ending with a `Co-Authored-By:` trailer naming your actual model (for example `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>`).
 - Stage only your own files (other agents commit concurrently). `git pull --ff-only` before pushing.
-- Never push per commit or per task (each push costs GitHub Actions minutes). Commit locally; the lead pushes one batch branch, opens one PR, and merges it when the wave is done. Push only when the lead or owner asks, as normal fast-forward pushes. Never force-push, change repository visibility, add remotes, create tags or releases, or publish packages (npm, crates) unless the task explicitly authorizes that exact action. Login/2FA stays with the owner.
+- Never push per commit or per task (each push costs GitHub Actions minutes). Commit locally; the lead pushes one batch branch, opens one PR, and merges it when the wave is done. Push only when the lead or owner asks, as normal fast-forward pushes. Never force-push, change repository visibility, add remotes, create GitHub releases or other tags, or publish packages (npm, crates) unless the task explicitly authorizes that exact action. Login/2FA stays with the owner.
+- Release tags are mandatory (owner rule 2026-11-01, Claude Code and Codex alike): every version published to npm gets an annotated tag `v<version>` (message `@zilijonas/foliark <version>`) on the commit that carries its record in `docs/release/candidate.md`. The agent landing the release creates and pushes it (`git tag -a v<version> <record commit> -m "@zilijonas/foliark <version>" && git push origin v<version>`) as soon as the owner confirms the publish, without asking again; never move or delete an existing tag. A release is not finished until its tag is on `origin`.
 
 Local machine (owner's Mac mini, only where `~/ai/bin/memory-queue` exists; plain runs elsewhere):
 - Every `cargo build/test/clippy`, `wasm-bindgen`, browser and Playwright run goes through the queue:
