@@ -4,6 +4,10 @@ All notable changes to `@zilijonas/foliark` (named `@foliark/sdk` before 0.1.0 w
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-01
+
+Edit limits read from the page, opt-in push-down of the content below an edit, opt-in metadata keeping on export, more default font-match families, and a fix for edits to an indented style segment. Source: tag `v0.3.0`. Tarball and hashes: `docs/release/candidate.md`.
+
 ### Added
 - `ExportPolicy.metadata: 'remove' | 'keep'` (default `'remove'`, output unchanged). With `'keep'`, native export writes back the eight standard Info fields (Title, Author, Subject, Keywords, Creator, Producer, CreationDate, ModDate) as one fresh dictionary: text decoded and normalized (NFC, no control or bidi characters, 1024 characters at most), dates rewritten in the `D:` grammar. A field is dropped when it spells text a redaction or an edit took out; custom keys and every XMP packet are always removed. `report.kept.metadata` lists the keys written; `removed.metadata` and `METADATA_REMOVED` count the rest. Raster export never writes Info (ADR 0016) (NEW-134).
 - `ParagraphInfo.maxWrapWidth` and `maxWrapLines`: an extended wrap width and its line budget, read from the page's own evidence (the mirrored left margin, and the nearest word, rule, image or shading to the right; a frame or panel around the paragraph caps it), and `EditPreview.wrapWidth`, the width the layout used. An edit is laid out at `wrapWidth` as before; only when it does not fit does it use `maxWrapWidth`, so text that fit lays out exactly as it did (ADR 0015) (NEW-129).

@@ -70,3 +70,13 @@ the offline precache lists the wasm but the service-worker cache name was not bu
 
 ## Next
 NEW-71 (remove Pyodide once 66 to 70 are accepted), then NEW-76. Open items carried here: scanned-page OCR timing is not part of the engine comparison, signature regions are an HDDN-side port over `renderRgba`.
+
+## 0.3.0 surface HDDN can adopt (not wired: HDDN pins 0.1.6 in production, ADRs 0015 to 0017)
+All additive and off by default, so the adapter written for 0.1.x keeps its output bytes. What to read or send when it is ready:
+| Need | Foliark 0.3.0 | Notes |
+|---|---|---|
+| wider editable box | `ParagraphInfo.maxWrapWidth`, `maxWrapLines`; `EditPreview.wrapWidth` | no call change: a longer edit that refused `EDIT_NO_FIT` for width now lays out at `maxWrapWidth` when `wrapWidth` does not fit. `maxLines` can now be smaller where a path, image or frame lies below. Draw the editor box at the `wrapWidth` the preview returns |
+| grow downward | `TextEdit.reflow: 'pushDown'`, `layoutEdit(page, rects, text, { reflow: 'pushDown' })`; `ParagraphInfo.pushDown` (budget, moved region), `EditPreview.shift`, `EditPreview.reflowBlocked` | opt in per edit; an `EDIT_NO_FIT` with `feature` `reflow*` means the content below cannot move as whole units |
+| keep overlays and redactions aligned | `ChangeResult.remap: PageShift[]` | steps `{pageIndex, region, dy}` from the previous working copy to the new one, in order; apply them to overlays drawn over the working copy. Redactions and later edits stay in base-revision coordinates and are mapped by the engine; a region cut by a move is refused `INVALID_ARGUMENT` `redactionTargetShifted` / `editTargetShifted` |
+| keep document properties | `ExportPolicy.metadata: 'keep'`; `report.kept.metadata` | native only; the eight standard Info fields, XMP always removed |
+| more matched faces | register Roboto, Open Sans, Lato, Noto Serif, Noto Sans, DejaVu Sans or EB Garamond | a registered family is used when the source font name matches; edited documents set in those names change face from the flags rung |
