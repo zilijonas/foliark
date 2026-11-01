@@ -366,6 +366,82 @@ fn ladder_name_match_rules_and_flags_fallback() {
 }
 
 #[test]
+fn default_font_match_picks_new_families_when_registered() {
+    let mut r = registry();
+    for fam in [
+        "Roboto",
+        "Open Sans",
+        "Lato",
+        "Noto Serif",
+        "Noto Sans",
+        "DejaVu Sans",
+        "EB Garamond",
+    ] {
+        r.register(load("LiberationSans-Regular.ttf", fam, 400))
+            .unwrap();
+    }
+    let first = |name: &str| {
+        let l = ladder(&r, name, StyleFlags::default());
+        let p = layout_paragraph("ab", &params(400.0, 1), &l).unwrap();
+        (p.lines[0].runs[0].font.clone(), p.lines[0].runs[0].rule)
+    };
+    for (name, fam) in [
+        ("ABCDEF+Roboto-Regular", "Roboto"),
+        ("Roboto", "Roboto"),
+        ("OpenSans-Regular", "Open Sans"),
+        ("Open Sans", "Open Sans"),
+        ("Lato-Bold", "Lato"),
+        ("NotoSerif-Regular", "Noto Serif"),
+        ("Noto Serif", "Noto Serif"),
+        // NotoSans must not land on Noto Serif, and the reverse.
+        ("NotoSans-Regular", "Noto Sans"),
+        ("Noto Sans", "Noto Sans"),
+        ("DejaVuSans", "DejaVu Sans"),
+        ("DejaVu Sans", "DejaVu Sans"),
+        ("Verdana", "DejaVu Sans"),
+        ("Tahoma", "DejaVu Sans"),
+        ("EBGaramond-Regular", "EB Garamond"),
+        // Mono names keep the mono rule, which comes before the new families.
+        ("DejaVuSansMono", "Liberation Mono"),
+        ("NotoSansMono-Regular", "Liberation Mono"),
+    ] {
+        assert_eq!(
+            first(name),
+            (id(&r, fam, false), Some(FontRule::NameMatch)),
+            "{name}"
+        );
+    }
+}
+
+#[test]
+fn default_font_match_falls_through_when_family_not_registered() {
+    let r = registry();
+    let first = |name: &str| {
+        let l = ladder(&r, name, StyleFlags::default());
+        let p = layout_paragraph("ab", &params(400.0, 1), &l).unwrap();
+        (p.lines[0].runs[0].font.clone(), p.lines[0].runs[0].rule)
+    };
+    // The DejaVu and EB Garamond rules are skipped; the existing Liberation rules apply.
+    for (name, fam) in [
+        ("Verdana", "Liberation Sans"),
+        ("Tahoma", "Liberation Sans"),
+        ("EBGaramond-Regular", "Liberation Serif"),
+        ("Garamond", "Liberation Serif"),
+    ] {
+        assert_eq!(
+            first(name),
+            (id(&r, fam, false), Some(FontRule::NameMatch)),
+            "{name}"
+        );
+    }
+    // A new family with nothing registered reaches the flags rung.
+    assert_eq!(
+        first("Roboto-Regular"),
+        (id(&r, "Liberation Sans", false), Some(FontRule::Flags))
+    );
+}
+
+#[test]
 fn missing_glyph_is_a_refusal_not_a_notdef() {
     let r = registry();
     let l = ladder(&r, "Arial", StyleFlags::default());
