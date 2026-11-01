@@ -365,6 +365,22 @@ SAFE_RECT = "20 355 160 375"
 HIT_RECT = "15 290 160 315"
 S = {"forbidden": [SECRET]}
 IMG = {"image_regions": [{"page": 0, "rect": IMG_RECT}]}
+# ---- NEW-134 / ADR 0016: kept Info fields (--allow info-standard): the eight standard keys, strings, D: dates, no forbidden text. ----
+INFO_STD = {"forbidden": [SECRET], "allow": ["info-standard"]}
+
+
+def info_pdf(body):
+    return simple(text(20, 360, "KEEP_PUBLIC_TEXT"), {6: body}, trailer="/Info 6 0 R")
+
+
+def leak_info_redacted_title():
+    return info_pdf("<< /Title (Report %s) >>" % SECRET)
+
+
+def leak_info_custom_key():
+    return info_pdf("<< /Title (Report) /Custom (C:/Users/x/draft.docx) >>")
+
+
 # name, builder, spec, codes that MUST appear (leaky) / None (safe), codes that must NOT appear[, substring a finding must contain]
 CASES = [
     ("leaky: black rect over live text", leak_overlay, S, {"TEXT_PYPDF", "TEXT_FITZ", "STREAM"}, set()),
@@ -404,6 +420,13 @@ CASES = [
     ("leaky: named destination left in the output", lambda: link_pdf(lk(SAFE_RECT, "/Dest /chapter2")), LINKS, {"LINK_DEST"}, set()),
     ("leaky: non-link annotation kept", lambda: link_pdf("<< /Type /Annot /Subtype /Text /Rect [20 355 40 375] >>"), LINKS, {"LINK_SUBTYPE"}, set()),
     ("safe: https link and explicit /Dest clear of the region", lambda: link_pdf(lk(SAFE_RECT, OK_URI), lk("20 200 100 220", OK_DEST)), LINKS, None, set()),
+    # NEW-134: a kept Info field must not spell redacted text, carry a custom key or hold a malformed date.
+    ("leaky: Info Title spells a redacted secret", leak_info_redacted_title, INFO_STD, {"INFO_TOKEN", "STRING"}, {"FEATURE", "INFO_KEY"}),
+    ("leaky: Info Title spells the secret, UTF-16BE", lambda: info_pdf("<< /Title <%s> >>" % ("FEFF" + SECRET.encode("utf-16-be").hex())), INFO_STD, {"INFO_TOKEN", "STRING"}, {"FEATURE"}),
+    ("leaky: custom Info key", leak_info_custom_key, INFO_STD, {"INFO_KEY"}, {"FEATURE"}),
+    ("leaky: Info date is not a D: date", lambda: info_pdf("<< /CreationDate (2024-01-02) >>"), INFO_STD, {"INFO_DATE"}, {"FEATURE"}),
+    ("leaky: Info Trapped name", lambda: info_pdf("<< /Trapped /False >>"), INFO_STD, {"INFO_KEY"}, {"FEATURE"}),
+    ("safe: standard Info fields only", lambda: info_pdf("<< /Title (Report) /Author (A. Writer) /CreationDate (D:20240102030405+02'00') /ModDate (D:20240102030405Z) >>"), INFO_STD, None, set()),
     ("safe: public-only page", safe_clean, S, None, set()),
     ("safe: Quartz font page, secret not shown", gen.quartz_type0_empty_tounicode, {"forbidden": ["SECRET_NOT_SHOWN"]}, None, set()),
     ("safe: combining-mark page, secret not shown", gen.quartz_type0_combining_marks, {"forbidden": ["SECRET_NOT_SHOWN"]}, None, set()),

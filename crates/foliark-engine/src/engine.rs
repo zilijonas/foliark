@@ -9,8 +9,8 @@ use crate::{Document, RenderOptions, RenderedPage};
 use foliark_model::{
     Capabilities, ChangeResult, ChangeSet, DocumentInfo, EditPreview, ErrorCode, ErrorDetails,
     ExportMode, ExportPlan, ExportPolicy, ExtractOptions, FontMatchRule, FontSource, Hit, Limits,
-    PageGeometry, ParagraphInfo, PdfError, Phase, Point, Progress, Rect, RegisteredFont, SearchHit,
-    SearchOptions, TextPage, TextRange,
+    MetadataPolicy, PageGeometry, ParagraphInfo, PdfError, Phase, Point, Progress, Rect,
+    RegisteredFont, SearchHit, SearchOptions, TextPage, TextRange,
 };
 use foliark_text::Registry;
 use std::collections::HashMap;
@@ -513,9 +513,15 @@ impl Engine {
             crate::cmaps::require(&e.session(&doc)?.info.required_assets)?;
             let binding = e.binding(&doc)?;
             let s = e.get(&doc)?;
+            let away = if policy.metadata == MetadataPolicy::Keep {
+                s.edited_away()?
+            } else {
+                Default::default()
+            };
             let mut out = export::prepare(
                 s.doc(),
                 &s.committed,
+                &away,
                 binding.clone(),
                 mode,
                 &policy,

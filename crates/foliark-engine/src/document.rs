@@ -179,6 +179,16 @@ impl Session {
         self.working.as_ref().unwrap_or(&self.source)
     }
 
+    /// The words the committed edits took out (ADR 0016), read from the source and the working
+    /// copy: what a kept Info field must not spell. Empty without edits.
+    pub(crate) fn edited_away(&self) -> Result<BTreeSet<String>, PdfError> {
+        let Some(working) = &self.working else {
+            return Ok(BTreeSet::new());
+        };
+        let pages = self.committed.edits.iter().map(|e| e.page_index as usize);
+        crate::sanitize::metadata::edited_away(&self.source, working, &pages.collect())
+    }
+
     pub(crate) fn layout(&mut self, page: u32, hidden: bool) -> Result<&TextLayout, PdfError> {
         let doc = self.working.as_ref().unwrap_or(&self.source);
         self.index.layout(doc, page, hidden)

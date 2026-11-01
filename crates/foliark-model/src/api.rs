@@ -787,6 +787,18 @@ pub enum LinkPolicy {
     Keep,
 }
 
+/// Native export only (ADR 0016): `Keep` writes the eight standard Info fields back, fresh and
+/// normalized, unless one spells text a redaction or an edit took out; XMP is always removed and
+/// raster export never writes Info.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum MetadataPolicy {
+    #[default]
+    Remove,
+    Keep,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -832,6 +844,7 @@ impl Default for RasterPolicy {
 pub struct ExportPolicy {
     pub annotations: AnnotationPolicy,
     pub links: LinkPolicy,
+    pub metadata: MetadataPolicy,
     pub signed_input: SignedInputPolicy,
     pub invisible_text: InvisibleTextPolicy,
     pub raster: RasterPolicy,
@@ -948,6 +961,10 @@ pub struct KeptReport {
     /// Hyperlinks written back under `policy.links: 'keep'` (ADR 0014); the rest are in
     /// `LINKS_REMOVED`.
     pub links: u32,
+    /// Info keys written back under `policy.metadata: 'keep'` (ADR 0016), in the order Title,
+    /// Author, Subject, Keywords, Creator, Producer, CreationDate, ModDate; the rest are in
+    /// `removed.metadata`.
+    pub metadata: Vec<String>,
     pub fonts_with_glyph_inventory: Vec<String>,
 }
 

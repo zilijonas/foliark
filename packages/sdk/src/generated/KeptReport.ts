@@ -5,4 +5,10 @@ export type KeptReport = { invisibleTextClusters: number,
  * Hyperlinks written back under `policy.links: 'keep'` (ADR 0014); the rest are in
  * `LINKS_REMOVED`.
  */
-links: number, fontsWithGlyphInventory: Array<string>, };
+links: number, 
+/**
+ * Info keys written back under `policy.metadata: 'keep'` (ADR 0016), in the order Title,
+ * Author, Subject, Keywords, Creator, Producer, CreationDate, ModDate; the rest are in
+ * `removed.metadata`.
+ */
+metadata: Array<string>, fontsWithGlyphInventory: Array<string>, };

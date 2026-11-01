@@ -335,6 +335,7 @@ fn a_partly_covered_cluster_grows_the_effective_region_and_a_cut_stroke_does_not
     let done = export::prepare(
         &doc,
         &committed,
+        &Default::default(),
         binding,
         ExportMode::Native,
         &ExportPolicy::default(),

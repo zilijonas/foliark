@@ -133,6 +133,7 @@ pub struct Writer<'d> {
     layers_resolved: bool,
     preserve: bool,
     links: Vec<Link>,
+    info: Vec<(&'static str, Vec<u8>)>,
 }
 
 /// Resources added per page: (resource name, object).
@@ -158,6 +159,7 @@ impl<'d> Writer<'d> {
             layers_resolved: false,
             preserve: false,
             links: Vec::new(),
+            info: Vec::new(),
         }
     }
 
@@ -165,6 +167,14 @@ impl<'d> Writer<'d> {
     /// this the allowlist writer drops every annotation.
     pub fn set_links(&mut self, links: Vec<Link>) -> &mut Self {
         self.links = links;
+        self
+    }
+
+    /// Write these (key, string value) pairs as the trailer's `/Info` (ADR 0016), already
+    /// normalized by [`crate::sanitize::metadata`]. Ignored in preserve mode, which keeps the
+    /// input's own. Without this the allowlist writer writes no `/Info`.
+    pub fn set_info(&mut self, info: Vec<(&'static str, Vec<u8>)>) -> &mut Self {
+        self.info = info;
         self
     }
 
@@ -431,6 +441,14 @@ impl<'d> Writer<'d> {
                 }
             }
             limits::check_output(pdf.len() as u64, !self.preserve, &self.limits)?;
+        }
+        if !self.preserve && !self.info.is_empty() {
+            // Ids are 1, 2 and 3.. after the shrink; the dictionary goes last.
+            let id = Ref::new(walk.nodes.iter().map(|n| n.id.get()).max().unwrap_or(2) + 1);
+            let mut i = pdf.document_info(id);
+            for (k, v) in &self.info {
+                put(i.insert(Name(k.as_bytes())), &Val::Str(v.clone()))?;
+            }
         }
         let out = pdf.finish();
         limits::check_output(out.len() as u64, !self.preserve, &self.limits)?;
