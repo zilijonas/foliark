@@ -46,4 +46,5 @@ it("previews and commits a push-down; without it the edit does not fit", async (
   const r = await doc.applyChanges({ baseRevision: 0, textEdits: [{ id: "e", pageIndex: 0, rects, text, reflow: "pushDown" }] });
   expect(r.accepted).toBe(true);
   expect(r.layouts[0].fingerprint).toBe(p.fingerprint);
+  expect(r.remap).toEqual([p.shift]);
 });

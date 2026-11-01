@@ -209,7 +209,7 @@ const isEditPreview = shape({
 const isChangeResult = shape({
   accepted: isBool, revision: isU32,
   rejected: arrayOf(shape({ id: isStr, code: isErrorCode, details: optNull(isRec) })),
-  changedPages: arrayOf(isU32), layouts: arrayOf(isEditLayout),
+  changedPages: arrayOf(isU32), layouts: arrayOf(isEditLayout), remap: arrayOf(isPageShift),
 });
 
 export const argsGuards = (maxBytes = DEFAULT_MAX_BUFFER_BYTES): Partial<Record<OpName, Guard>> => ({
