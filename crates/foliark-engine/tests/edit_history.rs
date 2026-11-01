@@ -58,6 +58,7 @@ fn edit(id: &str, rects: &[Rect], text: &str) -> TextEdit {
         rects: rects.to_vec(),
         text: text.into(),
         font: None,
+        reflow: None,
     }
 }
 

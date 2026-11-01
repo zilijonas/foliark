@@ -96,7 +96,10 @@ fn annots(bytes: &[u8], name: &str) -> Vec<String> {
 }
 
 fn oracle(name: &str, bytes: &[u8], spec: &str, forbid: &[&str]) {
-    let (p, s) = (tmp("links-keep", name), tmp("links-keep", "spec.json"));
+    let (p, s) = (
+        tmp("links-keep", name),
+        tmp("links-keep", &format!("{name}.spec.json")),
+    );
     std::fs::write(&p, bytes).unwrap();
     std::fs::write(&s, spec).unwrap();
     let mut args = vec![
@@ -299,6 +302,7 @@ fn a_link_over_an_edited_paragraph_is_dropped() {
         }],
         text: "CHANGED".into(),
         font: None,
+        reflow: None,
     };
     let t = e.apply_changes(
         &doc,

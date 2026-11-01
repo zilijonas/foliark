@@ -42,6 +42,7 @@ fn commit(e: &mut Engine, doc: &str, edits: &[(Rect, &str)]) -> ChangeResult {
             rects: vec![*r],
             text: (*t).into(),
             font: None,
+            reflow: None,
         })
         .collect();
     let t = e.apply_changes(
@@ -89,8 +90,14 @@ fn unchanged_text_keeps_its_breaks_in_the_source_font_and_the_preview_is_the_com
 fn longer_text_still_does_not_fit() {
     let (mut e, doc) = open();
     for (r, text, needed, max) in [
-        (PARAGRAPH, "ALPHA BRAVO DELTA ECHOS GOLFS HOTEL LIMA", 4, 3),
-        (PARAGRAPH, "ALPHA BRAVOS DELTA ECHOS GOLFS HOTEL", 4, 3),
+        // Too much for the stable width and for the extended one (ADR 0015): the figures are the
+        // extended layout's.
+        (
+            PARAGRAPH,
+            "ALPHA BRAVO DELTA ECHOS GOLFS HOTEL LIMA ALPHA BRAVO DELTA ECHOS GOLFS HOTEL LIMA ALPHA BRAVO DELTA",
+            6,
+            3,
+        ),
         // A lone word beside text may use the room up to it (ADR 0011 amendment), not more.
         (
             WORD,

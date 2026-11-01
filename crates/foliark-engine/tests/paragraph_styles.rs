@@ -48,6 +48,7 @@ fn commit(e: &mut Engine, doc: &str, text: &str) -> ChangeResult {
                 rects: vec![BLOCK],
                 text: text.into(),
                 font: None,
+                reflow: None,
             }]),
             redactions: None,
         },
@@ -265,13 +266,13 @@ fn unchanged_text_changes_nothing_and_longer_text_still_does_not_fit() {
     assert!(c.accepted && c.layouts[0].lines == 0, "{c:?}");
     assert_eq!(page(&mut e, &doc).words, before.words);
 
-    // Four lines fit above the KEEP line; this body needs five.
-    let text = format!("{HEAD}\n{BODY_TEXT} sierra tango uniform victor hotel india lima");
+    // Four lines fit above the KEEP line, at the extended width too (ADR 0015); this body needs more.
+    let text = format!("{HEAD}\n{BODY_TEXT} {BODY_TEXT} {BODY_TEXT}");
     let p = e
         .layout_edit(&doc, 0, vec![BLOCK], &text, None, false)
         .unwrap();
     assert!(!p.fits, "{p:?}");
-    assert_eq!((p.needed_lines, p.max_lines), (5, 4));
+    assert_eq!((p.needed_lines, p.max_lines), (6, 4));
     let c = commit(&mut e, &doc, &text);
     assert_eq!(c.rejected[0].code, ErrorCode::EditNoFit);
 }

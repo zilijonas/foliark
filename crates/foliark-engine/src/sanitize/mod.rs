@@ -4,6 +4,7 @@
 pub mod document;
 pub mod interactive;
 pub mod links;
+pub mod metadata;
 pub mod prune;
 pub mod resources;
 pub mod text_semantics;

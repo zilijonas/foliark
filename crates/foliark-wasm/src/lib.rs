@@ -6,7 +6,7 @@
 use foliark_engine::{RenderOptions, RenderedPage, Step};
 use foliark_model::{
     ChangeSet, ExportMode, ExportPolicy, ExtractOptions, FoliarkError, FontMatchRule, FontSource,
-    FontStyle, Limits, PdfError, Point, Rect, SearchOptions,
+    FontStyle, Limits, PdfError, Point, Rect, Reflow, SearchOptions,
 };
 use js_sys::{Object, Reflect, Uint8Array};
 use serde::de::DeserializeOwned;
@@ -306,6 +306,7 @@ impl Engine {
 
     /// ADR 0004: the layout an edit would commit, nothing committed.
     #[wasm_bindgen(js_name = layoutEdit)]
+    #[allow(clippy::too_many_arguments)]
     pub fn layout_edit(
         &mut self,
         doc: &str,
@@ -314,11 +315,21 @@ impl Engine {
         text: &str,
         font: Option<String>,
         glyphs: Option<bool>,
+        reflow: JsValue,
     ) -> Result<JsValue, JsValue> {
         let rects: Vec<Rect> = required(rects)?;
+        let reflow: Reflow = from_js(reflow)?;
         let p = self
             .inner
-            .layout_edit(doc, page, rects, text, font, glyphs.unwrap_or(false))
+            .layout_edit_with(
+                doc,
+                page,
+                rects,
+                text,
+                font,
+                glyphs.unwrap_or(false),
+                reflow,
+            )
             .map_err(err)?;
         to_js(&p)
     }

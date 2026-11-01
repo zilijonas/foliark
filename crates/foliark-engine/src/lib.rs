@@ -19,7 +19,7 @@ pub mod text;
 pub mod writer;
 
 pub use document::{
-    Applied, Binding, Committed, EditApplier, EditContext, NotBuilt, StoredRedaction,
+    Applied, Binding, Committed, EditApplier, EditContext, NotBuilt, Prior, StoredRedaction,
 };
 pub use engine::{BoxTask, DocId, Engine, Stats, Step, Task};
 pub use render::{RenderOptions, RenderedPage};

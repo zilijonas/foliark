@@ -6,6 +6,7 @@
 //! `BDC` property lists (the content re-emitter strips them; `structure` counts the catalog's
 //! `StructTreeRoot` and `MarkInfo` only), `ViewerPreferences`, `PageMode`, page `/Trans`/`/Dur`.
 use crate::reader::Document;
+use crate::sanitize::metadata::Kept;
 use foliark_model::{ErrorCode, Loss, LossCode, PdfError, SanitizedItem};
 use hayro::hayro_syntax::object::{Dict, MaybeRef, Name, Object, ObjectIdentifier};
 use std::collections::{BTreeMap, HashSet};
@@ -40,6 +41,29 @@ pub struct DocumentRemovals {
     pub losses: Vec<Loss>,
     /// Signature values (or a bare `/Perms`): `signedInput: refuse` stops on these.
     pub signatures: u32,
+    /// The Info dictionary's share of `removed[Metadata]` (0 or 1).
+    info: u32,
+}
+
+impl DocumentRemovals {
+    /// `policy.metadata: 'keep'` (ADR 0016): the Info dictionary counts as the keys of the input
+    /// that were not written back, not as one removed item.
+    pub fn keep_info(&mut self, kept: &Kept) {
+        let n =
+            self.removed.remove(&SanitizedItem::Metadata).unwrap_or(0) - self.info + kept.dropped();
+        self.losses.retain(|l| l.code != LossCode::MetadataRemoved);
+        if n > 0 {
+            self.removed.insert(SanitizedItem::Metadata, n);
+            self.losses.insert(
+                0,
+                Loss {
+                    code: LossCode::MetadataRemoved,
+                    count: n,
+                    pages: None,
+                },
+            );
+        }
+    }
 }
 
 #[derive(Default)]
@@ -214,5 +238,6 @@ pub fn scan(doc: &Document) -> Result<DocumentRemovals, PdfError> {
         removed,
         losses,
         signatures,
+        info,
     })
 }

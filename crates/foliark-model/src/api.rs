@@ -519,6 +519,13 @@ pub struct ParagraphInfo {
     pub wrap_width: f64,
     pub max_height: f64,
     pub max_lines: u32,
+    /// ADR 0015's extended width (never below `wrapWidth`), used only when the text does not fit
+    /// `wrapWidth`, and its line budget.
+    pub max_wrap_width: f64,
+    pub max_wrap_lines: u32,
+    /// ADR 0015: the line budget at `maxWrapWidth` with `reflow: 'pushDown'` and the region it
+    /// would move at that budget; null when nothing below can move.
+    pub push_down: Option<PushDown>,
     pub original_text: Option<String>,
     pub font: FontResolution,
     #[ts(optional = nullable)]
@@ -534,6 +541,39 @@ pub struct ParagraphInfo {
     /// Style runs of `originalText`: UTF-16 ranges that tile it, each drawn in one look. Empty
     /// when `originalText` is null.
     pub runs: Vec<StyleSpan>,
+}
+
+/// [`ParagraphInfo::push_down`].
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct PushDown {
+    pub max_lines: u32,
+    /// Display space, before the push.
+    pub region: Rect,
+}
+
+/// One push-down step (ADR 0015): the content of `region` (display space, before this step)
+/// moved down by `dy` display points.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct PageShift {
+    pub page_index: u32,
+    pub region: Rect,
+    pub dy: f64,
+}
+
+/// `TextEdit.reflow` (ADR 0015): what an edit that needs more lines than fit does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum Reflow {
+    /// Refuse `EDIT_NO_FIT` (spec §6.3).
+    #[default]
+    None,
+    /// Move the content below the paragraph down.
+    PushDown,
 }
 
 /// One page style of a paragraph (ADR 0013), as `ParagraphSegment` describes a segment's.
@@ -593,6 +633,8 @@ pub struct TextEdit {
     pub text: String,
     /// A registered `fontId`.
     pub font: Option<String>,
+    /// Omitted = `none`.
+    pub reflow: Option<Reflow>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -703,6 +745,9 @@ pub struct ChangeResult {
     pub rejected: Vec<RejectedChange>,
     pub changed_pages: Vec<u32>,
     pub layouts: Vec<EditLayout>,
+    /// ADR 0015: the push-down steps from the previous working copy to this one, in order; map an
+    /// overlay (a redaction box, a highlight) through them. Empty when nothing moved.
+    pub remap: Vec<PageShift>,
 }
 
 /// One line of an [`EditPreview`]: `text` is the normalized text it shows, `x` the origin of its
@@ -743,7 +788,11 @@ pub struct EditPreview {
     pub font_size: f64,
     pub lines: Vec<PreviewLine>,
     pub needed_lines: u32,
+    /// The budget of the width the layout used.
     pub max_lines: u32,
+    /// The width the chosen layout used (ADR 0015): `wrapWidth`, or `maxWrapWidth` when the text
+    /// needed it.
+    pub wrap_width: f64,
     /// False: `applyChanges` would refuse with `EDIT_NO_FIT`.
     pub fits: bool,
     pub approximate: bool,
@@ -755,6 +804,11 @@ pub struct EditPreview {
     pub styles: Vec<StyleSpan>,
     /// Only when asked for.
     pub glyphs: Option<Vec<PreviewGlyph>>,
+    /// With `reflow: 'pushDown'`: what the commit would move, when it needs to move anything.
+    #[ts(optional = nullable)]
+    pub shift: Option<PageShift>,
+    /// With `reflow: 'pushDown'`: the `EDIT_NO_FIT` feature that blocks the push-down.
+    pub reflow_blocked: Option<String>,
 }
 
 // ---- §1.6 export --------------------------------------------------------------------------------
@@ -782,6 +836,18 @@ pub enum AnnotationPolicy {
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub enum LinkPolicy {
+    #[default]
+    Remove,
+    Keep,
+}
+
+/// Native export only (ADR 0016): `Keep` writes the eight standard Info fields back, fresh and
+/// normalized, unless one spells text a redaction or an edit took out; XMP is always removed and
+/// raster export never writes Info.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum MetadataPolicy {
     #[default]
     Remove,
     Keep,
@@ -832,6 +898,7 @@ impl Default for RasterPolicy {
 pub struct ExportPolicy {
     pub annotations: AnnotationPolicy,
     pub links: LinkPolicy,
+    pub metadata: MetadataPolicy,
     pub signed_input: SignedInputPolicy,
     pub invisible_text: InvisibleTextPolicy,
     pub raster: RasterPolicy,
@@ -948,6 +1015,10 @@ pub struct KeptReport {
     /// Hyperlinks written back under `policy.links: 'keep'` (ADR 0014); the rest are in
     /// `LINKS_REMOVED`.
     pub links: u32,
+    /// Info keys written back under `policy.metadata: 'keep'` (ADR 0016), in the order Title,
+    /// Author, Subject, Keywords, Creator, Producer, CreationDate, ModDate; the rest are in
+    /// `removed.metadata`.
+    pub metadata: Vec<String>,
     pub fonts_with_glyph_inventory: Vec<String>,
 }
 

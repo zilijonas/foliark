@@ -73,3 +73,21 @@ undeclared raster, declared raster that kept its text layer, a 3 pt glyph left d
 Limits: the margin must cover anti-aliasing around changed regions; a region declared too large hides regressions inside it. Pixel diff compares one renderer (MuPDF) on both sides, so it
 sees changes, not rendering errors common to both. pypdf chunk matching is operator-granular: an engine that re-splits an unaffected line into different text-show operators fails WORDS_PYPDF
 even when the page is right (the PyMuPDF word check is the authoritative layout check); its start points ignore Tc/Tw/Tz and text rise. Reflowed text must be inside a declared region. Annotations render per PyMuPDF defaults.
+
+## Push-down shift: region R of the input is R + dy in the output (NEW-130, `shift.py`)
+```sh
+tests/oracles/.venv/bin/python tests/oracles/shift.py in.pdf out.pdf --region 0:x0,y0,x1,y1 --dy DY [--changed 0:x0,y0,x1,y1 ...] [--tol 0.05]
+```
+`shift.check(in, out, page, region, dy, changed=(), tol=0.05)` returns `CODE: detail` findings (empty = pass). Boxes are display space (top-left, y down, 0-based page, as `fidelity.py`); DY > 0 moves content down. Exit 0 pass, 1 findings, 2 open error.
+`--changed` is where an edit may rewrite text (the paragraph's old box through its new one): input items there are not compared and unexplained output items there are ignored.
+| Check | Code |
+|---|---|
+| Every word, vector drawing (`get_drawings`: type, colours, item count), image and link annotation (`/Rect`, kind, URI or page) of the input fully inside R is in the output with the same text/paint/target, x unchanged and y + DY (+-`tol`) | SHIFT_MOVED |
+| Every other input item (outside R and outside `--changed`) is in the output where it was | SHIFT_FIXED |
+| Every output item is explained by one of the two rules above or lies in `--changed` (a copy left at the old place, a stray word) | SHIFT_EXTRA |
+| R must not cut an item (touching R but not inside it); a table cell, a column rule, a word. The engine must refuse such a cut, and the oracle will not pass one | SHIFT_STRADDLE |
+| Page count and size | SHIFT_PAGES |
+
+Fixtures (`tests/fixtures/generators/generate.py`, bytes deterministic, in `manifest.json`): `push-letter` (HDDN sample letter, Bezier signature under the sign-off, footer), `push-invoice-table` (ruled cells, paragraph in the Notes cell), `push-two-column`, `push-link-below`. `generate.PUSH[name]` holds the `region`, `changed` and `dy` for each; `manifest.json` carries them as `expected.pushDown`.
+Each builder also writes a CORRECT push-down as a synthetic output (`generate.letter(dy=18, lines=2)`; `still={"sig"}` leaves one group behind), which `controls.py` uses: 6 passing pushes (text, Bezier path, ruled table, one column, link, image) and 11 failing ones (nothing moved, signature or table rules or link or image left behind, wrong dy, text outside `--changed`, region over both columns, region cutting a table or a cell).
+Limits: geometry only, one page per call; word boxes come from PyMuPDF (`dy` is compared on boxes, so a glyph moved inside a word that keeps its box is not seen; run `fidelity.py`/`objects.py` for pixels and privacy); drawings are compared by bounding box, paint and item count, not by path coordinates; clips, blend and shadings are not evaluated; page /Rotate is mapped with `rotation_matrix` but not exercised by a control.

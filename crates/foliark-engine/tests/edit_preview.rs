@@ -49,6 +49,7 @@ fn commit(e: &mut Engine, doc: &str, text: &str) -> foliark_model::ChangeResult 
                 rects: vec![A],
                 text: text.into(),
                 font: None,
+                reflow: None,
             }]),
             redactions: None,
         },

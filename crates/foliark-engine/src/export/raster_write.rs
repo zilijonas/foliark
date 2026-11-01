@@ -140,6 +140,7 @@ pub fn report(plan: &RasterPlan, edits: usize, bytes: &[u8]) -> Result<ExportRep
         kept: KeptReport {
             invisible_text_clusters: 0,
             links: 0,
+            metadata: Vec::new(),
             fonts_with_glyph_inventory: Vec::new(),
         },
         losses: plan.losses(),

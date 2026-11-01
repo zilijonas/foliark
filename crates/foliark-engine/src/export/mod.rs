@@ -28,14 +28,15 @@ use crate::redaction::plan::{RedactionPlan, bounds_of, glyph_boxes, text_coverag
 use crate::redaction::text::num;
 use crate::redaction::{Executed, execute, image};
 use crate::sanitize::document::scan;
-use crate::sanitize::{interactive, links, prune, resources, text_semantics, visibility};
+use crate::sanitize::{interactive, links, metadata, prune, resources, text_semantics, visibility};
 use crate::writer::{Link, Writer};
 use foliark_model::{
     Capabilities, Capability, CapabilityReason, CapabilityStatus, EditsReport, ErrorCode,
     ExportMode, ExportPolicy, ExportReport, ExtractOptions, Flattened, KeptReport, Limits,
-    LinkPolicy, Loss, LossCode, PdfError, Point, Rect, RedactionReport, SanitizedItem,
+    LinkPolicy, Loss, LossCode, MetadataPolicy, PdfError, Point, Rect, RedactionReport,
+    SanitizedItem,
 };
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
 pub mod preflight;
@@ -331,11 +332,12 @@ fn drop_unused(
     bytes: Vec<u8>,
     limits: &Limits,
     links: &[Link],
+    info: &[(&'static str, Vec<u8>)],
 ) -> Result<(Vec<u8>, u32), PdfError> {
     let out = Document::open_with_limits(bytes.clone(), None, false, limits.clone())?;
     let mut w = Writer::new(out.reader(), limits.clone());
-    // This write is a fresh graph too: the kept links go in again (their pages keep their index).
-    w.set_links(links.to_vec());
+    // This write is a fresh graph too: the kept links and Info go in again (their pages keep their index).
+    w.set_links(links.to_vec()).set_info(info.to_vec());
     let n = prune::unused(out.reader(), &mut w)?;
     if n == 0 {
         return Ok((bytes, 0));
@@ -364,6 +366,7 @@ fn link_regions(committed: &Committed, applied: &[AppliedRedaction]) -> BTreeMap
 pub fn prepare(
     doc: &Document,
     committed: &Committed,
+    edited_away: &BTreeSet<String>,
     binding: Binding,
     mode: ExportMode,
     policy: &ExportPolicy,
@@ -373,7 +376,7 @@ pub fn prepare(
         return raster::run(doc, committed, binding, policy, limits);
     }
     let reader = doc.reader();
-    let removals = scan(reader)?;
+    let mut removals = scan(reader)?;
     let inter = interactive::scan(reader, policy);
     let vis = visibility::scan_with(reader, policy.invisible_text)?;
     if let Some(b) = preflight::document_blockers(policy, &inter, &vis, removals.signatures).first()
@@ -437,8 +440,19 @@ pub fn prepare(
     } else {
         Vec::new()
     };
-    w.set_links(links.clone());
-    let (bytes, unused) = drop_unused(w.write()?, limits, &links)?;
+    let meta = if policy.metadata == MetadataPolicy::Keep {
+        let kept = metadata::keep(reader, || {
+            let mut tokens = links::removed_tokens(doc, &link_regions(committed, &applied))?;
+            tokens.extend(edited_away.iter().cloned());
+            Ok(tokens)
+        })?;
+        removals.keep_info(&kept);
+        kept
+    } else {
+        metadata::Kept::default()
+    };
+    w.set_links(links.clone()).set_info(meta.entries.clone());
+    let (bytes, unused) = drop_unused(w.write()?, limits, &links, &meta.entries)?;
     let pages = doc.page_count();
     let invisible = verify(&bytes, pages, committed, limits)?;
 
@@ -564,6 +578,7 @@ pub fn prepare(
         kept: KeptReport {
             invisible_text_clusters: invisible,
             links: links.len() as u32,
+            metadata: meta.names(),
             fonts_with_glyph_inventory: inventory,
         },
         losses,

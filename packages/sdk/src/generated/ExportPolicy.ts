@@ -2,10 +2,11 @@
 import type { AnnotationPolicy } from "./AnnotationPolicy";
 import type { InvisibleTextPolicy } from "./InvisibleTextPolicy";
 import type { LinkPolicy } from "./LinkPolicy";
+import type { MetadataPolicy } from "./MetadataPolicy";
 import type { RasterPolicy } from "./RasterPolicy";
 import type { SignedInputPolicy } from "./SignedInputPolicy";
 
 /**
  * Spec §1.6 policy. The SDK sends `Partial<ExportPolicy>`: missing fields take these defaults.
  */
-export type ExportPolicy = { annotations: AnnotationPolicy, links: LinkPolicy, signedInput: SignedInputPolicy, invisibleText: InvisibleTextPolicy, raster: RasterPolicy, };
+export type ExportPolicy = { annotations: AnnotationPolicy, links: LinkPolicy, metadata: MetadataPolicy, signedInput: SignedInputPolicy, invisibleText: InvisibleTextPolicy, raster: RasterPolicy, };

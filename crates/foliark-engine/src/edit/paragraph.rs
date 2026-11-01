@@ -1,9 +1,11 @@
 //! `prepareParagraph` (spec §6.1, §6.2, §6.4): which clusters a paragraph edit selects, the
 //! fixed budget around them (wrap width, line count, height) and the font it will use.
 //! Everything is in display space and computed from the page as it is, never from the edit.
+use super::limits::{Evidence, Limits, limits};
 use super::runs::carry;
 use crate::Document;
 use crate::interpret::{GlyphItem, ItemKind, SemanticPage};
+use crate::redaction::plan::painted_bounds;
 use crate::text::{ClusterId, SourceFontFace, TextLayout};
 use foliark_model::{
     Cluster, EditorFace, ErrorCode, ErrorDetails, FontMatchRule, FontResolution, FontRule,
@@ -171,8 +173,15 @@ fn hard_breaks(parts: &[Part]) -> Vec<bool> {
 /// Rows joined by LF at hard breaks and by `soft` (a space) where a line wrapped on its own
 /// ([`hard_breaks`]). A hard line's indent becomes leading spaces. With the page style of each
 /// `char`: a break or an indent the page does not draw is the paragraph's (`main`).
-fn original_text(parts: &[Part], space: f64, soft: char, main: u32) -> (String, Vec<u32>) {
+fn original_text(
+    parts: &[Part],
+    space: f64,
+    soft: char,
+    main: u32,
+    left: Option<f64>,
+) -> (String, Vec<u32>) {
     let x0 = parts.iter().map(|p| p.x0).fold(f64::INFINITY, f64::min);
+    let x0 = left.map_or(x0, |l| l.min(x0));
     let lead = |p: &Part| {
         let n = if space > 0.0 {
             ((p.x0 - x0) / space).round()
@@ -370,6 +379,10 @@ pub struct Prepared {
     pub main: usize,
     /// The look of each `char` of `originalText`; empty when it is null.
     pub text_looks: Vec<usize>,
+    /// What push-down (ADR 0015) reads: the page model, the limits and the ladder's descent.
+    pub(crate) model: SemanticPage,
+    pub(crate) limits: Limits,
+    pub(crate) descent: f64,
 }
 
 /// `looks` (one per `char` of `text`) as runs of `text`, each with the ladder `ladder(look)`;
@@ -435,9 +448,12 @@ impl Document {
         registry: &Registry,
         font_match: &[FontMatchRule],
     ) -> Result<ParagraphInfo, PdfError> {
-        Ok(self
-            .prepare(page, rects, font, editor_face, registry, font_match)?
-            .info)
+        let p = self.prepare(page, rects, font, editor_face, registry, font_match)?;
+        let push_down = super::reflow::Reflow::new(self, page, &p)?.budget();
+        Ok(ParagraphInfo {
+            push_down,
+            ..p.info
+        })
     }
 
     /// [`Document::prepare_paragraph`] plus what applying the edit needs.
@@ -450,20 +466,24 @@ impl Document {
         registry: &Registry,
         font_match: &[FontMatchRule],
     ) -> Result<Prepared, PdfError> {
-        let pick = |l: &TextLayout| select_clusters(l, rects);
+        let pick = |l: &TextLayout| (select_clusters(l, rects), None);
         self.prepare_with(page, pick, font, editor_face, registry, font_match)
     }
 
-    /// [`Document::prepare`] for page clusters `ids` (a segment of an earlier selection).
+    /// [`Document::prepare`] for page clusters `ids` (a segment of an earlier selection). `left`
+    /// is that selection's left edge: indents are counted, and the box starts, from it, as the
+    /// text the caller sends for the whole selection has them.
     pub fn prepare_clusters(
         &self,
         page: usize,
         ids: &[usize],
+        left: f64,
         font: Option<&str>,
         registry: &Registry,
         font_match: &[FontMatchRule],
     ) -> Result<Prepared, PdfError> {
-        self.prepare_with(page, |_| ids.to_vec(), font, false, registry, font_match)
+        let pick = |_: &TextLayout| (ids.to_vec(), Some(left));
+        self.prepare_with(page, pick, font, false, registry, font_match)
     }
 
     /// The paragraph font's object, its glyphs on the page and the face built from them (rung 2).
@@ -498,7 +518,7 @@ impl Document {
     fn prepare_with(
         &self,
         page: usize,
-        pick: impl FnOnce(&TextLayout) -> Vec<usize>,
+        pick: impl FnOnce(&TextLayout) -> (Vec<usize>, Option<f64>),
         font: Option<&str>,
         editor_face: bool,
         registry: &Registry,
@@ -508,7 +528,8 @@ impl Document {
         let layout = TextLayout::build(&model, false)?;
         let clusters = layout.page.clusters.as_deref().unwrap_or_default();
         let styles = &layout.page.styles;
-        let sel = pick(&layout);
+        // The clusters, and the left edge a part of a larger selection counts its indents from.
+        let (sel, left) = pick(&layout);
         if sel.is_empty() {
             return Err(PdfError::new(ErrorCode::EditNoStyle));
         }
@@ -569,6 +590,7 @@ impl Document {
             },
         );
         let [x0, top, x1, y1] = sel_bounds;
+        let x0 = left.map_or(x0, |l| l.min(x0));
         let first_baseline = rows[0].baseline;
         let last_baseline = rows[rows.len() - 1].baseline;
         let mut deltas: Vec<f64> = rows
@@ -605,29 +627,6 @@ impl Document {
             .filter(|c| c.flags & INVISIBLE == 0)
             .map(|c| bounds(&c.quad))
             .collect();
-        let nearest = others
-            .iter()
-            .filter(|w| w[0] > x1 && w[1] < y1 && w[3] > top)
-            .map(|w| w[0])
-            .fold(f64::INFINITY, f64::min);
-        let beside = nearest.is_finite();
-        let wrap_right = if beside {
-            x1
-        } else {
-            visible.iter().map(|b| b[2]).fold(x1, f64::max)
-        };
-        let below = others
-            .iter()
-            .filter(|w| w[1] >= last_baseline && w[2] > x0 && w[0] < wrap_right)
-            .map(|w| w[1])
-            .fold(f64::INFINITY, f64::min);
-        let bottom_limit = if below.is_finite() {
-            below
-        } else {
-            let margin = visible.iter().map(|b| b[1]).fold(f64::INFINITY, f64::min);
-            (model.geometry.height - margin).max(y1)
-        };
-
         let parts: Option<Vec<Part>> = (!sel.iter().any(|&i| clusters[i].flags & UNMAPPED != 0))
             .then(|| {
                 rows.iter()
@@ -685,20 +684,39 @@ impl Document {
             .map_or(size * 0.28, |g| g.iter().map(|g| g.x_advance).sum());
         let (resolution, face) = describe(style, primary, source, registry, editor_face);
 
+        let items = painted_bounds(&model);
+        let lim = limits(&Evidence {
+            sel: sel_bounds,
+            last_baseline,
+            descent,
+            space,
+            page: (model.geometry.width, model.geometry.height),
+            words: &others,
+            items: &items,
+            text: &visible,
+        });
+        let Limits {
+            nearest_word,
+            wrap_right,
+            ..
+        } = lim;
+        let bottom_limit = lim.bottom_limit(wrap_right);
         // ADR 0011 amendment: a lone line has no wrap width of its own, so beside other text it
         // may grow up to a space short of it. A wrapped paragraph keeps the width it wraps at.
-        let room = if rows.len() == 1 && beside {
-            (nearest - space).max(wrap_right)
+        let room = if rows.len() == 1 && nearest_word.is_finite() {
+            (nearest_word - space).max(wrap_right)
         } else {
             wrap_right
         };
-        let max_lines = ((bottom_limit + 0.1 - first_baseline - descent) / line_step)
-            .floor()
-            .max(-1.0) as i64
-            + 1;
+        let lines_in = |bottom: f64| {
+            ((bottom + 0.1 - first_baseline - descent) / line_step)
+                .floor()
+                .max(-1.0) as i64
+                + 1
+        };
         let (original, text_looks) = match parts.as_deref() {
             Some(p) => {
-                let (t, l) = original_text(p, space, ' ', main_index);
+                let (t, l) = original_text(p, space, ' ', main_index, left);
                 (Some(t), l.iter().map(look_of).collect())
             }
             None => (None, Vec::new()),
@@ -742,7 +760,7 @@ impl Document {
                     first_baseline,
                     origin_x: x0,
                 };
-                let (raw, raw_looks) = original_text(p, space, '\n', main_index);
+                let (raw, raw_looks) = original_text(p, space, '\n', main_index, left);
                 let raw_looks: Vec<usize> = raw_looks.iter().map(look_of).collect();
                 let rows = normalize(&raw).ok()?;
                 let row_looks = carry(&raw, &raw_looks, &rows, 0);
@@ -828,6 +846,11 @@ impl Document {
         let runs = original
             .as_deref()
             .map_or(Vec::new(), |t| style_spans(t, &text_looks));
+        // ADR 0015: the stable width as before; the extended one only where the page has room.
+        // Both budgets keep the lines the paragraph has now (ADR 0011).
+        let wrap_width = (room - x0).max(measured);
+        let max_wrap_width = wrap_width.max(lim.max_wrap_right - x0);
+        let budget = |bottom: f64| lines_in(bottom).max(rows.len() as i64) as u32;
         let info = ParagraphInfo {
             doc_id: String::new(),
             revision: 0,
@@ -849,10 +872,12 @@ impl Document {
             serif: style.flags.serif,
             mono: style.flags.mono,
             mixed_style: mixed,
-            wrap_width: (room - x0).max(measured),
+            wrap_width,
+            max_wrap_width,
             max_height: bottom_limit - top,
-            // The lines the paragraph has now are always there to use.
-            max_lines: max_lines.max(rows.len() as i64) as u32,
+            max_lines: budget(bottom_limit),
+            max_wrap_lines: budget(lim.bottom_limit(x0 + max_wrap_width)),
+            push_down: None,
             original_text: original,
             font: resolution,
             editor_face: face,
@@ -867,6 +892,9 @@ impl Document {
             looks,
             main: 0,
             text_looks,
+            model,
+            limits: lim,
+            descent,
         })
     }
 }

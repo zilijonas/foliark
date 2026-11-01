@@ -112,6 +112,21 @@ describe("text redaction and sanitized native export", () => {
     expect(keep.policyHash).not.toBe(none.policyHash);
   });
 
+  it("policy.metadata 'keep' reaches the engine: the standard Info fields come back and are listed, XMP never; junk is refused", async () => {
+    const f = await client();
+    const doc = await f.open(fixture("generated/leaks-metadata-attachment-js.pdf"));
+    const none = await doc.prepareExport({ mode: "native" });
+    expect(none.report.kept.metadata).toEqual([]);
+    const keep = await doc.prepareExport({ mode: "native", policy: { metadata: "keep" } });
+    expect(keep.report.kept.metadata).toEqual(["Title", "Author", "Producer"]);
+    expect(keep.report.removed.metadata).toBe(1); // the XMP packet
+    expect(keep.policyHash).not.toBe(none.policyHash);
+    const out = Buffer.from(await doc.export(keep)).toString("latin1");
+    expect(out).toContain("SECRET_INFO_TITLE"); // asked for with keep, and no redaction touches it
+    expect(out).not.toContain("SECRET_XMP_TITLE");
+    await code(doc.prepareExport({ mode: "native", policy: { metadata: "sometimes" as never } })); // the engine's decoder refuses an unknown variant
+  });
+
   it("a raster export succeeds where native refuses, keeps the page geometry and has no text layer", async () => {
     const f = await client();
     const bytes0 = fixture("generated/ocg-hidden-text.pdf");

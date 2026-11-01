@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Independent privacy oracle for OUTPUT PDFs (NEW-7). Never imports foliark; uses pypdf + pikepdf + PyMuPDF only.
 
-  .venv/bin/python objects.py out.pdf --forbid SECRET_A --forbid SECRET_B [--allow metadata] [--password pw]
+  .venv/bin/python objects.py out.pdf --forbid SECRET_A --forbid SECRET_B [--allow metadata|info|info-standard] [--password pw]
   .venv/bin/python objects.py out.pdf --spec spec.json        # {"forbidden":[], "allow":[], "image_regions":[{"page":0,"rect":[x0,y0,x1,y1],"color":[0,0,0]}], "vector_regions":[{"page":0,"rect":[...],"fill":[0,0,0],"allow":[[...]],"tol":0.25}], "cap":N,
   "occurrences":[{"page":0,"path":[0],"forbid":[],"require":[]}], "no_unused_xobjects":true}
 
@@ -9,6 +9,7 @@ Exit 0 iff no finding. Importable: check_isolated(path, spec) -> [finding string
 Finding codes: OPEN TEXT_PYPDF TEXT_FITZ TEXT_GLYPH BYTES_RAW STREAM STRING REVISION ORPHAN DANGLING FEATURE DECODE UNSUPPORTED CAP IMAGE_REGION VECTOR_REGION OCCURRENCE UNUSED_XOBJECT TIMEOUT CRASH.
 Every decode problem, unsupported filter or unsupported geometry is a finding, never a silent pass.
 """
+import datetime
 import json
 import math
 import re
@@ -225,6 +226,42 @@ def children(o):
     return [(k, v) for k, v in kv if isinstance(v, pikepdf.Object)]  # scalars (int/bool/float) come back as Python types
 
 
+INFO_TEXT = ("/Title", "/Author", "/Subject", "/Keywords", "/Creator", "/Producer")
+INFO_DATES = ("/CreationDate", "/ModDate")
+INFO_DATE = re.compile(r"D:\d{14}(Z|[+-]\d\d'\d\d')")
+
+
+def info_check(info, forb):
+    """ADR 0016 (--allow info-standard). The trailer /Info is one direct-key dictionary of the eight standard keys only, text
+    keys are strings without control or bidi characters (<= 1024 chars, NFC), the two dates match the D: grammar of a real
+    date, and no decoded text holds a forbidden string (plain or letters-and-digits only, as the engine's token rule)."""
+    F = []
+    for k in info.keys():
+        if str(k) not in INFO_TEXT + INFO_DATES:
+            F.append("INFO_KEY: /Info carries %s" % k)
+            continue
+        v = info[k]
+        if v._type_code != T.string:
+            F.append("INFO_VALUE: %s is not a string" % k)
+        elif str(k) in INFO_DATES:
+            raw = bytes(v).decode("latin-1")
+            try:
+                ok = INFO_DATE.fullmatch(raw) and datetime.date(int(raw[2:6]), int(raw[6:8]), int(raw[8:10])) and int(raw[10:12]) < 24 and int(raw[12:14]) < 60 and int(raw[14:16]) < 60
+            except ValueError:
+                ok = False
+            if not ok:
+                F.append("INFO_DATE: %s %r is not a D: date" % (k, raw))
+        else:
+            s = str(v)
+            if len(s) > 1024 or unicodedata.normalize("NFC", s) != s or any(unicodedata.category(c) in ("Cc", "Cf") for c in s):
+                F.append("INFO_TEXT: %s is not normalized text" % k)
+            squash = lambda x: re.sub(r"[\W_]+", "", _norm(x))
+            for f in forb:
+                if _norm(f) in _norm(s) or (squash(f) and squash(f) in squash(s)):
+                    F.append("INFO_TOKEN: %s spells forbidden %r" % (k, f))
+    return F
+
+
 def check(path, spec):
     F = []
     forb = spec.get("forbidden", [])
@@ -273,7 +310,10 @@ def check(path, spec):
         feats0 = {}
     info = pdf.trailer.get("/Info")
     if info is not None and len(info.keys()) and "info" not in allow:
-        F.append("FEATURE: /Info present (%s)" % ",".join(info.keys()))
+        if "info-standard" in allow:
+            F += info_check(info, forb)
+        else:
+            F.append("FEATURE: /Info present (%s)" % ",".join(info.keys()))
     feats = dict(feats0)
     for o in objs:
         t = o._type_code

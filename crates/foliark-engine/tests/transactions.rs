@@ -91,6 +91,7 @@ fn edit(id: &str) -> TextEdit {
         rects: vec![R(20.0, 90.0, 40.0, 10.0)],
         text: "new".into(),
         font: None,
+        reflow: None,
     }
 }
 
@@ -330,6 +331,7 @@ impl EditApplier for Swap {
             &[page, page]
         };
         Ok(Applied {
+            shifts: Vec::new(),
             bytes: pdf_bytes(pages, &Font::default(), 0),
             layouts: vec![],
         })

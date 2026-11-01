@@ -13,6 +13,7 @@ import type { Hit } from "./generated/Hit.js";
 import type { OpName } from "./generated/OpName.js";
 import type { PageGeometry } from "./generated/PageGeometry.js";
 import type { ParagraphInfo } from "./generated/ParagraphInfo.js";
+import type { Reflow } from "./generated/Reflow.js";
 import type { Point } from "./generated/Point.js";
 import type { Rect } from "./generated/Rect.js";
 import type { RenderWarning } from "./generated/RenderWarning.js";
@@ -72,7 +73,7 @@ export interface DocumentHandle {
    * ADR 0004: the layout `applyChanges` would commit for one edit, nothing committed. Cheap enough for every
    * keystroke. Rejects as `applyChanges` would (EDIT_*), except that overflow is `fits: false`.
    */
-  layoutEdit(page: number, rects: Rect[], text: string, o?: { font?: string; glyphs?: boolean }): Promise<EditPreview>;
+  layoutEdit(page: number, rects: Rect[], text: string, o?: { font?: string; glyphs?: boolean; reflow?: Reflow }): Promise<EditPreview>;
   applyChanges(cs: ChangeSet, o?: Signal): Promise<ChangeResult>;
   prepareExport(o: ExportOptions): Promise<ExportPlan>;
   /** Single-use byte handoff: the plan is freed. */
@@ -168,7 +169,7 @@ export function makeHandle(link: Link, id: string, info: DocumentInfo): Document
     },
     async layoutEdit(p, rects, text, o) {
       if (typeof text !== "string") throw invalid("text must be a string");
-      return call("layoutEdit", { page: page(p), rects, text, font: o?.font, glyphs: o?.glyphs });
+      return call("layoutEdit", { page: page(p), rects, text, font: o?.font, glyphs: o?.glyphs, reflow: o?.reflow });
     },
     async applyChanges(changes, o) {
       const r = await call<ChangeResult>("applyChanges", { changes }, o?.signal);

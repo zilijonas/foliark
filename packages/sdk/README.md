@@ -5,7 +5,7 @@
 <p align="center"><b>A PDF engine in Rust and WebAssembly for the browser. Extract, search, render, edit, redact and sanitize PDFs on the user's device. The document never leaves it.</b></p>
 
 ```sh
-npm install @zilijonas/foliark@0.2.0 --save-exact
+npm install @zilijonas/foliark@0.3.1 --save-exact
 ```
 
 ESM only, no runtime dependencies, typed. Runs in a worker, fetches only its own `.wasm` and worker script, and refuses what it cannot do safely with a typed `FoliarkError` instead of degrading quietly.
@@ -87,11 +87,25 @@ const r = await doc.applyChanges({ baseRevision: doc.revision, textEdits: [{ id:
 if (!r.accepted) console.warn(r.rejected);                  // typed code per edit, nothing changed
 ```
 
+An edit that does not fit its paragraph's own width is laid out at a wider limit read from the page (`ParagraphInfo.maxWrapWidth` and `maxWrapLines`; `EditPreview.wrapWidth` is the width the layout used). Text that fit at `wrapWidth` lays out exactly as before. To let a longer edit grow downward instead of refusing `EDIT_NO_FIT`, opt in per edit with `reflow: "pushDown"` (also an option of `layoutEdit`):
+
+```ts
+const p = await doc.layoutEdit(0, [info.bounds], longerText, { reflow: "pushDown" });   // p.shift: what would move; p.reflowBlocked: why it cannot
+const r = await doc.applyChanges({ baseRevision: doc.revision, textEdits: [{ id: "e1", pageIndex: 0, rects: [info.bounds], text: longerText, reflow: "pushDown" }] });
+// r.remap: ordered { pageIndex, region, dy } steps from the previous working copy, for re-placing your overlays; [] when nothing moved
+```
+
+Content below the paragraph moves by whole lines, nothing leaves the page, and redactions (stated in base-revision coordinates) and later edits are mapped through the move; one that a moved region cuts is refused `INVALID_ARGUMENT` (`redactionTargetShifted`, `editTargetShifted`). Content that cannot move as whole units refuses `EDIT_NO_FIT` with a `reflow*` `feature` (`ParagraphInfo.pushDown` tells the budget beforehand). Without `reflow` nothing outside the paragraph moves.
+
+When a registered family matches the source font's name, edits use it: besides Carlito, Caladea, Gelasio and the Liberation faces, the rules cover Roboto, Open Sans, Lato, Noto Serif, Noto Sans, DejaVu Sans and EB Garamond (Verdana, Tahoma and Garamond prefer DejaVu Sans or EB Garamond and fall back to Liberation). Foliark bundles none of them: you register the families you want.
+
 Image-only export burns the redactions into pixels:
 
 ```ts
 const flat = await doc.export(await doc.prepareExport({ mode: "raster", policy: { raster: { acknowledgeLosses: true, scale: 2 } } }));
 ```
+
+Native export removes the Info dictionary and XMP by default; `policy: { metadata: "keep" }` writes back Title, Author, Subject, Keywords, Creator, Producer, CreationDate and ModDate (normalized, and dropped when one spells text a redaction or an edit took out; `plan.report.kept.metadata` lists them). Custom keys and XMP are always removed.
 
 Native export removes hyperlinks by default; `policy: { links: "keep" }` keeps `http`, `https`, `mailto` and in-document links that no redaction touches or spells (`plan.report.kept.links`; the rest are `LINKS_REMOVED`).
 
@@ -116,8 +130,8 @@ Chromium on desktop (macOS arm64) is supported and has budgets. WebKit is suppor
 
 - Defaults: 64 MiB input, 1000 pages, 50 Mpx per render, 256 MiB output, 4 open documents (`limits` option). Exceeding one is `LIMIT_EXCEEDED`, with no output.
 - Repaired or truncated files are refused (`REPAIRED_PDF`) unless you pass `allowRepaired`.
-- Native export rewrites the file from scratch and drops metadata, attachments, scripts and outlines, reporting each in `plan.report`.
-- Paragraph editing is horizontal, unrotated, left-to-right text only, and needs a registered font when the document's own cannot be reused.
+- Native export rewrites the file from scratch and drops metadata (unless you opt in with `metadata: "keep"`), attachments, scripts and outlines, reporting each in `plan.report`.
+- Paragraph editing is horizontal, unrotated, left-to-right text only, and needs a registered font when the document's own cannot be reused. Push-down moves content within its page only; it never reflows onto the next page.
 - Redaction is checked inside the engine and by independent oracles on 80 test documents. That is evidence, not a certificate for arbitrary real-world files.
 
 ## Links
@@ -128,6 +142,6 @@ Chromium on desktop (macOS arm64) is supported and has budgets. WebKit is suppor
 
 [AGPL-3.0-only](https://github.com/zilijonas/foliark/blob/main/LICENSE), the same licence family as the AGPL option PyMuPDF is offered under. If the AGPL does not fit your use, separate commercial licensing is available: see `COMMERCIAL-LICENSING.md` in the package. This is not legal advice. Details are in `LICENSING.md`.
 
-Foliark is free software, so the complete corresponding source of version 0.2.0 (Rust engine, vendored hayro fork and patches, build scripts) is tag `v0.2.0` of https://github.com/zilijonas/foliark. Build steps are in `docs/development.md` there (`scripts/build-wasm.sh`, `pnpm build:sdk`, `tests/package-consumers/pack.sh`). The package contains `dist/`, `wasm/` (5.8 MB raw, 2.2 MB gzip), `cmaps/`, `LICENSE`, `LICENSING.md`, `COMMERCIAL-LICENSING.md`, `LICENSE_FOXIT`, `NOTICE`, `THIRD_PARTY_NOTICES.md` and `SUPPORT_MATRIX.md`.
+Foliark is free software, so the complete corresponding source of version 0.3.1 (Rust engine, vendored hayro fork and patches, build scripts) is tag `v0.3.1` of https://github.com/zilijonas/foliark. Build steps are in `docs/development.md` there (`scripts/build-wasm.sh`, `pnpm build:sdk`, `tests/package-consumers/pack.sh`). The package contains `dist/`, `wasm/` (5.8 MB raw, 2.2 MB gzip), `cmaps/`, `LICENSE`, `LICENSING.md`, `COMMERCIAL-LICENSING.md`, `LICENSE_FOXIT`, `NOTICE`, `THIRD_PARTY_NOTICES.md` and `SUPPORT_MATRIX.md`.
 
 PyMuPDF and MuPDF are products of Artifex Software, Inc. Foliark is independent of them and not affiliated with Artifex.

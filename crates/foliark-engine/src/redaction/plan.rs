@@ -827,6 +827,36 @@ fn plan_page(
     Ok(plan)
 }
 
+/// Display-space bounds of what the page paints besides text (images, shadings, painted
+/// paths; not clip-only paths, not optional-content-hidden items): the edit budget's obstacles
+/// (ADR 0015).
+pub(crate) fn painted_bounds(model: &SemanticPage) -> Vec<[f64; 4]> {
+    let to_display = affine(model.geometry.user_to_display);
+    let disp_scale = to_display.determinant().abs().sqrt();
+    model
+        .items
+        .iter()
+        .filter(|it| !it.ocg_hidden)
+        .filter(|it| match &it.kind {
+            ItemKind::Glyph(_) => false,
+            ItemKind::Path(p) => !p.clip_only,
+            ItemKind::Image(_) | ItemKind::Shading(_) => true,
+        })
+        .map(|it| item_bounds(it, model, to_display, disp_scale))
+        .collect()
+}
+
+/// [`item_bounds`] of every item of `model`, in item order (clip-only paths included).
+pub(crate) fn display_bounds(model: &SemanticPage) -> Vec<[f64; 4]> {
+    let to_display = affine(model.geometry.user_to_display);
+    let disp_scale = to_display.determinant().abs().sqrt();
+    model
+        .items
+        .iter()
+        .map(|it| item_bounds(it, model, to_display, disp_scale))
+        .collect()
+}
+
 /// Display-space bounds of an item, strokes grown by their full width (a bound, not the exact reach).
 fn item_bounds(item: &Item, model: &SemanticPage, to_display: Affine, disp_scale: f64) -> B {
     let u2d = model.geometry.user_to_display;

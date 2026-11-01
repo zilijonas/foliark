@@ -278,6 +278,7 @@ fn paragraph_edit() -> TextEdit {
         }],
         text: "Replacement words here".into(),
         font: None,
+        reflow: None,
     }
 }
 

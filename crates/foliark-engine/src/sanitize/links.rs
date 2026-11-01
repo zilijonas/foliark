@@ -27,7 +27,7 @@ const MAX_URI: usize = 2048;
 /// Name tree nodes one lookup may visit (a damaged tree cannot make it loop or crawl).
 const TREE_NODES: usize = 4096;
 /// Smallest token of redacted text that counts (shorter ones match everything).
-const MIN_TOKEN: usize = 3;
+pub(super) const MIN_TOKEN: usize = 3;
 /// View name and the number of arguments it takes (PDF 12.3.2.2).
 const VIEWS: [(&str, usize); 8] = [
     ("XYZ", 3),
@@ -211,7 +211,7 @@ fn candidates(doc: &reader::Document) -> Vec<Link> {
     out
 }
 
-fn normal(s: &str) -> String {
+pub(super) fn normal(s: &str) -> String {
     s.nfc().collect::<String>().to_lowercase()
 }
 
@@ -230,7 +230,7 @@ fn tokens_of(text: &str, out: &mut BTreeSet<String>) {
 /// The text each region of `regions` (display space, by page) removes, as tokens: the clusters
 /// the redaction planner's own coverage test takes, read from `doc`, the document the plan was
 /// made on.
-fn removed_tokens(
+pub(crate) fn removed_tokens(
     doc: &Document,
     regions: &BTreeMap<usize, Vec<Rect>>,
 ) -> Result<BTreeSet<String>, PdfError> {

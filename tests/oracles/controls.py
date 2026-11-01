@@ -15,6 +15,7 @@ sys.path.insert(0, str(HERE.parent / "fixtures" / "generators"))
 import generate as gen  # noqa: E402
 import fidelity  # noqa: E402
 import objects  # noqa: E402
+import shift  # noqa: E402
 from pdfsyn import simple, stream, text  # noqa: E402
 
 SECRET = "SECRET_TEXT_XYZ"
@@ -42,6 +43,20 @@ def out(doc):
 def redact(doc, pg, rect, images=fitz.PDF_REDACT_IMAGE_NONE):
     pg.add_redact_annot(fitz.Rect(rect), fill=(0, 0, 0))
     pg.apply_redactions(images=images)
+
+
+# NEW-133 (ADR 0015): a push-down moved the secret line 30 pt down. A redaction stated in base coordinates must be mapped
+# through the shift; one left at its old rectangle removes nothing and the moved secret leaks.
+SHIFT_OLD = [15, 84, 250, 104]  # display rect of the secret line before the push (baseline 100)
+
+
+def pushed_secret(rect):
+    d = fitz.open()
+    pg = d.new_page(width=300, height=400)
+    pg.insert_text((20, 60), "KEEP_PUBLIC_TEXT", fontsize=14)
+    pg.insert_text((20, 130), SECRET, fontsize=14)  # was at baseline 100 before the push
+    redact(d, pg, rect)
+    return out(d)
 
 
 def leak_overlay():
@@ -110,6 +125,14 @@ def safe_clean():
 def safe_redact_text():
     d, p = page()
     redact(d, p, p.search_for(SECRET)[0])
+    return out(d)
+
+
+def leak_image_redaction_shifted():
+    """NEW-136: text over a staying scan moved 30 pt and its redaction was mapped with it; the image's pixels under the
+    redaction's original place are left uncovered."""
+    d, p = page(img=True, secret=False)
+    redact(d, p, [IMG_RECT[0], IMG_RECT[1] + 30, IMG_RECT[2], IMG_RECT[3] + 30], fitz.PDF_REDACT_IMAGE_PIXELS)
     return out(d)
 
 
@@ -364,8 +387,26 @@ SAFE_RECT = "20 355 160 375"
 HIT_RECT = "15 290 160 315"
 S = {"forbidden": [SECRET]}
 IMG = {"image_regions": [{"page": 0, "rect": IMG_RECT}]}
+# ---- NEW-134 / ADR 0016: kept Info fields (--allow info-standard): the eight standard keys, strings, D: dates, no forbidden text. ----
+INFO_STD = {"forbidden": [SECRET], "allow": ["info-standard"]}
+
+
+def info_pdf(body):
+    return simple(text(20, 360, "KEEP_PUBLIC_TEXT"), {6: body}, trailer="/Info 6 0 R")
+
+
+def leak_info_redacted_title():
+    return info_pdf("<< /Title (Report %s) >>" % SECRET)
+
+
+def leak_info_custom_key():
+    return info_pdf("<< /Title (Report) /Custom (C:/Users/x/draft.docx) >>")
+
+
 # name, builder, spec, codes that MUST appear (leaky) / None (safe), codes that must NOT appear[, substring a finding must contain]
 CASES = [
+    ("leaky: push-down moved the secret, redaction stayed at the old rect", lambda: pushed_secret(SHIFT_OLD), S, {"TEXT_PYPDF", "TEXT_FITZ", "STREAM"}, set()),
+    ("safe: redaction mapped through the push-down shift", lambda: pushed_secret([15, 114, 250, 134]), S, None, set()),
     ("leaky: black rect over live text", leak_overlay, S, {"TEXT_PYPDF", "TEXT_FITZ", "STREAM"}, set()),
     ("leaky: /Info title", leak_info, {"forbidden": ["SECRET_META_TITLE"]}, {"FEATURE", "STRING"}, set()),
     ("leaky: XMP packet", leak_xmp, {"forbidden": ["SECRET_XMP_BODY"]}, {"FEATURE", "STREAM"}, set()),
@@ -374,6 +415,7 @@ CASES = [
     ("leaky: secret only in unused Form XObject", leak_unused_form, {"forbidden": ["SECRET_UNUSED_FORM"]}, {"STREAM"}, {"TEXT_PYPDF", "TEXT_FITZ"}),
     ("leaky: secret in hidden OCG", gen.ocg_hidden, {"forbidden": ["SECRET_HIDDEN_OCG"]}, {"STREAM", "FEATURE"}, set()),
     ("leaky: image pixels under overlay", leak_image_under_overlay, IMG, {"IMAGE_REGION"}, set()),
+    ("leaky: redaction moved off a staying scan", leak_image_redaction_shifted, IMG, {"IMAGE_REGION"}, set()),
     # NEW-100: glyphs only their font program's cmap names (iOS Quartz Type0, ToUnicode maps nothing); both extractors miss them.
     ("leaky: secret in a font whose ToUnicode maps nothing", gen.quartz_type0_empty_tounicode, {"forbidden": [gen.QUARTZ_SECRET]}, {"TEXT_GLYPH"}, {"TEXT_FITZ"}),
     ("leaky: secret word carrying zero-width combining marks", gen.quartz_type0_combining_marks, {"forbidden": [gen.MARKS_SECRET]}, {"TEXT_GLYPH"}, {"TEXT_FITZ"}),
@@ -403,6 +445,13 @@ CASES = [
     ("leaky: named destination left in the output", lambda: link_pdf(lk(SAFE_RECT, "/Dest /chapter2")), LINKS, {"LINK_DEST"}, set()),
     ("leaky: non-link annotation kept", lambda: link_pdf("<< /Type /Annot /Subtype /Text /Rect [20 355 40 375] >>"), LINKS, {"LINK_SUBTYPE"}, set()),
     ("safe: https link and explicit /Dest clear of the region", lambda: link_pdf(lk(SAFE_RECT, OK_URI), lk("20 200 100 220", OK_DEST)), LINKS, None, set()),
+    # NEW-134: a kept Info field must not spell redacted text, carry a custom key or hold a malformed date.
+    ("leaky: Info Title spells a redacted secret", leak_info_redacted_title, INFO_STD, {"INFO_TOKEN", "STRING"}, {"FEATURE", "INFO_KEY"}),
+    ("leaky: Info Title spells the secret, UTF-16BE", lambda: info_pdf("<< /Title <%s> >>" % ("FEFF" + SECRET.encode("utf-16-be").hex())), INFO_STD, {"INFO_TOKEN", "STRING"}, {"FEATURE"}),
+    ("leaky: custom Info key", leak_info_custom_key, INFO_STD, {"INFO_KEY"}, {"FEATURE"}),
+    ("leaky: Info date is not a D: date", lambda: info_pdf("<< /CreationDate (2024-01-02) >>"), INFO_STD, {"INFO_DATE"}, {"FEATURE"}),
+    ("leaky: Info Trapped name", lambda: info_pdf("<< /Trapped /False >>"), INFO_STD, {"INFO_KEY"}, {"FEATURE"}),
+    ("safe: standard Info fields only", lambda: info_pdf("<< /Title (Report) /Author (A. Writer) /CreationDate (D:20240102030405+02'00') /ModDate (D:20240102030405Z) >>"), INFO_STD, None, set()),
     ("safe: public-only page", safe_clean, S, None, set()),
     ("safe: Quartz font page, secret not shown", gen.quartz_type0_empty_tounicode, {"forbidden": ["SECRET_NOT_SHOWN"]}, None, set()),
     ("safe: combining-mark page, secret not shown", gen.quartz_type0_combining_marks, {"forbidden": ["SECRET_NOT_SHOWN"]}, None, set()),
@@ -429,6 +478,65 @@ CASES = [
     ("leaky: vector inside Form XObject under overlay", lambda: in_form("vector"), VEC, {"VECTOR_REGION"}, set()),
     ("safe: vector removed, only declared black fill left", safe_vec, VEC, None, set()),
 ]
+
+
+# ---- NEW-130: push-down shift oracle. Outputs are synthetic (the fixture builders wrap pushed groups in a `cm` translation, or
+# PyMuPDF redraws a page), never the engine's. Region/changed/dy per fixture come from generate.PUSH. ----
+def push(name, **kw):
+    f = {"letter": gen.letter, "invoice-table": gen.invoice_table, "two-column": gen.two_column, "link-below": gen.link_below}[name]
+    return (lambda: f(**kw)), gen.PUSH[name]
+
+
+def img_page(dy_text=0, dy_img=0):
+    d = fitz.open()
+    pg = d.new_page(width=300, height=400)
+    pg.insert_text((20, 100), "stays above", fontsize=12)
+    pg.insert_text((20, 200 + dy_text), "moves below", fontsize=12)
+    px = bytes((x * 4 + y * 2 + c * 50) % 256 for y in range(32) for x in range(32) for c in range(3))
+    pg.insert_image(fitz.Rect(20, 250 + dy_img, 84, 314 + dy_img), pixmap=fitz.Pixmap(fitz.csRGB, 32, 32, px, False))
+    return out(d)
+
+
+IMG_SHIFT = {"page": 0, "region": [10, 150, 290, 380], "changed": [], "dy": 20}
+# name, input builder, output builder, spec (page, region, changed, dy; region/dy/changed overridable), codes that MUST appear (None: pass)
+SHIFT_CASES = [
+    ("pass: letter, text + Bezier signature pushed, paragraph grew a line", push("letter"), push("letter", dy=18, lines=2)[0], {}, None),
+    ("pass: letter, pure move without an edit", push("letter"), push("letter", dy=18)[0], {"changed": []}, None),
+    ("pass: invoice, whole ruled table pushed as a unit", push("invoice-table"), push("invoice-table", dy=15, lines=2)[0], {}, None),
+    ("pass: two columns, only the left column moves", push("two-column"), push("two-column", dy=14, lines=2)[0], {}, None),
+    ("pass: link below moves with its text, link above stays", push("link-below"), push("link-below", dy=14, lines=2)[0], {}, None),
+    ("pass: text and image pushed", (lambda: img_page(), IMG_SHIFT), lambda: img_page(20, 20), {}, None),
+    ("fail: nothing moved", push("letter"), push("letter", dy=0)[0], {}, {"SHIFT_MOVED"}),
+    ("fail: text moved, Bezier signature left behind", push("letter"), push("letter", dy=18, lines=2, still={"sig"})[0], {}, {"SHIFT_MOVED", "SHIFT_EXTRA"}),
+    ("fail: partial shift (signature moved, text left behind)", push("letter"), push("letter", dy=18, lines=2, still={"below"})[0], {}, {"SHIFT_MOVED", "SHIFT_EXTRA"}),
+    ("fail: pushed 18 pt, oracle told 19", push("letter"), push("letter", dy=18, lines=2)[0], {"dy": 19}, {"SHIFT_MOVED"}),
+    ("fail: new text outside the declared changed rect", push("letter"), push("letter", dy=18, lines=2)[0], {"changed": []}, {"SHIFT_EXTRA"}),
+    ("fail: link left behind", push("link-below"), push("link-below", dy=14, lines=2, still={"link"})[0], {}, {"SHIFT_MOVED"}),
+    ("fail: table rules left behind", push("invoice-table"), push("invoice-table", dy=15, lines=2, still={"table"})[0], {}, {"SHIFT_MOVED"}),
+    ("fail: region over both columns, right column did not move", push("two-column"), push("two-column", dy=14, lines=2)[0], {"region": [40, 152, 555, 740]}, {"SHIFT_MOVED"}),
+    ("fail: region cuts the table (straddle)", push("invoice-table"), push("invoice-table", dy=15, lines=2)[0], {"region": gen.PUSH["invoice-table"]["region"][:1] + [160] + gen.PUSH["invoice-table"]["region"][2:]}, {"SHIFT_STRADDLE"}),
+    ("fail: region cuts the Notes cell paragraph (straddle)", push("invoice-table"), push("invoice-table", dy=15, lines=2)[0], {"region": [40, 243, 555, 740]}, {"SHIFT_STRADDLE"}),
+    ("fail: image left behind", (lambda: img_page(), IMG_SHIFT), lambda: img_page(20, 0), {}, {"SHIFT_MOVED"}),
+]
+
+
+def run_shift(tmp):
+    bad = 0
+    nfail = sum(m is not None for *_, m in SHIFT_CASES)
+    for i, (name, (src, spec), dst, over, must) in enumerate(SHIFT_CASES):
+        a, b = tmp / ("s%02d.in.pdf" % i), tmp / ("s%02d.out.pdf" % i)
+        a.write_bytes(src())
+        b.write_bytes(dst())
+        s = {**spec, **over}
+        findings = shift.check(a, b, s["page"], s["region"], s["dy"], s["changed"])
+        codes = {f.split(":")[0] for f in findings}
+        ok = not findings if must is None else must <= codes
+        bad += not ok
+        print("%s %-46s %s" % ("ok  " if ok else "FAIL", name, sorted(codes) if codes else "clean"))
+        if not ok:
+            print("     findings:", *findings[:6], sep="\n       ")
+    print("shift cases: %d fail-cases caught or pass-cases passed of %d (%d must fail), %d wrong" % (len(SHIFT_CASES) - bad, len(SHIFT_CASES), nfail, bad))
+    return bad
 
 
 def main():
@@ -475,7 +583,8 @@ def main():
         if not ok:
             print("     findings:", *(findings[:6] + notes), sep="\n       ")
     print("fidelity fail cases caught %d/%d, pass cases passed %d/%d" % (fcaught, ffail, fok, fpass))
-    return 1 if bad or fbad else 0
+    sbad = run_shift(tmp)
+    return 1 if bad or fbad or sbad else 0
 
 
 if __name__ == "__main__":

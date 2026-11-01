@@ -2,11 +2,22 @@
 import type { EditorFace } from "./EditorFace";
 import type { FontResolution } from "./FontResolution";
 import type { ParagraphSegment } from "./ParagraphSegment";
+import type { PushDown } from "./PushDown";
 import type { Rect } from "./Rect";
 import type { StyleSpan } from "./StyleSpan";
 import type { TextLook } from "./TextLook";
 
-export type ParagraphInfo = { docId: string, revision: number, pageIndex: number, bounds: Rect, originX: number, top: number, firstBaseline: number, fontSize: number, lineStep: number, color: [number, number, number], bold: boolean, italic: boolean, serif: boolean, mono: boolean, mixedStyle: boolean, wrapWidth: number, maxHeight: number, maxLines: number, originalText: string | null, font: FontResolution, editorFace?: EditorFace | null, 
+export type ParagraphInfo = { docId: string, revision: number, pageIndex: number, bounds: Rect, originX: number, top: number, firstBaseline: number, fontSize: number, lineStep: number, color: [number, number, number], bold: boolean, italic: boolean, serif: boolean, mono: boolean, mixedStyle: boolean, wrapWidth: number, maxHeight: number, maxLines: number, 
+/**
+ * ADR 0015's extended width (never below `wrapWidth`), used only when the text does not fit
+ * `wrapWidth`, and its line budget.
+ */
+maxWrapWidth: number, maxWrapLines: number, 
+/**
+ * ADR 0015: the line budget at `maxWrapWidth` with `reflow: 'pushDown'` and the region it
+ * would move at that budget; null when nothing below can move.
+ */
+pushDown: PushDown | null, originalText: string | null, font: FontResolution, editorFace?: EditorFace | null, 
 /**
  * ADR 0012's style segments, top to bottom; empty when `originalText` is null. Their ranges
  * tile `originalText` exactly (a segment's hard-break LF ends it), so slicing the text at

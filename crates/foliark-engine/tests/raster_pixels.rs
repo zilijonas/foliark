@@ -246,6 +246,7 @@ impl EditApplier for Edited {
         _: &EditContext<'_>,
     ) -> Result<Applied, Vec<RejectedChange>> {
         Ok(Applied {
+            shifts: Vec::new(),
             bytes: pdf_bytes(&[EDITED], &Font::default(), 0),
             layouts: vec![],
         })
@@ -272,6 +273,7 @@ fn a_redaction_over_edited_text_burns_the_edited_pixels_not_the_original_ones() 
                 }],
                 text: "EDITED".into(),
                 font: None,
+                reflow: None,
             }]),
             redactions: None,
         },
