@@ -173,7 +173,7 @@ export function createWorkerCore(host: WorkerHost, stepBudget = STEP_BUDGET) {
         return { result: r, transfer: faces.map((face) => face.bytes as unknown as ArrayBuffer) };
       }
       case "layoutEdit":
-        return { result: e.layoutEdit(d, a.page, a.rects, a.text, a.font, a.glyphs) };
+        return { result: e.layoutEdit(d, a.page, a.rects, a.text, a.font, a.glyphs, a.reflow) };
       case "export": {
         const bytes = ownBuffer(e.takeExport(d, a.planId));
         return { result: bytes, transfer: [bytes] };

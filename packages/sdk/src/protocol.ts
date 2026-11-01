@@ -188,7 +188,8 @@ const isRegisteredFont = shape({
 const isMode = (x: unknown) => x === "native" || x === "raster";
 /** Rust serializes an absent `Option` as null. */
 const optNull = (g: (x: unknown) => boolean) => (x: unknown) => x === undefined || x === null || g(x);
-const isTextEdit = shape({ id: isStr, pageIndex: isU32, rects: arrayOf(isRect), text: isStr, font: optNull(isStr) });
+const isReflow = (x: unknown) => x === "none" || x === "pushDown";
+const isTextEdit = shape({ id: isStr, pageIndex: isU32, rects: arrayOf(isRect), text: isStr, font: optNull(isStr), reflow: optNull(isReflow) });
 const isRedaction = (x: unknown) =>
   shape({ id: isStr, pageIndex: isU32, fill: optNull(isRgb) })(x) &&
   ((x as Rec).kind === "region" ? isRect((x as Rec).rect) : (x as Rec).kind === "text" && isU32((x as Rec).start) && isU32((x as Rec).end));
@@ -197,11 +198,13 @@ const isLayoutRun = shape({ source: (x) => x === "embedded" || x === "registered
 const isEditLayout = shape({
   id: isStr, lines: isU32, approximate: isBool, fingerprint: isStr, runs: arrayOf(isLayoutRun),
 });
+const isPageShift = shape({ pageIndex: isU32, region: isRect, dy: isNum });
 const isEditPreview = shape({
   docId: isStr, revision: isU32, fontRegistryVersion: isU32, fontSize: isNum,
   lines: arrayOf(shape({ text: isStr, baseline: isNum, x: isNum, width: isNum })),
   neededLines: isU32, maxLines: isU32, wrapWidth: isNum, fits: isBool, approximate: isBool, runs: arrayOf(isLayoutRun), fingerprint: isStr,
   glyphs: opt(arrayOf(shape({ line: isU32, font: isStr, gid: isU32, start: isU32, end: isU32, x: isNum, width: isNum }))),
+  shift: optNull(isPageShift), reflowBlocked: optNull(isStr),
 });
 const isChangeResult = shape({
   accepted: isBool, revision: isU32,
@@ -227,7 +230,7 @@ export const argsGuards = (maxBytes = DEFAULT_MAX_BUFFER_BYTES): Partial<Record<
     page: isU32, scale: opt((x) => isNum(x) && x > 0), clip: opt(isRect), annotations: opt(isBool), background: opt(tuple(4)),
   }),
   prepareParagraph: shape({ page: isU32, rects: arrayOf(isRect), font: opt(isStr), editorFace: opt(isBool) }),
-  layoutEdit: shape({ page: isU32, rects: arrayOf(isRect), text: isStr, font: opt(isStr), glyphs: opt(isBool) }),
+  layoutEdit: shape({ page: isU32, rects: arrayOf(isRect), text: isStr, font: opt(isStr), glyphs: opt(isBool), reflow: opt(isReflow) }),
   applyChanges: shape({ changes: isChangeSet }),
   prepareExport: shape({ mode: isMode, policy: opt(isRec) }),
   export: shape({ planId: isStr }),
