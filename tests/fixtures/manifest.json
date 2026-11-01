@@ -7,9 +7,9 @@
   "python": "3.9"
  },
  "counts": {
-  "total": 48,
+  "total": 52,
   "hddn": 20,
-  "generated": 28,
+  "generated": 32,
   "byFeature": {
    "actualtext": 1,
    "additional-actions": 1,
@@ -17,6 +17,7 @@
    "aes-256": 1,
    "annotation": 2,
    "appearance-stream": 2,
+   "bezier": 1,
    "cjk": 1,
    "combining-marks": 2,
    "corrupt-flate": 1,
@@ -43,7 +44,7 @@
    "javascript": 2,
    "jpeg": 1,
    "ligature": 1,
-   "link": 2,
+   "link": 3,
    "malformed": 2,
    "malformed-xref": 1,
    "many-pages": 1,
@@ -58,6 +59,7 @@
    "outline": 1,
    "predefined-cmap": 1,
    "prior-revision": 1,
+   "push-down": 4,
    "rc4-128": 1,
    "rc4-40": 1,
    "rotation-crop": 1,
@@ -68,12 +70,14 @@
    "shared-image": 1,
    "shared-vector": 1,
    "structure-alt": 1,
+   "table": 1,
    "text": 1,
    "thumbnail": 1,
    "tight-widths": 1,
    "truncated": 1,
+   "two-column": 1,
    "uri-action": 1,
-   "vector": 2,
+   "vector": 5,
    "widget": 1,
    "xmp": 2,
    "xref-repair": 1
@@ -1901,6 +1905,184 @@
      "https://example.com/public",
      "chapter2 -> page 1 (explicit /Dest)"
     ]
+   }
+  },
+  {
+   "id": "push-letter",
+   "path": "generated/push-letter.pdf",
+   "sha256": "4b175bcd9c77dd027efdbe8174cce439d0993a842160b9f2af18cd9e8d2cfcb2",
+   "bytes": 1949,
+   "pages": 1,
+   "features": [
+    "push-down",
+    "vector",
+    "bezier"
+   ],
+   "origin": "tests/fixtures/generators/generate.py",
+   "license": "synthetic, generated (original)",
+   "deterministic": true,
+   "expected": {
+    "behavior": "HDDN sample letter plus a stroked Bezier signature under the sign-off and a footer; a one-line edit of the 'Thank you' paragraph that needs a second line pushes the Email..sign-off block and the signature down, the footer stays",
+    "mustRemove": [],
+    "mustKeepText": [
+     "Thank you for contacting us.",
+     "The Northwind team",
+     "Made up for Foliark tests"
+    ],
+    "pushDown": {
+     "page": 0,
+     "region": [
+      40,
+      209,
+      555,
+      740
+     ],
+     "changed": [
+      [
+       60,
+       185,
+       535,
+       227
+      ]
+     ],
+     "dy": 18
+    }
+   }
+  },
+  {
+   "id": "push-invoice-table",
+   "path": "generated/push-invoice-table.pdf",
+   "sha256": "3b3fa3b2a734f6a60a2bbeaa97e1d82e8441c54b54a56b26df1797583d1ec118",
+   "bytes": 2136,
+   "pages": 1,
+   "features": [
+    "push-down",
+    "vector",
+    "table"
+   ],
+   "origin": "tests/fixtures/generators/generate.py",
+   "license": "synthetic, generated (original)",
+   "deterministic": true,
+   "expected": {
+    "behavior": "paragraph above a ruled table (one rect per cell) with a paragraph inside the last cell; pushing the whole table is a unit move, a cut through the table or its Notes cell must be refused",
+    "mustRemove": [],
+    "mustKeepText": [
+     "Payment is due within 14 days",
+     "Total due: EUR 1,250.00"
+    ],
+    "pushDown": {
+     "page": 0,
+     "region": [
+      40,
+      140,
+      555,
+      740
+     ],
+     "changed": [
+      [
+       60,
+       92,
+       535,
+       155
+      ]
+     ],
+     "dy": 15
+    },
+    "refuseCuts": {
+     "tableRow": [
+      40,
+      160,
+      555,
+      740
+     ],
+     "notesCell": [
+      40,
+      243,
+      555,
+      740
+     ]
+    }
+   }
+  },
+  {
+   "id": "push-two-column",
+   "path": "generated/push-two-column.pdf",
+   "sha256": "96a14bb5469ba0d9f43d1f775ed114d654b872bd77bda69f87a4d7850320fdcd",
+   "bytes": 1803,
+   "pages": 1,
+   "features": [
+    "push-down",
+    "vector",
+    "two-column"
+   ],
+   "origin": "tests/fixtures/generators/generate.py",
+   "license": "synthetic, generated (original)",
+   "deterministic": true,
+   "expected": {
+    "behavior": "two text columns on shared baselines with a divider in the gutter; editing the left paragraph pushes only the left column below it",
+    "mustRemove": [],
+    "mustKeepText": [
+     "Revenue grew in every region this",
+     "Customers rated the service 4.6 of"
+    ],
+    "pushDown": {
+     "page": 0,
+     "region": [
+      40,
+      152,
+      295,
+      740
+     ],
+     "changed": [
+      [
+       60,
+       92,
+       295,
+       166
+      ]
+     ],
+     "dy": 14
+    }
+   }
+  },
+  {
+   "id": "push-link-below",
+   "path": "generated/push-link-below.pdf",
+   "sha256": "d221ba1e439e77af348d4c0c4c1248d362aff911744b875d154f97f8574f2808",
+   "bytes": 1708,
+   "pages": 1,
+   "features": [
+    "push-down",
+    "link"
+   ],
+   "origin": "tests/fixtures/generators/generate.py",
+   "license": "synthetic, generated (original)",
+   "deterministic": true,
+   "expected": {
+    "behavior": "URI link over a line below the paragraph moves with its text; the link above the paragraph stays",
+    "mustRemove": [],
+    "mustKeepText": [
+     "Visit our help center for details.",
+     "Read our terms of service."
+    ],
+    "pushDown": {
+     "page": 0,
+     "region": [
+      40,
+      145,
+      555,
+      740
+     ],
+     "changed": [
+      [
+       60,
+       98,
+       535,
+       159
+      ]
+     ],
+     "dy": 14
+    }
    }
   },
   {

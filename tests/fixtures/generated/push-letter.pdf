@@ -1,0 +1,57 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 6 0 R /F3 7 0 R >> >> >>
+endobj
+4 0 obj
+<<  /Length 1094 >>
+stream
+BT /F2 16 Tf 64 770 Td (Northwind Utilities) Tj ET
+BT /F1 10 Tf 64 747 Td (Customer service letter, sample document) Tj ET
+BT /F1 11 Tf 64 719 Td (Jonas Petraitis) Tj ET
+BT /F1 11 Tf 64 701 Td (Gedimino pr. 12, Vilnius, Lithuania) Tj ET
+BT /F1 11 Tf 64 672 Td (Dear Jonas Petraitis,) Tj ET
+BT /F1 11 Tf 64 643 Td (Thank you for contacting us. We updated the details on your account:) Tj ET
+BT /F1 11 Tf 64 614 Td (Email: jonas.petraitis@example.com) Tj ET
+BT /F1 11 Tf 64 596 Td (Phone: +370 612 34567) Tj ET
+BT /F1 11 Tf 64 578 Td (Bank account (IBAN): LT12 1000 0111 0100 1000) Tj ET
+BT /F1 11 Tf 64 549 Td (Your next invoice goes to Marta Jones, our billing contact for your account.) Tj ET
+BT /F1 11 Tf 64 531 Td (Reply to marta.jones@example.com if anything here looks wrong.) Tj ET
+BT /F1 11 Tf 64 502 Td (Kind regards,) Tj ET
+BT /F1 11 Tf 64 484 Td (The Northwind team) Tj ET
+q 1.2 w 0.1 0.1 0.5 RG 64 476 m 76 480 86 454 100 468 c 114 482 124 454 150 466 c S Q
+64 62 m 531 62 l S
+BT /F3 9 Tf 64 48 Td (Made up for Foliark tests: none of these people, numbers or addresses exist.) Tj ET
+
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+6 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+endobj
+7 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Oblique /Encoding /WinAnsiEncoding >>
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000121 00000 n 
+0000000273 00000 n 
+0000001420 00000 n 
+0000001517 00000 n 
+0000001619 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R  >>
+startxref
+1724
+%%EOF

@@ -15,6 +15,7 @@ sys.path.insert(0, str(HERE.parent / "fixtures" / "generators"))
 import generate as gen  # noqa: E402
 import fidelity  # noqa: E402
 import objects  # noqa: E402
+import shift  # noqa: E402
 from pdfsyn import simple, stream, text  # noqa: E402
 
 SECRET = "SECRET_TEXT_XYZ"
@@ -431,6 +432,65 @@ CASES = [
 ]
 
 
+# ---- NEW-130: push-down shift oracle. Outputs are synthetic (the fixture builders wrap pushed groups in a `cm` translation, or
+# PyMuPDF redraws a page), never the engine's. Region/changed/dy per fixture come from generate.PUSH. ----
+def push(name, **kw):
+    f = {"letter": gen.letter, "invoice-table": gen.invoice_table, "two-column": gen.two_column, "link-below": gen.link_below}[name]
+    return (lambda: f(**kw)), gen.PUSH[name]
+
+
+def img_page(dy_text=0, dy_img=0):
+    d = fitz.open()
+    pg = d.new_page(width=300, height=400)
+    pg.insert_text((20, 100), "stays above", fontsize=12)
+    pg.insert_text((20, 200 + dy_text), "moves below", fontsize=12)
+    px = bytes((x * 4 + y * 2 + c * 50) % 256 for y in range(32) for x in range(32) for c in range(3))
+    pg.insert_image(fitz.Rect(20, 250 + dy_img, 84, 314 + dy_img), pixmap=fitz.Pixmap(fitz.csRGB, 32, 32, px, False))
+    return out(d)
+
+
+IMG_SHIFT = {"page": 0, "region": [10, 150, 290, 380], "changed": [], "dy": 20}
+# name, input builder, output builder, spec (page, region, changed, dy; region/dy/changed overridable), codes that MUST appear (None: pass)
+SHIFT_CASES = [
+    ("pass: letter, text + Bezier signature pushed, paragraph grew a line", push("letter"), push("letter", dy=18, lines=2)[0], {}, None),
+    ("pass: letter, pure move without an edit", push("letter"), push("letter", dy=18)[0], {"changed": []}, None),
+    ("pass: invoice, whole ruled table pushed as a unit", push("invoice-table"), push("invoice-table", dy=15, lines=2)[0], {}, None),
+    ("pass: two columns, only the left column moves", push("two-column"), push("two-column", dy=14, lines=2)[0], {}, None),
+    ("pass: link below moves with its text, link above stays", push("link-below"), push("link-below", dy=14, lines=2)[0], {}, None),
+    ("pass: text and image pushed", (lambda: img_page(), IMG_SHIFT), lambda: img_page(20, 20), {}, None),
+    ("fail: nothing moved", push("letter"), push("letter", dy=0)[0], {}, {"SHIFT_MOVED"}),
+    ("fail: text moved, Bezier signature left behind", push("letter"), push("letter", dy=18, lines=2, still={"sig"})[0], {}, {"SHIFT_MOVED", "SHIFT_EXTRA"}),
+    ("fail: partial shift (signature moved, text left behind)", push("letter"), push("letter", dy=18, lines=2, still={"below"})[0], {}, {"SHIFT_MOVED", "SHIFT_EXTRA"}),
+    ("fail: pushed 18 pt, oracle told 19", push("letter"), push("letter", dy=18, lines=2)[0], {"dy": 19}, {"SHIFT_MOVED"}),
+    ("fail: new text outside the declared changed rect", push("letter"), push("letter", dy=18, lines=2)[0], {"changed": []}, {"SHIFT_EXTRA"}),
+    ("fail: link left behind", push("link-below"), push("link-below", dy=14, lines=2, still={"link"})[0], {}, {"SHIFT_MOVED"}),
+    ("fail: table rules left behind", push("invoice-table"), push("invoice-table", dy=15, lines=2, still={"table"})[0], {}, {"SHIFT_MOVED"}),
+    ("fail: region over both columns, right column did not move", push("two-column"), push("two-column", dy=14, lines=2)[0], {"region": [40, 152, 555, 740]}, {"SHIFT_MOVED"}),
+    ("fail: region cuts the table (straddle)", push("invoice-table"), push("invoice-table", dy=15, lines=2)[0], {"region": gen.PUSH["invoice-table"]["region"][:1] + [160] + gen.PUSH["invoice-table"]["region"][2:]}, {"SHIFT_STRADDLE"}),
+    ("fail: region cuts the Notes cell paragraph (straddle)", push("invoice-table"), push("invoice-table", dy=15, lines=2)[0], {"region": [40, 243, 555, 740]}, {"SHIFT_STRADDLE"}),
+    ("fail: image left behind", (lambda: img_page(), IMG_SHIFT), lambda: img_page(20, 0), {}, {"SHIFT_MOVED"}),
+]
+
+
+def run_shift(tmp):
+    bad = 0
+    nfail = sum(m is not None for *_, m in SHIFT_CASES)
+    for i, (name, (src, spec), dst, over, must) in enumerate(SHIFT_CASES):
+        a, b = tmp / ("s%02d.in.pdf" % i), tmp / ("s%02d.out.pdf" % i)
+        a.write_bytes(src())
+        b.write_bytes(dst())
+        s = {**spec, **over}
+        findings = shift.check(a, b, s["page"], s["region"], s["dy"], s["changed"])
+        codes = {f.split(":")[0] for f in findings}
+        ok = not findings if must is None else must <= codes
+        bad += not ok
+        print("%s %-46s %s" % ("ok  " if ok else "FAIL", name, sorted(codes) if codes else "clean"))
+        if not ok:
+            print("     findings:", *findings[:6], sep="\n       ")
+    print("shift cases: %d fail-cases caught or pass-cases passed of %d (%d must fail), %d wrong" % (len(SHIFT_CASES) - bad, len(SHIFT_CASES), nfail, bad))
+    return bad
+
+
 def main():
     tmp = pathlib.Path(tempfile.mkdtemp(prefix="foliark-controls-"))
     bad, leaky, caught, safe, passed = 0, 0, 0, 0, 0
@@ -475,7 +535,8 @@ def main():
         if not ok:
             print("     findings:", *(findings[:6] + notes), sep="\n       ")
     print("fidelity fail cases caught %d/%d, pass cases passed %d/%d" % (fcaught, ffail, fok, fpass))
-    return 1 if bad or fbad else 0
+    sbad = run_shift(tmp)
+    return 1 if bad or fbad or sbad else 0
 
 
 if __name__ == "__main__":

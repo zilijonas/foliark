@@ -1,0 +1,57 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 6 0 R /F3 7 0 R >> >> /Annots [8 0 R 9 0 R] >>
+endobj
+4 0 obj
+<<  /Length 515 >>
+stream
+BT /F1 11 Tf 64 780 Td (Read our terms of service.) Tj ET
+BT /F2 16 Tf 64 750 Td (Billing notice) Tj ET
+BT /F1 11 Tf 64 730 Td (Your plan renews on the first of the month and the new) Tj ET
+BT /F1 11 Tf 64 716 Td (price applies from that date.) Tj ET
+BT /F1 11 Tf 64 670 Td (Visit our help center for details.) Tj ET
+BT /F1 11 Tf 64 652 Td (Opening hours: 9 to 17, Monday to Friday.) Tj ET
+64 62 m 531 62 l S
+BT /F3 9 Tf 64 48 Td (Made up for Foliark tests: none of these people, numbers or addresses exist.) Tj ET
+
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+6 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+endobj
+7 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Oblique /Encoding /WinAnsiEncoding >>
+endobj
+8 0 obj
+<< /Type /Annot /Subtype /Link /Rect [64 777 190 791] /Border [0 0 0] /A << /S /URI /URI (https://example.com/terms) >> >>
+endobj
+9 0 obj
+<< /Type /Annot /Subtype /Link /Rect [64 667 250 681] /Border [0 0 0] /A << /S /URI /URI (https://example.com/help) >> >>
+endobj
+xref
+0 10
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000121 00000 n 
+0000000295 00000 n 
+0000000862 00000 n 
+0000000959 00000 n 
+0000001061 00000 n 
+0000001166 00000 n 
+0000001304 00000 n 
+trailer
+<< /Size 10 /Root 1 0 R  >>
+startxref
+1441
+%%EOF

@@ -1,0 +1,74 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 6 0 R /F3 7 0 R >> >> >>
+endobj
+4 0 obj
+<<  /Length 1281 >>
+stream
+BT /F2 16 Tf 64 770 Td (Invoice 2026-0042) Tj ET
+BT /F1 11 Tf 64 735 Td (Payment is due within 14 days of the invoice date. Late payments) Tj ET
+BT /F1 11 Tf 64 720 Td (may be charged interest as set out in the terms.) Tj ET
+64 668 236 22 re S
+BT /F2 11 Tf 70 675 Td (Description) Tj ET
+300 668 80 22 re S
+BT /F2 11 Tf 306 675 Td (Qty) Tj ET
+380 668 80 22 re S
+BT /F2 11 Tf 386 675 Td (Unit) Tj ET
+460 668 71 22 re S
+BT /F2 11 Tf 466 675 Td (Amount) Tj ET
+64 646 236 22 re S
+BT /F1 11 Tf 70 653 Td (Water supply, October) Tj ET
+300 646 80 22 re S
+BT /F1 11 Tf 306 653 Td (1) Tj ET
+380 646 80 22 re S
+BT /F1 11 Tf 386 653 Td (420.00) Tj ET
+460 646 71 22 re S
+BT /F1 11 Tf 466 653 Td (420.00) Tj ET
+64 624 236 22 re S
+BT /F1 11 Tf 70 631 Td (Sewage and drainage) Tj ET
+300 624 80 22 re S
+BT /F1 11 Tf 306 631 Td (2) Tj ET
+380 624 80 22 re S
+BT /F1 11 Tf 386 631 Td (415.00) Tj ET
+460 624 71 22 re S
+BT /F1 11 Tf 466 631 Td (830.00) Tj ET
+64 564 467 60 re S
+BT /F1 11 Tf 70 606 Td (Notes: wire transfer to the bank account on file.) Tj ET
+BT /F1 11 Tf 70 592 Td (Please quote the invoice number.) Tj ET
+BT /F2 11 Tf 380 534 Td (Total due: EUR 1,250.00) Tj ET
+64 62 m 531 62 l S
+BT /F3 9 Tf 64 48 Td (Made up for Foliark tests: none of these people, numbers or addresses exist.) Tj ET
+
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+6 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+endobj
+7 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Oblique /Encoding /WinAnsiEncoding >>
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000121 00000 n 
+0000000273 00000 n 
+0000001607 00000 n 
+0000001704 00000 n 
+0000001806 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R  >>
+startxref
+1911
+%%EOF

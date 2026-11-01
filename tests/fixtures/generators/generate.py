@@ -597,6 +597,154 @@ def word_inline_runs():
                + "BT /FR 5 Tf 20 230 Td (%s) Tj ET\n" % RUNS_KEEP).encode())
     return simple(content, ex, fonts="/F1 5 0 R /FR 6 0 R /FB 9 0 R /FI 12 0 R /FBU 15 0 R")
 
+# NEW-130: push-down fixtures (ADR 0015). A4 pages of non-embedded Helvetica built from hand-written syntax like every other fixture here
+# (no ReportLab dependency; bytes are deterministic). Each builder can also write the CORRECT output of a push-down by wrapping the
+# pushed groups in a `cm` translation (dy display-space points downward): `dy=18` is a right answer, `still={"sig"}` leaves one group
+# behind. tests/oracles/controls.py uses these as synthetic outputs, so the shift oracle is judged without the engine.
+A4W, A4H = 595.28, 841.89
+_F = "/F1 5 0 R /F2 6 0 R /F3 7 0 R"  # Helvetica, Helvetica-Bold, Helvetica-Oblique
+
+
+def _n(v):
+    return ("%.2f" % v).rstrip("0").rstrip(".")
+
+
+def _t(x, y, s, size=11, font="F1"):
+    return "BT /%s %s Tf %s %s Td (%s) Tj ET\n" % (font, size, _n(x), _n(y), s)
+
+
+def _rect(x0, y0, x1, y1):
+    return "%s %s %s %s re S\n" % (_n(x0), _n(y0), _n(x1 - x0), _n(y1 - y0))
+
+
+def _line(x0, y0, x1, y1):
+    return "%s %s m %s %s l S\n" % (_n(x0), _n(y0), _n(x1), _n(y1))
+
+
+def _push_doc(groups, pushed, dy, still, annots=()):
+    """groups [(name, content)]; annots [(group, pdf rect, uri)]. A group in `pushed` and not in `still` moves down by dy."""
+    move = lambda g: dy and g in pushed and g not in still  # noqa: E731
+    body = "".join(("q 1 0 0 1 0 %s cm\n%sQ\n" % (_n(-dy), c)) if move(g) else c for g, c in groups)
+    objs = {
+        1: "<< /Type /Catalog /Pages 2 0 R >>",
+        2: "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        3: "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 %s %s] /Contents 4 0 R /Resources << /Font << %s >> >>%s >>"
+        % (_n(A4W), _n(A4H), _F, (" /Annots [%s]" % " ".join("%d 0 R" % (8 + i) for i in range(len(annots)))) if annots else ""),
+        4: stream("", body.encode()),
+        5: "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+        6: "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>",
+        7: "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Oblique /Encoding /WinAnsiEncoding >>",
+    }
+    for i, (g, (x0, y0, x1, y1), uri) in enumerate(annots):
+        d = -dy if move(g) else 0
+        objs[8 + i] = ("<< /Type /Annot /Subtype /Link /Rect [%s %s %s %s] /Border [0 0 0] /A << /S /URI /URI (%s) >> >>"
+                       % (_n(x0), _n(y0 + d), _n(x1), _n(y1 + d), uri))
+    return build(objs)[0]
+
+
+def _footer():
+    return _line(64, 62, 531, 62) + _t(64, 48, "Made up for Foliark tests: none of these people, numbers or addresses exist.", 9, "F3")
+
+
+# Display-space (top-left, y down) boxes for the oracle: `region` is the content a push moves, `changed` where the edit may
+# rewrite text (the paragraph's old box through its new one), `dy` the paragraph's own line pitch (one extra line).
+PUSH = {
+    "letter": {"page": 0, "region": [40, 209, 555, 740], "changed": [[60, 185, 535, 227]], "dy": 18},
+    "invoice-table": {"page": 0, "region": [40, 140, 555, 740], "changed": [[60, 92, 535, 155]], "dy": 15},
+    "two-column": {"page": 0, "region": [40, 152, 295, 740], "changed": [[60, 92, 295, 166]], "dy": 14},
+    "link-below": {"page": 0, "region": [40, 145, 555, 740], "changed": [[60, 98, 535, 159]], "dy": 14},
+}
+
+
+# letter.pdf mirrors HDDN's sample (scripts/pdf-fixtures/generate-sample.py: A4, Helvetica 11 pt at x=64, 18 pt pitch, 11 pt blanks)
+# plus a stroked Bezier signature under the sign-off; the italic note becomes the footer. Edit the "Thank you" paragraph.
+_LETTER = [("head", "Helvetica-Bold", 16, "Northwind Utilities"), ("head", "Helvetica", 10, "Customer service letter, sample document"), None,
+           ("head", "Helvetica", 11, "Jonas Petraitis"), ("head", "Helvetica", 11, "Gedimino pr. 12, Vilnius, Lithuania"), None,
+           ("head", "Helvetica", 11, "Dear Jonas Petraitis,"), None,
+           ("para", "Helvetica", 11, "Thank you for contacting us. We updated the details on your account:"), None,
+           ("below", "Helvetica", 11, "Email: jonas.petraitis@example.com"), ("below", "Helvetica", 11, "Phone: +370 612 34567"),
+           ("below", "Helvetica", 11, "Bank account (IBAN): LT12 1000 0111 0100 1000"), None,
+           ("below", "Helvetica", 11, "Your next invoice goes to Marta Jones, our billing contact for your account."),
+           ("below", "Helvetica", 11, "Reply to marta.jones@example.com if anything here looks wrong."), None,
+           ("below", "Helvetica", 11, "Kind regards,"), ("below", "Helvetica", 11, "The Northwind team")]
+LETTER_EDIT = "It takes effect from the first of next month."
+
+
+def letter(dy=0, still=(), lines=1):
+    """lines=2 adds a second paragraph line (the edited paragraph after a push of dy)."""
+    g = {"head": "", "para": "", "below": "", "sig": "", "footer": _footer()}
+    y = 770
+    for ln in _LETTER:
+        if ln is None:
+            y -= 11
+            continue
+        grp, font, size, s = ln
+        g[grp] += _t(64, y, s, size, "F2" if font.endswith("Bold") else "F1")
+        if grp == "para" and lines == 2:
+            g[grp] += _t(64, y - 18, LETTER_EDIT)
+        y -= size + 7
+    ys = y + 18 - 8  # just under the last line's baseline
+    g["sig"] = "q 1.2 w 0.1 0.1 0.5 RG 64 %s m 76 %s 86 %s 100 %s c 114 %s 124 %s 150 %s c S Q\n" % tuple(_n(ys - d) for d in (0, -4, 22, 8, -6, 22, 10))
+    return _push_doc([(k, g[k]) for k in ("head", "para", "below", "sig", "footer")], {"below", "sig"}, dy, still)
+
+
+# invoice-table.pdf: a two-line paragraph above a ruled table (one rect path per cell) whose last cell holds a two-line paragraph
+# of its own; the total sits under the table. A cut through the table (or through that cell) must be refused, not pushed.
+INVOICE_COLS = [64, 300, 380, 460, 531]
+INVOICE_ROWS = [("Description", "Qty", "Unit", "Amount"), ("Water supply, October", "1", "420.00", "420.00"), ("Sewage and drainage", "2", "415.00", "830.00")]
+
+
+def invoice_table(dy=0, still=(), lines=1):
+    head = _t(64, 770, "Invoice 2026-0042", 16, "F2")
+    para = _t(64, 735, "Payment is due within 14 days of the invoice date. Late payments") + _t(64, 720, "may be charged interest as set out in the terms.")
+    if lines == 2:
+        para += _t(64, 705, LETTER_EDIT)
+    table, y = "", 690
+    for r, row in enumerate(INVOICE_ROWS):
+        for c, cell in enumerate(row):
+            table += _rect(INVOICE_COLS[c], y - 22, INVOICE_COLS[c + 1], y) + _t(INVOICE_COLS[c] + 6, y - 15, cell, 11, "F2" if r == 0 else "F1")
+        y -= 22
+    table += _rect(64, y - 60, 531, y) + _t(70, y - 18, "Notes: wire transfer to the bank account on file.") + _t(70, y - 32, "Please quote the invoice number.")
+    total = _t(380, y - 90, "Total due: EUR 1,250.00", 11, "F2")
+    return _push_doc([("head", head + para), ("table", table), ("total", total), ("footer", _footer())], {"table", "total"}, dy, still)
+
+
+# two-column.pdf: left and right columns share baselines with a hairline in the 36 pt gutter. Edit the left paragraph; only the left
+# column below it moves, the right column, the divider and the footer stay.
+def two_column(dy=0, still=(), lines=1):
+    left = ["Revenue grew in every region this", "quarter, led by the north, and the", "order book is full into spring."]
+    rest = ["Costs stayed flat as the new depot", "opened on schedule in September.", None, "Hiring continues for field crews", "and the customer desk."]
+    right = ["Customers rated the service 4.6 of", "5, up from 4.4 a year ago, and", "complaints fell by a fifth.", None, "We plan two more depots next", "year, subject to the budget."]
+    if lines == 2:
+        left.append(LETTER_EDIT[:34])
+    pl = _t(64, 770, "Quarterly update", 16, "F2") + "".join(_t(64, 730 - 14 * i, s) for i, s in enumerate(left))
+    below, y = "", 670
+    for s in rest:
+        if s:
+            below += _t(64, y, s)
+        y -= 14
+    rc, y = "", 730
+    for s in right:
+        if s:
+            rc += _t(320, y, s)
+        y -= 14
+    return _push_doc([("head", pl), ("below", below), ("right", rc), ("divider", _line(302, 780, 302, 150)), ("footer", _footer())], {"below"}, dy, still)
+
+
+# link-below.pdf: a URI link above the paragraph (stays) and one over a line below it (moves with its text).
+LINK_HELP = "https://example.com/help"
+
+
+def link_below(dy=0, still=(), lines=1):
+    head = _t(64, 780, "Read our terms of service.", 11) + _t(64, 750, "Billing notice", 16, "F2")
+    para = _t(64, 730, "Your plan renews on the first of the month and the new") + _t(64, 716, "price applies from that date.")
+    if lines == 2:
+        para += _t(64, 702, LETTER_EDIT)
+    below = _t(64, 670, "Visit our help center for details.") + _t(64, 652, "Opening hours: 9 to 17, Monday to Friday.")
+    annots = [("head", [64, 777, 190, 791], "https://example.com/terms"), ("link", [64, 667, 250, 681], LINK_HELP)]
+    return _push_doc([("head", head + para), ("below", below), ("footer", _footer())], {"below", "link"}, dy, still, annots)
+
+
 
 def _joined(runs):
     return "".join(s for _, s in runs)
@@ -650,6 +798,19 @@ FIXTURES = {
                     "mustKeepText": ["KEEP_PUBLIC_LINKS", "KEEP_PUBLIC_PAGE_TWO"],
                     "regions": [R(20, 300, "SECRET_LINKTOKEN"), R(20, 360, "KEEP_PUBLIC_LINKS", kind="public")],
                     "keptLinks": ["https://example.com/public", "chapter2 -> page 1 (explicit /Dest)"]}, {}),
+    "push-letter": (letter, ["push-down", "vector", "bezier"],
+                    {"behavior": "HDDN sample letter plus a stroked Bezier signature under the sign-off and a footer; a one-line edit of the 'Thank you' paragraph that needs a second line pushes the Email..sign-off block and the signature down, the footer stays",
+                     "mustRemove": [], "mustKeepText": ["Thank you for contacting us.", "The Northwind team", "Made up for Foliark tests"], "pushDown": PUSH["letter"]}, {}),
+    "push-invoice-table": (invoice_table, ["push-down", "vector", "table"],
+                           {"behavior": "paragraph above a ruled table (one rect per cell) with a paragraph inside the last cell; pushing the whole table is a unit move, a cut through the table or its Notes cell must be refused",
+                            "mustRemove": [], "mustKeepText": ["Payment is due within 14 days", "Total due: EUR 1,250.00"], "pushDown": PUSH["invoice-table"],
+                            "refuseCuts": {"tableRow": [40, 160, 555, 740], "notesCell": [40, 243, 555, 740]}}, {}),
+    "push-two-column": (two_column, ["push-down", "vector", "two-column"],
+                        {"behavior": "two text columns on shared baselines with a divider in the gutter; editing the left paragraph pushes only the left column below it",
+                         "mustRemove": [], "mustKeepText": ["Revenue grew in every region this", "Customers rated the service 4.6 of"], "pushDown": PUSH["two-column"]}, {}),
+    "push-link-below": (link_below, ["push-down", "link"],
+                        {"behavior": "URI link over a line below the paragraph moves with its text; the link above the paragraph stays",
+                         "mustRemove": [], "mustKeepText": ["Visit our help center for details.", "Read our terms of service."], "pushDown": PUSH["link-below"]}, {}),
     "mixed-regions": (mixed_regions, ["text", "image", "vector", "form-xobject"],
                       {"behavior": "text, image pixels, a vector rectangle and Form text each under a region; public text and the gray image bar stay",
                        "mustRemove": ["SECRET_MIXED_TEXT", "SECRET_MIXED_FORM"], "mustKeepText": ["KEEP_PUBLIC_MIXED"],
