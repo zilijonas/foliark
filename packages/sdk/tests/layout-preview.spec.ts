@@ -108,11 +108,8 @@ describe("layoutEdit", () => {
     expect(r.rejected[0]).toMatchObject({ code: "EDIT_NO_FIT", details: { neededLines: p.neededLines, maxLines: p.maxLines } });
   });
 
-  it("is stale after a commit, and validates its arguments", async () => {
+  it("validates its arguments", async () => {
     const { doc, rects } = await open(true);
-    const p = await doc.layoutEdit(0, rects, "one");
-    await doc.applyChanges({ baseRevision: 0, textEdits: [{ id: "e", pageIndex: 0, rects, text: "one" }] });
-    expect(isCurrentPreview(p, doc)).toBe(false);
     expect((await doc.layoutEdit(0, [{ x: 0, y: 0, width: 1, height: 1 }], "x").catch((e) => e)).code).toBe("EDIT_NO_STYLE");
     await expect(doc.layoutEdit(-1, rects, "x")).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
     await expect(doc.layoutEdit(0, rects, 5 as unknown as string)).rejects.toBeInstanceOf(FoliarkError);

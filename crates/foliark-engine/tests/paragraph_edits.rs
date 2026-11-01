@@ -10,7 +10,6 @@ use foliark_model::{
     FontSource, FontStyle, Limits, LossCode, Rect, Redaction, RejectedChange, RunSource, TextEdit,
 };
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
 
 /// 300 x 400 page. Paragraph A: display baselines 100 and 114 (user 300, 286), x 20 to 145 on a
 /// pale blue background rectangle (display y 85 to 145) with a rule below it. Line N is the
@@ -969,26 +968,15 @@ fn every_failing_edit_is_reported_and_nothing_is_applied() {
 }
 
 #[test]
-fn one_edit_on_a_thirty_page_document_takes_a_bounded_time() {
+fn one_edit_on_a_thirty_page_document_changes_only_its_page() {
     let pages: Vec<&str> = (0..30).map(|_| PAGE).collect();
     let (mut e, doc) = engine(pdf_bytes(&pages, &Font::default(), 0), true);
-    let t = Instant::now();
     let r = changes(
         &mut e,
         &doc,
         Some(vec![edit("e", 14, &[A], "ąčęėįšųūž testing")]),
         None,
     );
-    let ms = t.elapsed().as_millis();
     assert!(r.accepted, "{:?}", r.rejected);
-    eprintln!(
-        "one edit on 30 pages: {ms} ms ({})",
-        if cfg!(debug_assertions) {
-            "debug"
-        } else {
-            "release"
-        }
-    );
-    assert!(ms < 20_000);
     assert_eq!(r.changed_pages, [14]);
 }

@@ -270,7 +270,7 @@ describe("cooperative cancellation", () => {
     const f = await stepped({ cancelOnProgress: true });
     const doc = await f.open(fixture("hddn/rotation-crop.pdf"));
     expect((await rejects(doc.search("a"))).code).toBe("CANCELLED");
-    expect((await doc.search("a")).length).toBeGreaterThanOrEqual(0);
+    expect((await doc.search("a")).length).toBeGreaterThan(0);
     expect(f.generation).toBe(1);
   });
 

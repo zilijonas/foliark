@@ -158,10 +158,6 @@ impl Engine {
         self.fonts.version()
     }
 
-    pub fn open_documents(&self) -> usize {
-        self.docs.len()
-    }
-
     pub fn stats(&self) -> Stats {
         let seed = Stats {
             plan_bytes: self

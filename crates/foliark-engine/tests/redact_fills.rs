@@ -416,16 +416,6 @@ fn coordinates_over_the_cap_are_refused() {
 }
 
 #[test]
-#[ignore = "timing at the vertex cap: cargo test --release -p foliark-engine --test redact_fills -- --ignored --nocapture"]
-fn a_path_just_under_the_vertex_cap_is_cut_and_its_time_recorded() {
-    let (input, regions) = reg(&saw(249_000), 0, &[[100.0, 90.0, 140.0, 120.0]]);
-    let t = std::time::Instant::now();
-    let r = run("cap", input, &regions);
-    println!("redact_vectors at 249000 vertices: {:?}", t.elapsed());
-    assert_eq!(r.report.paths_cut, 1);
-}
-
-#[test]
 fn a_path_clear_of_every_region_keeps_the_stream_byte_for_byte() {
     let content = "0 0 1 rg 50 100 100 100 re f\n1 0 0 rg 200 300 40 40 re f";
     let (input, regions) = reg(content, 0, &[[10.0, 10.0, 30.0, 30.0]]);

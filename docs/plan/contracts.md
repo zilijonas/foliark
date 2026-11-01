@@ -1,3 +1,5 @@
+> Historical (2026-10-21 planning baseline). Superseded by `docs/spec/v1.md`, the ADRs and `CHANGELOG.md`; kept because the frozen spec cites it as an input.
+
 # Foliark implementation contracts and execution policy
 
 ## Public API contract to freeze in NEW-3

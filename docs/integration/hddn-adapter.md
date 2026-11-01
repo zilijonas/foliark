@@ -1,22 +1,10 @@
-# HDDN adapter (NEW-66)
+# HDDN adapter
 
-HDDN worktree `~/ai/repos/hddn-foliark`, branch `foliark/integration` (from `codex/hddn-export-buffer` 2fe0f9a), local only. The adapter is
-`src/workers/lib/foliark.ts` there; this page is the contract it implements and what is left.
-
-## Status (HDDN worktree `~/ai/repos/hddn-foliark`, branch `foliark/integration`, local commits, nothing pushed)
-| Task | What | Commit | State |
-|---|---|---|---|
-| NEW-66 | adapter: load, inspect, extract, render, lane, failure codes | 2cd43c5 | done |
-| NEW-67 | signature scan, OCR route, selection/search proof, real-browser e2e | 2ac3d92 | done |
-| NEW-68 | paragraph editing on `prepareParagraph` / `layoutEdit` / `applyChanges` | 61fc5bd | done |
-| NEW-69 | export: native redaction, image-only fallback behind explicit consent, report notices | 7a19c1b | done |
-| NEW-70 | AbortSignal cancellation, typed OCR failure, cache name bump, 3-browser e2e | 1c7d255 | committed, owned by another agent (board is the source of truth) |
-| NEW-71 | remove Pyodide and the `PUBLIC_PDF_ENGINE` switch | - | not started |
-| NEW-76 | complete-replacement and rollback proof | - | blocked on NEW-71 and this candidate |
+HDDN (the owner's private app, separate repo) runs `@zilijonas/foliark` 0.3.1 in production; the adapter is `src/workers/lib/foliark.ts` there. This page is the contract it implements and the parity evidence. Release history, gates and rollback: `hddn-acceptance.md`; what a given document does in HDDN: `hddn-compatibility.md`.
 
 SDK surface HDDN relies on: `createInlineFoliark`, `open`, `pages`, `extractText`, `renderPage`, `prepareParagraph`, `applyChanges`, `prepareExport`, `export`,
 `FoliarkError` codes, and the exported types `ChangeSet`, `TextEdit`, `Redaction`, `ExportReport`, `Loss` (NEW-74 added them to the public index so the adapter no longer derives them from `ChangeSet`).
-Not wired: `search`, `quadsFor`, `select` (nothing in HDDN's UI would use them), `cmapsUrl` (no pack ships).
+Not wired: `search`, `quadsFor`, `select` (nothing in HDDN's UI would use them). `cmapsUrl` is wired to the shipped `foliark-cmaps/` pack.
 
 ## Decision: in-worker entry, not a nested worker
 HDDN already runs one dedicated worker (`redactor.worker.ts`) whose router serializes whole requests and whose `documentFaulted` / generation
@@ -39,10 +27,8 @@ feeds HDDN's existing recovery path); `wasm` option (bytes or module) lets tests
 | lane | HDDN rule unchanged on `words.length`, code-point length of `text`, `stats.imageCoverage`, U+FFFD count and the garbled ratios | `unmappedGlyphs` is already the U+FFFD count in `text`, so it is not read separately |
 | GET_PAGE_PREVIEW | `renderPage(i,{scale})` -> RGB PNG made in the worker (CompressionStream, no canvas) | the UI still receives `image/png` bytes; unrotated crop for OCR by undoing `/Rotate` on the RGBA |
 
-## Switch
-`PUBLIC_PDF_ENGINE=pyodide` (build) or `INIT {engine}` (runtime) keeps the PyMuPDF path; default on this branch is Foliark. Under Foliark every operation runs on the engine
-(NEW-66 to NEW-69); an operation the engine refuses fails with its mapped HDDN code and is never retried on Pyodide (no silent fallback). Pyodide is not booted under Foliark.
-The switch goes away with NEW-71.
+## No fallback
+Every operation runs on the engine. An operation the engine refuses fails with its mapped HDDN code and is never retried elsewhere (no silent fallback). The Pyodide/PyMuPDF path and the `PUBLIC_PDF_ENGINE` switch were removed before the first production release (2026-10-23).
 
 ## Parity (tests: `src/workers/lib/foliark.test.ts`, `router.foliark.test.ts`)
 Oracle: HDDN's shipped `stage_document_from_bytes` under native PyMuPDF 1.26.5 (app ships 1.26.3), recorded by
@@ -57,10 +43,6 @@ Accepted differences:
 - `compressed-stream` (8 MiB of no-op operators, decode ratio 1001): refused at `maxDecodeRatio`; it is a content-stream bomb and the fixture's `inputPolicy` asks for bounded decode or explicit rejection. NEW-82 exempted image XObjects from the ratio (a blank 150 dpi RGB letter scan, 6.3 MB of 0xFF, ratio 1026, was refused too; `maxImagePixels` and `maxStreamDecodedBytes` still bound images).
 - Page sizes ignore `/UserUnit` in PyMuPDF and include it in Foliark (normalized boxes are invariant); no fixture sets it.
 
-## Limits of NEW-66 (historical: NEW-67 added scanned fixtures and the signature scan, NEW-70 bumped the cache name)
-Scanned-page OCR is wired through the same `renderPng(...,true)` seam but has no scanned fixture here; signature regions return none under Foliark;
-the offline precache lists the wasm but the service-worker cache name was not bumped (NEW-70).
-
 ## NEW-67: signatures, OCR, selection, search, browser proof (HDDN `foliark/integration`)
 - Signature scan: `detect_signature_regions` ported to TS (`src/workers/lib/signature-regions.ts`) over `renderRgba(page, 1.5)` from the active Foliark handle (gray like MuPDF `csGRAY`, same 540 px grid, thresholds and text-overlap veto). Parity vs PyMuPDF on 4 fixtures at both vertical gates: same region counts, boxes within 0.02; ranking by ink area can swap near-ties by 1 px between rasterizers, so tests compare by position.
 - OCR: already routed through `renderPng(page, ocrScale, true)` (NEW-66); now proven in a real browser on a scanned and a mixed fixture. OCR spans merge unchanged (`source:'ocr'`).
@@ -68,12 +50,11 @@ the offline precache lists the wasm but the service-worker cache name was not bu
 - Real-browser proof: `pnpm run test:e2e:foliark` (6 cases, chromium, built `/redact`), see `tests/pdf/README.md` in HDDN.
 - Findings: Tesseract start-up failure (unreadable or unreachable language data) makes HDDN's `errorHandler` throw in the worker: UI shows the worker-crash/recovery banner and the import is lost (engine independent, tesseract.ts). Page-level OCR failure behaves as designed (warning, manual-review gate).
 
-## Next
-NEW-71 (remove Pyodide once 66 to 70 are accepted), then NEW-76. Open items carried here: scanned-page OCR timing is not part of the engine comparison, signature regions are an HDDN-side port over `renderRgba`.
+Open: scanned-page OCR timing is not part of the engine comparison; signature regions are an HDDN-side port over `renderRgba`.
 
-## 0.3.0 surface HDDN can adopt (not wired: HDDN pins 0.1.6 in production, ADRs 0015 to 0017)
-All additive and off by default, so the adapter written for 0.1.x keeps its output bytes. What to read or send when it is ready:
-| Need | Foliark 0.3.0 | Notes |
+## 0.3.x surface (adopted in HDDN 0.3.1, ADRs 0015 to 0017)
+All additive and off by default, so an adapter written for 0.1.x keeps its output bytes. What to read or send:
+| Need | Foliark 0.3.x | Notes |
 |---|---|---|
 | wider editable box | `ParagraphInfo.maxWrapWidth`, `maxWrapLines`; `EditPreview.wrapWidth` | no call change: a longer edit that refused `EDIT_NO_FIT` for width now lays out at `maxWrapWidth` when `wrapWidth` does not fit. `maxLines` can now be smaller where a path, image or frame lies below. Draw the editor box at the `wrapWidth` the preview returns |
 | grow downward | `TextEdit.reflow: 'pushDown'`, `layoutEdit(page, rects, text, { reflow: 'pushDown' })`; `ParagraphInfo.pushDown` (budget, moved region), `EditPreview.shift`, `EditPreview.reflowBlocked` | opt in per edit; an `EDIT_NO_FIT` with `feature` `reflow*` means the content below cannot move as whole units; from 0.3.1 `reflowBackground` means the paragraph sits on a scan, image, shading or pattern that would stay while the text moved (adopt 0.3.1, not 0.3.0) |

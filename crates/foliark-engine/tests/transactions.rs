@@ -1,10 +1,8 @@
 //! Atomic revisions and declarative ChangeSets (spec §4): stale base, all-or-nothing, list
 //! replace/keep/undo, text redactions resolved to per-line regions, revision stamping.
 mod common;
-use common::{Font, close, pdf_bytes};
-use foliark_engine::{
-    Applied, BoxTask, Document, EditApplier, EditContext, Engine, NotBuilt, Step,
-};
+use common::{Font, close, pdf_bytes, run};
+use foliark_engine::{Applied, Document, EditApplier, EditContext, Engine, NotBuilt};
 use foliark_model::{
     ChangeResult, ChangeSet, ErrorCode, ExtractOptions, Limits, PdfError, Rect, Redaction,
     RejectedChange, TextEdit,
@@ -29,14 +27,6 @@ fn fixture() -> Vec<u8> {
 
 fn open(e: &mut Engine) -> String {
     e.open(fixture(), None, false).unwrap().0
-}
-
-fn run<T>(e: &mut Engine, mut task: BoxTask<T>) -> Result<T, PdfError> {
-    loop {
-        if let Step::Done(v) = task.step(e, 1000)? {
-            return Ok(v);
-        }
-    }
 }
 
 fn apply(e: &mut Engine, doc: &str, cs: ChangeSet) -> Result<ChangeResult, PdfError> {

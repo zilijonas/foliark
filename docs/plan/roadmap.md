@@ -1,3 +1,5 @@
+> Historical (2026-10-21 planning baseline). Superseded by `docs/spec/v1.md`, the ADRs and `CHANGELOG.md`; kept because the frozen spec cites it as an input.
+
 # Foliark delivery roadmap — planning baseline, 2026-10-21
 
 ## Goal
