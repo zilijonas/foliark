@@ -523,6 +523,9 @@ pub struct ParagraphInfo {
     /// `wrapWidth`, and its line budget.
     pub max_wrap_width: f64,
     pub max_wrap_lines: u32,
+    /// ADR 0015: the line budget at `maxWrapWidth` with `reflow: 'pushDown'` and the region it
+    /// would move at that budget; null when nothing below can move.
+    pub push_down: Option<PushDown>,
     pub original_text: Option<String>,
     pub font: FontResolution,
     #[ts(optional = nullable)]
@@ -538,6 +541,39 @@ pub struct ParagraphInfo {
     /// Style runs of `originalText`: UTF-16 ranges that tile it, each drawn in one look. Empty
     /// when `originalText` is null.
     pub runs: Vec<StyleSpan>,
+}
+
+/// [`ParagraphInfo::push_down`].
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct PushDown {
+    pub max_lines: u32,
+    /// Display space, before the push.
+    pub region: Rect,
+}
+
+/// One push-down step (ADR 0015): the content of `region` (display space, before this step)
+/// moved down by `dy` display points.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct PageShift {
+    pub page_index: u32,
+    pub region: Rect,
+    pub dy: f64,
+}
+
+/// `TextEdit.reflow` (ADR 0015): what an edit that needs more lines than fit does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum Reflow {
+    /// Refuse `EDIT_NO_FIT` (spec §6.3).
+    #[default]
+    None,
+    /// Move the content below the paragraph down.
+    PushDown,
 }
 
 /// One page style of a paragraph (ADR 0013), as `ParagraphSegment` describes a segment's.
@@ -597,6 +633,8 @@ pub struct TextEdit {
     pub text: String,
     /// A registered `fontId`.
     pub font: Option<String>,
+    /// Omitted = `none`.
+    pub reflow: Option<Reflow>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -763,6 +801,11 @@ pub struct EditPreview {
     pub styles: Vec<StyleSpan>,
     /// Only when asked for.
     pub glyphs: Option<Vec<PreviewGlyph>>,
+    /// With `reflow: 'pushDown'`: what the commit would move, when it needs to move anything.
+    #[ts(optional = nullable)]
+    pub shift: Option<PageShift>,
+    /// With `reflow: 'pushDown'`: the `EDIT_NO_FIT` feature that blocks the push-down.
+    pub reflow_blocked: Option<String>,
 }
 
 // ---- §1.6 export --------------------------------------------------------------------------------

@@ -4,6 +4,7 @@ mod apply;
 mod limits;
 mod paragraph;
 mod preview;
+mod reflow;
 mod runs;
 
 pub use apply::ParagraphApplier;

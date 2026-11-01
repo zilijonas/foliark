@@ -34,10 +34,10 @@ pub(crate) struct Limits {
     /// Words and non-container, non-decoration items.
     obstacles: Vec<B>,
     /// The bottom of the tightest container, else infinity.
-    container_bottom: f64,
+    pub container_bottom: f64,
     /// `H` minus the page's smallest visible text y.
-    text_bottom: f64,
-    page_h: f64,
+    pub text_bottom: f64,
+    pub page_h: f64,
 }
 
 impl Limits {

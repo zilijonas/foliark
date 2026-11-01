@@ -9,7 +9,7 @@ use crate::{Document, RenderOptions, RenderedPage};
 use foliark_model::{
     Capabilities, ChangeResult, ChangeSet, DocumentInfo, EditPreview, ErrorCode, ErrorDetails,
     ExportMode, ExportPlan, ExportPolicy, ExtractOptions, FontMatchRule, FontSource, Hit, Limits,
-    MetadataPolicy, PageGeometry, ParagraphInfo, PdfError, Phase, Point, Progress, Rect,
+    MetadataPolicy, PageGeometry, ParagraphInfo, PdfError, Phase, Point, Progress, Rect, Reflow,
     RegisteredFont, SearchHit, SearchOptions, TextPage, TextRange,
 };
 use foliark_text::Registry;
@@ -440,6 +440,21 @@ impl Engine {
         font: Option<String>,
         glyphs: bool,
     ) -> Result<EditPreview, PdfError> {
+        self.layout_edit_with(doc, page, rects, text, font, glyphs, Reflow::None)
+    }
+
+    /// [`Engine::layout_edit`] with `TextEdit.reflow` (ADR 0015).
+    #[allow(clippy::too_many_arguments)]
+    pub fn layout_edit_with(
+        &self,
+        doc: &str,
+        page: u32,
+        rects: Vec<Rect>,
+        text: &str,
+        font: Option<String>,
+        glyphs: bool,
+        reflow: Reflow,
+    ) -> Result<EditPreview, PdfError> {
         let flat: Vec<f64> = rects
             .iter()
             .flat_map(|r| [r.x, r.y, r.width, r.height])
@@ -458,6 +473,7 @@ impl Engine {
             font.as_deref(),
             text,
             glyphs,
+            reflow,
             &ctx,
         )?;
         p.doc_id = doc.to_owned();

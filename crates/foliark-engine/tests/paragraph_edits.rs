@@ -66,6 +66,7 @@ fn edit(id: &str, page: u32, rects: &[Rect], text: &str) -> TextEdit {
         rects: rects.to_vec(),
         text: text.into(),
         font: None,
+        reflow: None,
     }
 }
 

@@ -98,6 +98,14 @@ fn emit(data: &[u8], obj: ObjectId, subs: &[(Range<usize>, Vec<u8>)]) -> Result<
     Ok(out)
 }
 
+/// One instruction's bytes as re-emission writes them (comments dropped, whitespace runs one
+/// space), for a substitution that keeps the instruction.
+pub(crate) fn instruction(src: &[u8]) -> Vec<u8> {
+    let mut out = Vec::new();
+    normalize(src, &mut out);
+    out
+}
+
 fn is_delim(b: u8) -> bool {
     b"()<>[]{}/%".contains(&b)
 }

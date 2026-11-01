@@ -299,6 +299,7 @@ fn a_link_over_an_edited_paragraph_is_dropped() {
         }],
         text: "CHANGED".into(),
         font: None,
+        reflow: None,
     };
     let t = e.apply_changes(
         &doc,

@@ -55,6 +55,7 @@ fn commit(e: &mut Engine, doc: &str, area: Rect, text: &str, font: Option<&str>)
                 rects: vec![area],
                 text: text.into(),
                 font: font.map(str::to_owned),
+                reflow: None,
             }]),
             redactions: None,
         },

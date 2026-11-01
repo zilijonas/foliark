@@ -379,6 +379,10 @@ pub struct Prepared {
     pub main: usize,
     /// The look of each `char` of `originalText`; empty when it is null.
     pub text_looks: Vec<usize>,
+    /// What push-down (ADR 0015) reads: the page model, the limits and the ladder's descent.
+    pub(crate) model: SemanticPage,
+    pub(crate) limits: Limits,
+    pub(crate) descent: f64,
 }
 
 /// `looks` (one per `char` of `text`) as runs of `text`, each with the ladder `ladder(look)`;
@@ -444,9 +448,12 @@ impl Document {
         registry: &Registry,
         font_match: &[FontMatchRule],
     ) -> Result<ParagraphInfo, PdfError> {
-        Ok(self
-            .prepare(page, rects, font, editor_face, registry, font_match)?
-            .info)
+        let p = self.prepare(page, rects, font, editor_face, registry, font_match)?;
+        let push_down = super::reflow::Reflow::new(self, page, &p)?.budget();
+        Ok(ParagraphInfo {
+            push_down,
+            ..p.info
+        })
     }
 
     /// [`Document::prepare_paragraph`] plus what applying the edit needs.
@@ -870,6 +877,7 @@ impl Document {
             max_height: bottom_limit - top,
             max_lines: budget(bottom_limit),
             max_wrap_lines: budget(lim.bottom_limit(x0 + max_wrap_width)),
+            push_down: None,
             original_text: original,
             font: resolution,
             editor_face: face,
@@ -884,6 +892,9 @@ impl Document {
             looks,
             main: 0,
             text_looks,
+            model,
+            limits: lim,
+            descent,
         })
     }
 }

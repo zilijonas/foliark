@@ -136,6 +136,7 @@ fn a_redaction_commit_keeps_layouts_and_restamps_them_an_edit_commit_drops_them(
         }],
         text: "x".into(),
         font: None,
+        reflow: None,
     };
     let cs = ChangeSet {
         base_revision: 1,

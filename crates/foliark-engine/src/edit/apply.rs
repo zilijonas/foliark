@@ -31,7 +31,8 @@ use crate::writer::text::{PlanFonts, SourceFonts, emit_plan};
 use crate::writer::{Val, Writer};
 use crate::{Binding, Committed, Document, StoredRedaction};
 use foliark_model::{
-    EditLayout, ErrorCode, ObjectId, PdfError, Rect, RejectedChange, RunSource, TextEdit,
+    EditLayout, ErrorCode, ErrorDetails, ObjectId, PdfError, Rect, RejectedChange, RunSource,
+    TextEdit,
 };
 use foliark_text::FontFace;
 use hayro::hayro_syntax::object::{Dict, MaybeRef, Object};
@@ -149,12 +150,26 @@ fn apply_one(
     ctx: &EditContext<'_>,
 ) -> Result<(Vec<u8>, EditLayout), PdfError> {
     let page = e.page_index as usize;
+    let reflow = e.reflow.unwrap_or_default();
     let Planned {
         prepared: p,
         text,
         laid,
+        push,
+        blocked,
         ..
-    } = plan_edit(doc, page, &e.rects, e.font.as_deref(), &e.text, ctx)?;
+    } = plan_edit(doc, page, &e.rects, e.font.as_deref(), &e.text, reflow, ctx)?;
+    if let Some(Some(feature)) = blocked {
+        return Err(PdfError::with(
+            ErrorCode::EditNoFit,
+            ErrorDetails {
+                needed_lines: Some(laid.needed_lines()),
+                max_lines: Some(laid.max_lines),
+                feature: Some(feature.into()),
+                ..Default::default()
+            },
+        ));
+    }
     let plan = laid.fit()?;
 
     // Remove the selected clusters. The glyphs the new text reuses from the source font must
@@ -202,6 +217,10 @@ fn apply_one(
     let mut w = Writer::new(doc.reader(), ctx.limits.clone());
     w.preserve();
     redact_text(doc, &removal, &mut w)?;
+    // ADR 0015: what lies below moves in the same pass, before the new text is drawn on top.
+    if let Some(push) = &push {
+        push.write(&mut w);
+    }
 
     if !plan.lines.is_empty() {
         let internal = || PdfError::new(ErrorCode::Internal);

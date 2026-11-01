@@ -272,6 +272,7 @@ fn a_redaction_over_edited_text_burns_the_edited_pixels_not_the_original_ones() 
                 }],
                 text: "EDITED".into(),
                 font: None,
+                reflow: None,
             }]),
             redactions: None,
         },

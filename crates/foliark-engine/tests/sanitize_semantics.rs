@@ -604,6 +604,7 @@ fn keep_ocr_survives_a_paragraph_edit_and_still_honors_regions() {
         }],
         text: "NEW_VISIBLE_WORDS".into(),
         font: None,
+        reflow: None,
     };
     let row = line(20.0, 280.0);
     let (_, out) = export_edited(&input, keep_ocr(), vec![edit], vec![region("a", row)]).unwrap();

@@ -1,15 +1,16 @@
 //! Edit previews (ADR 0004): the layout an edit would commit, computed by the same function
 //! `apply_one` calls, so a preview and the committed text cannot disagree.
 use super::paragraph::{style_spans, text_runs};
+use super::reflow::{Push, Reflow as Mover, Refusal};
 use super::runs::carry;
 use crate::Document;
 use crate::document::EditContext;
 use crate::edit::Prepared;
 use foliark_model::{
     EditPreview, ErrorCode, ErrorDetails, FontStyle, PdfError, PreviewGlyph, PreviewLine, Rect,
-    StyleSpan,
+    Reflow, StyleSpan,
 };
-use foliark_text::{Laid, LayoutParams, layout_runs, normalize};
+use foliark_text::{Fnv, Laid, LayoutParams, layout_runs, normalize};
 
 /// Everything an edit needs before anything is written: the selection, the normalized text and
 /// its layout with the budget not yet enforced. With style segments (ADR 0012) these are the
@@ -24,6 +25,11 @@ pub(super) struct Planned {
     pub wrap_width: f64,
     /// The look of every character of the whole text (ADR 0013), as UTF-16 spans.
     pub styles: Vec<StyleSpan>,
+    /// ADR 0015: the push-down the commit writes, when `reflow: 'pushDown'` needs one.
+    pub push: Option<Push>,
+    /// The push-down refusal when it is impossible: `Some(feature)`, or `None` for a plain
+    /// overflow. `laid` does not fit then.
+    pub blocked: Option<Refusal>,
 }
 
 /// ADR 0012: the part of a selection an edit changes. `text` is split at LF and lined up with
@@ -86,6 +92,7 @@ pub(super) fn plan_edit(
     rects: &[Rect],
     font: Option<&str>,
     text: &str,
+    reflow: Reflow,
     ctx: &EditContext<'_>,
 ) -> Result<Planned, PdfError> {
     let whole = doc.prepare(page, rects, font, false, ctx.fonts, ctx.font_match)?;
@@ -196,6 +203,34 @@ pub(super) fn plan_edit(
         wrap_width = info.max_wrap_width;
         laid = lay(wrap_width, info.max_wrap_lines)?;
     }
+    let (mut push, mut blocked) = (None, None);
+    if reflow == Reflow::PushDown {
+        // ADR 0015 step 3: push down the `maxWrapWidth` layout, so the push is the smallest.
+        if !laid.fits() && laid.max_lines != info.max_wrap_lines {
+            wrap_width = info.max_wrap_width;
+            laid = lay(wrap_width, info.max_wrap_lines)?;
+        }
+        if !laid.fits() {
+            let mover = Mover::new(doc, page, &prepared)?;
+            let budget = mover.budget().map_or(info.max_wrap_lines, |b| b.max_lines);
+            match laid.too_wide {
+                true => blocked = Some(None),
+                false => match mover.push(laid.needed_lines()) {
+                    Ok(p) => push = Some(p),
+                    Err(f) => blocked = Some(f),
+                },
+            }
+            laid.max_lines = budget.max(if push.is_some() {
+                laid.needed_lines()
+            } else {
+                0
+            });
+        }
+        // The fingerprint covers the reflow mode (ADR 0015); `none` keeps today's.
+        let mut h = Fnv::new();
+        h.field(laid.plan.fingerprint.as_bytes()).field(b"pushDown");
+        laid.plan.fingerprint = h.hex();
+    }
     Ok(Planned {
         prepared,
         text: part,
@@ -203,10 +238,13 @@ pub(super) fn plan_edit(
         laid,
         wrap_width,
         styles,
+        push,
+        blocked,
     })
 }
 
 /// `doc_id` and `revision` are left for the session layer, as in `prepare_paragraph`.
+#[allow(clippy::too_many_arguments)]
 pub fn layout_edit(
     doc: &Document,
     page: usize,
@@ -214,6 +252,7 @@ pub fn layout_edit(
     font: Option<&str>,
     text: &str,
     glyphs: bool,
+    reflow: Reflow,
     ctx: &EditContext<'_>,
 ) -> Result<EditPreview, PdfError> {
     let Planned {
@@ -223,7 +262,9 @@ pub fn layout_edit(
         laid,
         wrap_width,
         styles,
-    } = plan_edit(doc, page, rects, font, text, ctx)?;
+        push,
+        blocked,
+    } = plan_edit(doc, page, rects, font, text, reflow, ctx)?;
     let text16: Vec<u16> = text.encode_utf16().collect();
     let (mut lines, mut boxes) = (Vec::new(), Vec::new());
     for (n, line) in laid.plan.lines.iter().enumerate() {
@@ -270,5 +311,7 @@ pub fn layout_edit(
         fingerprint: layout.fingerprint,
         styles,
         glyphs: glyphs.then_some(boxes),
+        shift: push.map(|p| p.shift),
+        reflow_blocked: blocked.flatten().map(str::to_owned),
     })
 }

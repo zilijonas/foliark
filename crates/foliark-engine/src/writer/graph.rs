@@ -897,6 +897,18 @@ impl<'a> Walk<'a> {
             ),
             other => other,
         };
+        let val = match (val, self.redirects.overrides.get(&id)) {
+            (Val::Dict(mut e), Some(over)) => {
+                for (k, v) in over {
+                    match e.iter_mut().find(|(key, _)| key == k) {
+                        Some(entry) => entry.1 = v.clone(),
+                        None => e.push((k.clone(), v.clone())),
+                    }
+                }
+                Val::Dict(e)
+            }
+            (val, _) => val,
+        };
         let val = self.edit_form_resources(id, val)?;
         let class = refine(class, &val, id)?;
         // A rebuilt ToUnicode replaces the source one, which must not be copied at all: an

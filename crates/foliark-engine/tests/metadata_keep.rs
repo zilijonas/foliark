@@ -129,6 +129,7 @@ fn edit_confidential() -> ChangeSet {
             }],
             text: "CHANGED".into(),
             font: None,
+            reflow: None,
         }]),
         redactions: None,
     }

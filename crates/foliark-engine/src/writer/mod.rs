@@ -9,7 +9,7 @@ use std::ops::Range;
 
 mod content;
 pub use content::reemit;
-pub(crate) use content::string_token;
+pub(crate) use content::{instruction, string_token};
 pub mod fonts;
 mod graph;
 mod shrink;
@@ -111,6 +111,8 @@ pub(crate) struct Redirects {
     pub form_xobjects: BTreeMap<ObjectId, XObjectEdits>,
     /// Resource entries dropped per owner: (category such as `Font`, name).
     pub pruned: BTreeMap<Owner, Vec<(&'static str, Vec<u8>)>>,
+    /// Dictionary entries written instead of the source object's own (key, value).
+    pub overrides: BTreeMap<ObjectId, Vec<(Vec<u8>, Val)>>,
 }
 
 pub struct Writer<'d> {
@@ -198,6 +200,17 @@ impl<'d> Writer<'d> {
     /// Write `new` (an added object) wherever the input refers to `old`, and not `old` itself.
     pub fn supersede(&mut self, old: ObjectId, new: Val) -> &mut Self {
         self.redirects.superseded.insert(old, new);
+        self
+    }
+
+    /// Write `val` as the `key` entry of the source dictionary `obj` (added when missing), for a
+    /// working copy's annotation that a push-down moved (ADR 0015).
+    pub fn override_entry(&mut self, obj: ObjectId, key: &str, val: Val) -> &mut Self {
+        self.redirects
+            .overrides
+            .entry(obj)
+            .or_default()
+            .push((key.as_bytes().to_vec(), val));
         self
     }
 

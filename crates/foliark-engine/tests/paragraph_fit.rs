@@ -42,6 +42,7 @@ fn commit(e: &mut Engine, doc: &str, edits: &[(Rect, &str)]) -> ChangeResult {
             rects: vec![*r],
             text: (*t).into(),
             font: None,
+            reflow: None,
         })
         .collect();
     let t = e.apply_changes(
