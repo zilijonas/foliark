@@ -1,6 +1,6 @@
 # ADR 0011: Unchanged text fits its own edit box
 
-Status: Accepted, 2026-10-23 (NEW-104). Amends spec §6.2 (`wrapWidth`, `maxLines`) and §6.4 (cluster coverage); refines ADR 0003. ADR 0004 is unchanged: preview and commit still share one layout path and fingerprint. ADR 0012 measures the box without the caller's font and per style segment. ADR 0015 replaces `wrapRight` and `bottomLimit` (the amendment's lone-line rule becomes the rule for every paragraph); the measured widening and the `maxLines` floor stay.
+Status: Accepted, 2026-10-23 (NEW-104). Amends spec §6.2 (`wrapWidth`, `maxLines`) and §6.4 (cluster coverage); refines ADR 0003. ADR 0004 is unchanged: preview and commit still share one layout path and fingerprint. ADR 0012 measures the box without the caller's font and per style segment. ADR 0015 keeps this `wrapWidth` as the stable width and adds an extended `maxWrapWidth` used only when the edit does not fit; obstacles beyond words change `bottomLimit`.
 
 ## Context
 On the owner's iOS PDF, 10 of 38 paragraphs reported "does not fit" with their text untouched and 11 re-broke differently; one more refused `EDIT_NO_FONT`. Measured (counts only):
