@@ -53,6 +53,7 @@ Documents:
   - [0012](docs/adr/0012-edit-style-segments.md) an edit keeps each style segment (bold heading, regular body) as its own; box measured in the page's fonts
   - [0013](docs/adr/0013-edit-inline-runs.md) an edit keeps inline bold/italic runs: looks carried through a word diff, one layout with per-run fonts, caller font per run's weight/style or `EDIT_NO_FONT`
   - [0014](docs/adr/0014-keep-links.md) `links: 'keep'` (opt-in, native): safe URI/GoTo links written fresh, none over or spelling a redaction
+  - [0015](docs/adr/0015-edit-limits-and-push-down.md) edit limits from the page's evidence (mirrored margin, path/image obstacles, containers); opt-in `reflow: 'pushDown'` moves content below by `cm`, redactions mapped through shifts
 
 ## 3. Commands
 
