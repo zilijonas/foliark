@@ -4,6 +4,18 @@ All notable changes to `@zilijonas/foliark` (named `@foliark/sdk` before 0.1.0 w
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-01
+
+Fixes found in a review of 0.3.0, before HDDN adopts it. Source: tag `v0.3.1`. Tarball and hashes: `docs/release/candidate.md`.
+
+### Fixed
+- Privacy: `reflow: 'pushDown'` no longer moves content over a staying background that carries information. With the paragraph and the moved lines over a full-page scan (an image with OCR text) or over an image, shading or pattern panel, the push moved the text off its picture, and a region redaction there was mapped with the move, so the image's pixels under its old place were left uncovered in the export. Such an edit now refuses `EDIT_NO_FIT` with `feature: 'reflowBackground'` and `ParagraphInfo.pushDown` is `null`; a frame or a solid colour background may still stay (ADR 0015) (NEW-136).
+- `prepareParagraph` could spin on a paragraph with a near-zero line step (hidden or zero-size text) while computing `pushDown`: a line step under 0.5 pt now has no push-down and the budget adds at most 64 lines (NEW-136).
+- `metadata: 'keep'` strips format characters (zero-width space and joiners, word joiner, soft hyphen, BOM, tag characters), private-use characters, noncharacters and variation selectors from Info text before the leak check, so a redacted name split by a zero-width character is caught and the output passes the Cc/Cf rule of `objects.py` (ADR 0016) (NEW-136).
+
+### Docs
+- ADR 0016 records the limits of the edited-away token test (whitespace split; words under 3 characters); ADR 0017 states where the EB Garamond rule sits (NEW-136).
+
 ## [0.3.0] - 2026-11-01
 
 Edit limits read from the page, opt-in push-down of the content below an edit, opt-in metadata keeping on export, more default font-match families, and a fix for edits to an indented style segment. Source: tag `v0.3.0`. Tarball and hashes: `docs/release/candidate.md`.
