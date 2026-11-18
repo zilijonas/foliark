@@ -7,9 +7,9 @@
   "python": "3.9"
  },
  "counts": {
-  "total": 53,
+  "total": 54,
   "hddn": 20,
-  "generated": 33,
+  "generated": 34,
   "byFeature": {
    "actualtext": 1,
    "additional-actions": 1,
@@ -26,7 +26,7 @@
    "deep-form": 1,
    "dimension-bomb": 1,
    "embedded-file": 2,
-   "embedded-font": 11,
+   "embedded-font": 12,
    "empty-tounicode": 3,
    "encrypted": 5,
    "flate-bomb": 1,
@@ -36,7 +36,7 @@
    "form-xobject": 4,
    "hidden-ocg-text": 1,
    "icc-profile": 1,
-   "identity-h": 5,
+   "identity-h": 6,
    "image": 6,
    "image-payload": 1,
    "incremental-update": 2,
@@ -64,6 +64,7 @@
    "rc4-40": 1,
    "rotation-crop": 1,
    "rotation-matrix": 1,
+   "round-trip": 1,
    "shared-content-stream": 1,
    "shared-font-program": 1,
    "shared-form": 1,
@@ -2717,6 +2718,56 @@
        42.5
       ],
       "text": "KEEP_PUBLIC_RUNS"
+     }
+    ]
+   }
+  },
+  {
+   "id": "pdflib-type0-subset",
+   "path": "generated/pdflib-type0-subset.pdf",
+   "sha256": "65bc51aca350617b4e1a0de510619b7ee863d529f32dcdf6f529d6680391b553",
+   "bytes": 2629,
+   "pages": 1,
+   "features": [
+    "embedded-font",
+    "identity-h",
+    "round-trip"
+   ],
+   "origin": "tests/fixtures/generators/generate.py",
+   "license": "synthetic, generated (original)",
+   "deterministic": true,
+   "expected": {
+    "behavior": "pdf-lib shape: Type0 Identity-H subset (CIDToGIDMap Identity, bfchar ToUnicode, drawn spaces, no x/y/z); edit, export and edit the export again for three rounds on the embedded and the registered-font path; redacting words one by one leaves no space glyph between them",
+    "mustRemove": [
+     "CD34"
+    ],
+    "mustKeepText": [
+     "KEEP_PUBLIC_PDFLIB",
+     "AB12",
+     "EF56"
+    ],
+    "regions": [
+     {
+      "kind": "sensitive",
+      "page": 0,
+      "rectTopLeft": [
+       115,
+       121,
+       141,
+       133
+      ],
+      "text": "CD34"
+     },
+     {
+      "kind": "public",
+      "page": 0,
+      "rectTopLeft": [
+       19,
+       151,
+       129,
+       163
+      ],
+      "text": "KEEP_PUBLIC_PDFLIB"
      }
     ]
    }
