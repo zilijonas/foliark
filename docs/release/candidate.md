@@ -34,8 +34,8 @@ Checks on `0acc3e4` (one supervised sequential chain through `~/ai/bin/memory-qu
 
 Owner files (outside the repo, never committed): the original invoice and the copy HDDN saved on 0.3.1, through the SDK over the local wasm. Every paragraph (68 and 66 paragraph/mode cases) edited, exported and edited again three times, once in the file's own fonts and once in Liberation Sans: text read back exactly by the engine and by PyMuPDF, no U+FFFD, no more space glyphs than the new text draws; 66/68 and 65/66 pass, the rest are `EDIT_NO_FIT` where Liberation Sans with added letters is wider than the line allows (unchanged text fits). Per-word region redactions of the invoice-date line leave no glyph on that line in either file. Rendered pages of round 3 checked by eye; poppler reads the same text.
 
-Owner publish command, from the repository root `/Users/agent/ai/repos/foliark` (after `npm login`; rebuild with the commands above if the tarball is gone and compare the sha256):
-`npm publish ./dist-pkg/zilijonas-foliark-0.3.2.tgz --access public`
+Owner publish command (checks the sha256 against this record, logs in through the browser, publishes; rebuild with the commands above if the tarball is gone):
+`cd /Users/agent/ai/repos/foliark && shasum -a 256 dist-pkg/zilijonas-foliark-0.3.2.tgz && npm login --auth-type=web && npm publish ./dist-pkg/zilijonas-foliark-0.3.2.tgz --access public --auth-type=web`
 
 ---
 
