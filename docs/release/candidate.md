@@ -1,3 +1,44 @@
+# Release candidate: @zilijonas/foliark 0.3.2 (NEW-138: a saved file edits again, no leftover spaces, edits read back)
+
+Qualified on 2026-11-19 on the owner's Mac mini (same toolchain as 0.1.0). Fixes for editing a file Foliark saved, found on the owner's invoices in HDDN (`CHANGELOG.md` [0.3.2], ADR 0018, spec 5.1, 6.3, 12): every resource name a writer adds is fresh against the page's (or Form's) own and inherited resources, so a saved file with `FkE*`/`FkR*`/`FlkImg*`/`FlkFm*`/`FoliarkFlat*` names no longer refuses `INVALID_ARGUMENT`; a registered font is reused only with its proven glyph record, so an export's stripped subset is never drawn through (it garbled the line); whitespace glyphs inside a removed stretch go with it (privacy); every edit reads its text back and refuses `INTERNAL` `editReadBack` (a `RejectedChange`) if it differs. No API shape changes. Not published by an agent: the owner publishes this exact tarball (`npm publish`, local). Source correspondence: tag `v0.3.2` on the commit that carries this record; the tarball was built from the source commit below, and the record commit differs from it only by documentation. `tools/release/dry-run.sh` reads the first recorded sha256 in this file, so the 0.3.2 hash stays in this section, above the 0.3.1 record. No budget was re-based: wasm gzip 2,290,917 B is inside the 0.1.4 cap (2,352,843 B, 97.4 percent of it); paragraph prepare 7.1 ms and edit apply 64.2 ms medians, inside their 12 ms and 101 ms budgets (the read-back adds one reopen and one page interpretation per edit).
+
+| | |
+|---|---|
+| file | `dist-pkg/zilijonas-foliark-0.3.2.tgz` (gitignored): `/Users/agent/ai/repos/foliark/dist-pkg/zilijonas-foliark-0.3.2.tgz` |
+| sha256 | `cf49fce92ef1ffe039b6a0f06bdfac3cd9f0a8122c747b37eaa7f8fb7af0bf3d` |
+| size | 3,508,118 B, 292 entries (0.3.1: 292) |
+| built from | foliark `0acc3e4` on `fix/edit-round-trip` (`chore(release): bump @zilijonas/foliark to 0.3.2`; the only other change in the tree, `docs/plan/contracts.md`, is unrelated and not packaged); `scripts/build-wasm.sh && pnpm build:sdk && tests/package-consumers/pack.sh <dir>`; packed three times (`dist-pkg` and two temp dirs), identical sha256 |
+| wasm | `wasm/foliark_wasm_bg.wasm` sha256 `da135f6937f6ed0c1c480700749a3466841e39c28da855e63eb50bb9249fd67a`, 6,010,257 B raw, 2,290,917 B gzip -9 (0.3.1: `30536a56...`, 5,991,012 B, 2,283,543 B) |
+
+Checks on `0acc3e4` (one supervised sequential chain through `~/ai/bin/memory-queue`, `CARGO_BUILD_JOBS=2`, one browser engine at a time, Vitest `--maxWorkers=1 --no-file-parallelism`; fuzz smoke self-queued, run unwrapped; the chain's two extra packs pointed at missing directories and were redone by hand right after, same tree):
+
+| Check | Command | Exit | Result |
+|---|---|---|---|
+| format, lint | `cargo fmt --check`; `cargo clippy --workspace --all-targets --locked -- -D warnings` | 0, 0 | |
+| Rust tests | `cargo test --workspace --locked --no-fail-fast` | 0 | 494 passed, 0 failed, 0 ignored over 65 targets, including `strict_native` and the new `edit_round_trip` (3 rounds, both font paths, space glyphs) |
+| licences, advisories | `cargo deny check licenses bans sources`; `cargo deny check advisories` | 0, 0 | bans ok, licenses ok, sources ok; advisories ok |
+| wasm and SDK build | `pnpm install --frozen-lockfile`; `scripts/build-wasm.sh && pnpm build:sdk` | 0, 0 | sha256 above |
+| TS parity | `scripts/check-ts-parity.sh` | 0 | in sync (97 files) |
+| SDK tests | `pnpm --filter @zilijonas/foliark exec vitest run --maxWorkers=1 --no-file-parallelism` | 0 | 90 passed (14 files, new `edit-round-trip.spec.ts`) |
+| oracle controls | `tests/oracles/.venv/bin/python tests/oracles/controls.py` | 0 | leaky caught 48/48, safe passed 17/17; fidelity 7/7, 3/3; shift 17/17 |
+| acceptance | `SKIP_BUILD=1 tests/integration/acceptance/run.sh` | 0 | 95 cases (new fixture `pdflib-type0-subset`), 570 results: SAFE 468, EXPLAINED 47, REFUSED 55; negative controls 131, missed 0; cancellation 27 attempts, 0 findings |
+| smoke | `pnpm smoke chromium`, `pnpm smoke webkit` | 0, 0 | |
+| browser specs | `tests/browser/run.sh --project=<engine> --workers=1`, once per engine | 0, 0, 0 | 33 passed (11 each) |
+| pack x3 | `tests/package-consumers/pack.sh <dir>` | 0, 0, 0 | identical sha256 |
+| package consumers | `tests/package-consumers/run.sh` | 0 | 6 builds ok |
+| budgets | `node --test tools/bench/check-budgets.test.mjs`; fresh `sdk.mjs --extended` x2 + `scans-sdk.mjs` (chromium) through `check-budgets.mjs` | 0, 0 | 40 ok, 38 webkit skipped, 0 failing |
+| notices | `node scripts/gen-notices.mjs --check` | 0 | up to date |
+| export size | `cargo build --release -p foliark-engine --example export_size`; `tools/bench/export-size.py --check` | 0, 0 | Foliark <= PyMuPDF on every exportable fixture |
+| fuzz smoke | `FUZZ_SECS=30 tools/fuzz-smoke/run.sh` | 0 | 7 targets x 30 s, all clean |
+| release dry run | `tools/release/dry-run.sh` | 0 | tarball bytes equal the recorded sha256, manifest 0.3.2, 292 entries, notices, SBOM (102 components), `SHA256SUMS`, package README names tag `v0.3.2`, `npm publish --dry-run` against an unreachable registry |
+
+Owner files (outside the repo, never committed): the original invoice and the copy HDDN saved on 0.3.1, through the SDK over the local wasm. Every paragraph (68 and 66 paragraph/mode cases) edited, exported and edited again three times, once in the file's own fonts and once in Liberation Sans: text read back exactly by the engine and by PyMuPDF, no U+FFFD, no more space glyphs than the new text draws; 66/68 and 65/66 pass, the rest are `EDIT_NO_FIT` where Liberation Sans with added letters is wider than the line allows (unchanged text fits). Per-word region redactions of the invoice-date line leave no glyph on that line in either file. Rendered pages of round 3 checked by eye; poppler reads the same text.
+
+Owner publish command, from the repository root `/Users/agent/ai/repos/foliark` (after `npm login`; rebuild with the commands above if the tarball is gone and compare the sha256):
+`npm publish ./dist-pkg/zilijonas-foliark-0.3.2.tgz --access public`
+
+---
+
 # Release candidate: @zilijonas/foliark 0.3.1 (NEW-136: push-down background refusal, Info format characters, bounded push-down budget)
 
 Qualified on 2026-11-01 on the owner's Mac mini (same toolchain as 0.1.0). Fixes from an independent review of 0.3.0, before HDDN adopts it (`CHANGELOG.md` [0.3.1], ADRs 0015 to 0017, spec §12): push-down refuses `EDIT_NO_FIT` with the new feature `reflowBackground` when the paragraph and the moved lines sit on a staying image, shading, pattern, text or soft-masked container (a scan with OCR text), so a mapped redaction can no longer leave the image's pixels under its old place uncovered (privacy); `pushDown` has no budget for a line step under 0.5 pt and adds at most 64 lines (`prepareParagraph` could spin); kept Info text drops format, private-use, noncharacter and variation-selector code points before the leak check; ADR 0016/0017 wording. No API shape changes. Not published by an agent: the owner publishes this exact tarball (`npm publish`, local). Source correspondence: tag `v0.3.1` on the commit that carries this record; the tarball was built from the source commit below, and the record commit differs from it only by documentation. `tools/release/dry-run.sh` reads the first recorded sha256 in this file, so the 0.3.1 hash stays in this section, above the 0.3.0 record. The source commit is `claude/teo-f3fix` = `claude/text-edit-overhaul` `4e5b1de` (the 0.3.0 record) plus the NEW-136 commits. No budget was re-based: wasm gzip 2,283,543 B is inside the 0.1.4 cap (2,352,843 B); paragraph prepare 7.4 ms median, inside its 12 ms budget. HDDN production is unchanged by this record.
