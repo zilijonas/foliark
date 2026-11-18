@@ -11,6 +11,7 @@ mod search;
 mod selection;
 mod source_face;
 
+pub(crate) use extract::spaces_beside;
 pub use extract::{ClusterId, TextLayout};
 pub(crate) use index::TextIndex;
 pub use source_face::{SourceApprox, SourceFontFace};

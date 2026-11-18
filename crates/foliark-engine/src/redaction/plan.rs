@@ -639,6 +639,34 @@ fn plan_page(
         .filter_map(|d| d.loc)
         .collect();
 
+    // What goes by area or by list, with its regions; then the whitespace inside a removed
+    // stretch of its line, which takes its neighbour's regions (spaces left at their old places
+    // would spell the removed words' lengths).
+    let mut gone: HashMap<ClusterId, Vec<u32>> = HashMap::new();
+    for item in &model.items {
+        if let ItemKind::Glyph(g) = &item.kind {
+            let quad = g.quad_user.map(model.geometry.user_to_display);
+            let id = ClusterId {
+                page,
+                path: item.path.clone(),
+                loc: item.loc,
+                glyph: g.op_glyph_index,
+            };
+            let mut hit: Vec<u32> = (0..boxes.len() as u32)
+                .filter(|&i| text_coverage(&quad, boxes[i as usize]).is_some())
+                .collect();
+            hit.extend(must.get(&id).into_iter().flatten());
+            if !hit.is_empty() {
+                gone.insert(id, hit);
+            }
+        }
+    }
+    let beside: HashMap<ClusterId, Vec<u32>> =
+        crate::text::spaces_beside(model, |id| gone.contains_key(id))?
+            .into_iter()
+            .map(|(space, next)| (space, gone[&next].clone()))
+            .collect();
+
     let mut plan = PagePlan {
         page_index: page,
         regions: Vec::new(),
@@ -680,11 +708,17 @@ fn plan_page(
                     glyph: g.op_glyph_index,
                 };
                 let forced = must.get_key_value(&id);
-                if by_area.is_empty() && forced.is_none() {
+                let companion = beside.get(&id);
+                if by_area.is_empty() && forced.is_none() && companion.is_none() {
                     scan.survivor(g);
                     continue;
                 }
                 let mut hit: Vec<u32> = by_area.iter().map(|(i, _)| *i).collect();
+                if let Some(own) = companion {
+                    hit.extend(own);
+                    hit.sort_unstable();
+                    hit.dedup();
+                }
                 if let Some((key, own)) = forced {
                     resolved.insert(*key);
                     // The regions of that redaction that reach the glyph, else all of them.
@@ -712,7 +746,7 @@ fn plan_page(
                     font: g.font,
                     code: g.char_code,
                     quad,
-                    reason: match (by_area.is_empty(), forced.is_some()) {
+                    reason: match (by_area.is_empty(), forced.is_some() || companion.is_some()) {
                         (false, true) => ClusterReason::Both,
                         (true, _) => ClusterReason::MustRemove,
                         _ => ClusterReason::Overlap,
