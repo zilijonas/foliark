@@ -572,16 +572,12 @@ pub fn redact_images(
                 w.replace_stream(obj, NewStream { dict, data });
             }
             Target::Clone { page, path, span } => {
-                let name = format!("FlkImg{n}");
+                let base = format!("FlkImg{n}");
                 let new = w.add_object(dict_val(dict), Some(data));
-                match path.last() {
-                    None => {
-                        w.add_page_xobject(page as usize, &name, new)?;
-                    }
-                    Some(_) => {
-                        w.add_form_xobject(span.0, &name, new);
-                    }
-                }
+                let name = match path.last() {
+                    None => w.add_page_xobject(page as usize, &base, new)?,
+                    Some(_) => w.add_form_xobject(span.0, &base, new),
+                };
                 w.replace_span(span.0, span.1, format!("/{name} Do").as_bytes());
             }
         }

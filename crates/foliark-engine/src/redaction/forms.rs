@@ -219,17 +219,13 @@ impl Targets {
         let mut redirected: Vec<(u32, Vec<InstanceStep>, SourceLoc)> = Vec::new();
         for (n, (page, parent, loc, name, clone)) in redirects.iter().enumerate() {
             let target = self.stream(*page, parent, loc.stream);
-            let new = format!("FlkFm{n}");
+            let base = format!("FlkFm{n}");
+            let new = match parent.last() {
+                None => w.add_page_xobject(*page as usize, &base, Val::Src(*clone))?,
+                Some(_) => w.add_form_xobject(target, &base, Val::Src(*clone)),
+            };
             let range = loc.start as usize..loc.end as usize;
             w.replace_span(target, range, format!("/{new} Do").as_bytes());
-            match parent.last() {
-                None => {
-                    w.add_page_xobject(*page as usize, &new, Val::Src(*clone))?;
-                }
-                Some(_) => {
-                    w.add_form_xobject(target, &new, Val::Src(*clone));
-                }
-            }
             gone.entry((*page, parent.clone()))
                 .or_default()
                 .insert(name.clone());

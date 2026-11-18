@@ -552,9 +552,10 @@ fn registered_liberation_sans_run_is_searchable_in_both_oracles() {
         embed_registered_font(&mut w, reg.get(&info.id).unwrap(), &used).is_err(),
         "one font object per (font, document)"
     );
-    w.add_page_font(0, "FoliarkF1", embedded.font.clone())
+    let res = w
+        .add_page_font(0, "FoliarkF1", embedded.font.clone())
         .unwrap();
-    let fonts = BTreeMap::from([(info.id.as_str(), ("FoliarkF1", &embedded))]);
+    let fonts = BTreeMap::from([(info.id.as_str(), (res.as_str(), &embedded))]);
     let ops = emit_plan(
         &plan,
         &fonts,

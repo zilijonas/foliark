@@ -15,6 +15,17 @@ mod graph;
 mod shrink;
 pub mod text;
 
+/// `base`, or the first of `base_2`, `base_3`, ... that is not `taken`.
+fn fresh(base: &str, taken: impl Fn(&str) -> bool) -> String {
+    let mut name = base.to_owned();
+    let mut k = 1;
+    while taken(&name) {
+        k += 1;
+        name = format!("{base}_{k}");
+    }
+    name
+}
+
 /// Span substitutions per content stream: decoded byte range and replacement operators.
 pub(crate) type Spans = BTreeMap<ObjectId, Vec<(Range<usize>, Vec<u8>)>>;
 
@@ -267,41 +278,67 @@ impl<'d> Writer<'d> {
         Val::New(self.extras.len() - 1)
     }
 
-    /// Make `font` (from `add_object`) usable as `/name Tf` on page `page`. A name the page
-    /// already has is refused at `write`.
+    /// Make `font` (from `add_object`) usable on page `page` and return its name for `/name Tf`:
+    /// `base`, or the first free `base_2`, `base_3`, ... when the page's own or inherited font
+    /// resources or an earlier addition already use it (a file this engine wrote before carries
+    /// its names).
     pub fn add_page_font(
         &mut self,
         page: usize,
-        name: &str,
+        base: &str,
         font: Val,
-    ) -> Result<&mut Self, PdfError> {
-        if page >= self.doc.page_count() {
-            return Err(PdfError::page_out_of_range(page));
-        }
-        self.page_fonts
-            .entry(page)
-            .or_default()
-            .push((name.as_bytes().to_vec(), font));
-        Ok(self)
+    ) -> Result<String, PdfError> {
+        let name = self.fresh_page_name(page, "Font", base)?;
+        let added = self.page_fonts.entry(page).or_default();
+        added.push((name.as_bytes().to_vec(), font));
+        Ok(name)
     }
 
-    /// Make `xobject` (an added object or a source Form, `Val::Src`) usable as `/name Do` on
-    /// page `page`. A name the page already has is refused at `write`. Only page content: a
+    /// Make `xobject` (an added object or a source Form, `Val::Src`) usable on page `page` and
+    /// return its name for `/name Do`, chosen as in `add_page_font`. Only page content: a
     /// Form's own resources are not reachable here.
     pub fn add_page_xobject(
         &mut self,
         page: usize,
-        name: &str,
+        base: &str,
         xobject: Val,
-    ) -> Result<&mut Self, PdfError> {
+    ) -> Result<String, PdfError> {
+        let name = self.fresh_page_name(page, "XObject", base)?;
+        let added = self.page_xobjects.entry(page).or_default();
+        added.push((name.as_bytes().to_vec(), xobject));
+        Ok(name)
+    }
+
+    /// A name for a new `category` resource of page `page` that neither the page's resources
+    /// (own or inherited) nor an earlier addition use.
+    fn fresh_page_name(&self, page: usize, category: &str, base: &str) -> Result<String, PdfError> {
+        use hayro::hayro_syntax::object::Dict;
         if page >= self.doc.page_count() {
             return Err(PdfError::page_out_of_range(page));
         }
-        self.page_xobjects
-            .entry(page)
-            .or_default()
-            .push((name.as_bytes().to_vec(), xobject));
-        Ok(self)
+        let mut node = self.doc.page(page)?.raw().clone();
+        let mut source = None;
+        for _ in 0..64 {
+            if let Some(res) = node.get::<Dict<'_>>("Resources") {
+                source = res.get::<Dict<'_>>(category);
+                break;
+            }
+            match node.get::<Dict<'_>>("Parent") {
+                Some(p) => node = p,
+                None => break,
+            }
+        }
+        let added = if category == "Font" {
+            &self.page_fonts
+        } else {
+            &self.page_xobjects
+        };
+        Ok(fresh(base, |n| {
+            source.as_ref().is_some_and(|d| d.contains_key(n))
+                || added
+                    .get(&page)
+                    .is_some_and(|a| a.iter().any(|(k, _)| k == n.as_bytes()))
+        }))
     }
 
     /// Take the `/name` entry out of page `page`'s XObject resources, so an XObject no content
@@ -347,12 +384,24 @@ impl<'d> Writer<'d> {
         Ok(self)
     }
 
-    /// Make `xobject` usable as `/name Do` inside Form `form` (a source Form or a clone). The
-    /// Form must have `/Resources` of its own; a name it already has is refused at `write`.
-    pub fn add_form_xobject(&mut self, form: ObjectId, name: &str, xobject: Val) -> &mut Self {
+    /// Make `xobject` usable inside Form `form` (a source Form or a clone) and return its name
+    /// for `/name Do`, chosen as in `add_page_font` against the Form's own XObject resources.
+    /// The Form must have `/Resources` of its own.
+    pub fn add_form_xobject(&mut self, form: ObjectId, base: &str, xobject: Val) -> String {
+        use hayro::hayro_syntax::object::{Dict, ObjectIdentifier, Stream};
+        let source = self.redirects.aliases.get(&form).copied().unwrap_or(form);
+        let id = ObjectIdentifier::new(source.num as i32, i32::from(source.generation));
+        let own = (self.doc.pdf().xref())
+            .get::<Stream<'_>>(id)
+            .and_then(|s| s.dict().get::<Dict<'_>>("Resources"))
+            .and_then(|r| r.get::<Dict<'_>>("XObject"));
         let entry = self.redirects.form_xobjects.entry(form).or_default();
+        let name = fresh(base, |n| {
+            own.as_ref().is_some_and(|d| d.contains_key(n))
+                || entry.0.iter().any(|(k, _)| k == n.as_bytes())
+        });
         entry.0.push((name.as_bytes().to_vec(), xobject));
-        self
+        name
     }
 
     /// Take `/name` out of Form `form`'s XObject resources (see `drop_page_xobject`).
