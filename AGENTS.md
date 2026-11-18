@@ -56,6 +56,7 @@ Documents:
   - [0015](docs/adr/0015-edit-limits-and-push-down.md) edit limits: stable width first, then an extended width from the page's evidence (mirrored margin, path/image obstacles, containers); opt-in `reflow: 'pushDown'` moves content below by `cm`, redactions mapped through shifts
   - [0016](docs/adr/0016-keep-metadata.md) `metadata: 'keep'` (opt-in, native): 8 standard Info fields written fresh, none spelling removed text; XMP always removed
   - [0017](docs/adr/0017-default-font-match-families.md) default font-match rules for more OFL families (spec §6.4 rung 3)
+  - [0018](docs/adr/0018-edit-round-trip.md) a written file stays editable (fresh resource names, registered font reused only with its record), spaces inside removed stretches go, edits read back (`INTERNAL` `editReadBack`)
 
 ## 3. Commands
 
