@@ -120,31 +120,64 @@ impl TextLayout {
     }
 }
 
-/// Whitespace glyphs of `model` inside a removed stretch of their line: every non-whitespace
-/// glyph next to them on the line (before and after, where there is one) is `removed`. Each comes
-/// with such a neighbour. Left at their old places they would spell where removed words began
-/// and ended; one beside a kept glyph stays, so kept words keep their spacing.
+/// Whitespace glyphs of `model` inside a removed stretch, each with a removed glyph it goes with:
+/// one whose non-whitespace neighbours on its line (before and after, where there is one) are all
+/// `removed`, and one whose centre lies in the box of a run of removed glyphs on a line (a space
+/// an earlier edit left behind, drawn on its own). Left at their old places they would spell where
+/// removed words began and ended; one beside a kept glyph stays, so kept words keep their spacing.
 pub(crate) fn spaces_beside(
     model: &SemanticPage,
     removed: impl Fn(&ClusterId) -> bool,
 ) -> Result<Vec<(ClusterId, ClusterId)>, PdfError> {
     let (glyphs, ..) = collect(model, true)?;
+    let lines = lines(&glyphs);
     let mut out = Vec::new();
-    for line in lines(&glyphs) {
+    // Boxes of the runs of removed glyphs on each line, each with one of its glyphs.
+    let mut runs: Vec<([f64; 4], usize)> = Vec::new();
+    for line in &lines {
+        let mut run: Option<([f64; 4], usize)> = None;
+        for &gi in line.glyphs.iter().filter(|&&gi| !glyphs[gi].whitespace) {
+            if removed(&glyphs[gi].id) {
+                let b = bounds([glyphs[gi].quad].into_iter());
+                let (r, k) = run.unwrap_or((b, gi));
+                run = Some((
+                    [
+                        r[0].min(b[0]),
+                        r[1].min(b[1]),
+                        r[2].max(b[2]),
+                        r[3].max(b[3]),
+                    ],
+                    k,
+                ));
+            } else {
+                runs.extend(run.take());
+            }
+        }
+        runs.extend(run);
+    }
+    for line in &lines {
         let ids = &line.glyphs;
         for (j, &gi) in ids.iter().enumerate() {
-            if !glyphs[gi].whitespace || removed(&glyphs[gi].id) {
+            let g = &glyphs[gi];
+            if !g.whitespace || removed(&g.id) {
                 continue;
             }
             let ink = |k: &&usize| !glyphs[**k].whitespace;
             let before = ids[..j].iter().rev().find(ink);
             let after = ids[j + 1..].iter().find(ink);
             let gone = |k: Option<&usize>| k.is_none_or(|k| removed(&glyphs[*k].id));
-            if gone(before)
-                && gone(after)
-                && let Some(&k) = before.or(after)
-            {
-                out.push((glyphs[gi].id.clone(), glyphs[k].id.clone()));
+            let c = bounds([g.quad].into_iter());
+            let (x, y) = ((c[0] + c[2]) / 2.0, (c[1] + c[3]) / 2.0);
+            let inside = runs
+                .iter()
+                .find(|(r, _)| r[0] <= x && x <= r[2] && r[1] <= y && y <= r[3]);
+            let with = match (gone(before) && gone(after), before.or(after), inside) {
+                (true, Some(&k), _) => Some(k),
+                (_, _, Some(&(_, k))) => Some(k),
+                _ => None,
+            };
+            if let Some(k) = with {
+                out.push((g.id.clone(), glyphs[k].id.clone()));
             }
         }
     }

@@ -2725,8 +2725,8 @@
   {
    "id": "pdflib-type0-subset",
    "path": "generated/pdflib-type0-subset.pdf",
-   "sha256": "65bc51aca350617b4e1a0de510619b7ee863d529f32dcdf6f529d6680391b553",
-   "bytes": 2629,
+   "sha256": "af3ec228ee87e93610a6b44cde8e0e5c3a3a504390705d685c2a7da5ba34ebab",
+   "bytes": 2636,
    "pages": 1,
    "features": [
     "embedded-font",
@@ -2737,7 +2737,7 @@
    "license": "synthetic, generated (original)",
    "deterministic": true,
    "expected": {
-    "behavior": "pdf-lib shape: Type0 Identity-H subset (CIDToGIDMap Identity, bfchar ToUnicode, drawn spaces, no x/y/z); edit, export and edit the export again for three rounds on the embedded and the registered-font path; redacting words one by one leaves no space glyph between them",
+    "behavior": "pdf-lib shape: Type0 Identity-H subset (CIDToGIDMap Identity, bfchar ToUnicode, drawn spaces, no x/y/z) with one space an earlier edit left behind on the first line; edit, export and edit the export again for three rounds on the embedded and the registered-font path; redacting words one by one leaves no space glyph between them",
     "mustRemove": [
      "CD34"
     ],

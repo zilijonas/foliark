@@ -214,7 +214,8 @@ fn redacting_adjacent_words_one_by_one_leaves_no_space_glyph_between_them() {
 #[test]
 fn edited_lines_keep_no_space_glyph_of_the_text_they_replaced() {
     // Every spaced line is replaced in the file's own font, so the source's space glyph lives
-    // on only through the new text; the export is then edited again.
+    // on only through the new text; the export is then edited again. The space drawn on its own
+    // inside the first line goes with it.
     let rounds = [
         [
             "Invoice-date: 2026-12-01",
@@ -230,6 +231,8 @@ fn edited_lines_keep_no_space_glyph_of_the_text_they_replaced() {
         ],
     ];
     let mut bytes = fixture(FILE);
+    // Negative control: the probe sees the first line's two spaces and the one left beside them.
+    assert_eq!(probe("spaces-edited-source.pdf", &bytes)[0].1, 3);
     for (round, texts) in rounds.iter().enumerate() {
         let (mut e, doc, _) = engine(bytes);
         let edits = (texts.iter().enumerate())

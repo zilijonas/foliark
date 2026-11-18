@@ -386,6 +386,8 @@ def pdflib_type0_subset():
     }
     content = b"".join(("BT /FL-0 10 Tf 20 %d Td %s Tj ET\n" % (360 - 30 * i, _cid_hex(line, chars))).encode()
                        for i, line in enumerate(PDFLIB_LINES))
+    # A space drawn on its own inside the first line, as an earlier edit left one behind (0.3.1).
+    content += ("BT /FL-0 10 Tf 110 360 Td %s Tj ET\n" % _cid_hex(" ", chars)).encode()
     return simple(content, ex, fonts="/FL-0 6 0 R")
 
 
@@ -930,7 +932,7 @@ FIXTURES = {
                           "regions": [{"kind": "sensitive", "page": 0, "rectTopLeft": [54, 103, 81, 110], "text": RUNS_SECRET},
                                       R(20, 360, "KEEP_PUBLIC_RUNS", 10, kind="public")]}, {}),
     "pdflib-type0-subset": (pdflib_type0_subset, ["embedded-font", "identity-h", "round-trip"],
-                            {"behavior": "pdf-lib shape: Type0 Identity-H subset (CIDToGIDMap Identity, bfchar ToUnicode, drawn spaces, no x/y/z); edit, export and edit the export again for three rounds on the embedded and the registered-font path; redacting words one by one leaves no space glyph between them",
+                            {"behavior": "pdf-lib shape: Type0 Identity-H subset (CIDToGIDMap Identity, bfchar ToUnicode, drawn spaces, no x/y/z) with one space an earlier edit left behind on the first line; edit, export and edit the export again for three rounds on the embedded and the registered-font path; redacting words one by one leaves no space glyph between them",
                              "mustRemove": ["CD34"], "mustKeepText": ["KEEP_PUBLIC_PDFLIB", "AB12", "EF56"],
                              "regions": [{"kind": "sensitive", "page": 0, "rectTopLeft": [115, 121, 141, 133], "text": "CD34"}, {"kind": "public", "page": 0, "rectTopLeft": [19, 151, 129, 163], "text": "KEEP_PUBLIC_PDFLIB"}]}, {}),
     "word-right-note-body": (word_right_note_body, ["embedded-font", "mixed-style-paragraph"],
