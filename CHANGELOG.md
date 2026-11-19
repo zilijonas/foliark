@@ -4,6 +4,17 @@ All notable changes to `@zilijonas/foliark` (named `@foliark/sdk` before 0.1.0 w
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-11-19
+
+Edits of right-aligned and centered text, and a width tolerance for edits a hair too wide, found on the owner's invoice in HDDN (ADR 0019). Source: tag `v0.3.3`. Tarball and hashes: `docs/release/candidate.md`.
+
+### Added
+- `ParagraphInfo.align?: 'left' | 'right' | 'center'`, read from the rows' geometry: rows whose right edges agree (0.1 em) with ragged left edges are `right`, rows whose centres agree with both edges ragged are `center`; a lone row is `right` only when a nearby line ends at the same x and starts elsewhere (a column of amounts, a date under an invoice number), never when it starts at the page's left margin or spans more than half the page's text width; justified rows, unmapped text and anything unclear stay `left`. Absent from older engines; the SDK refuses an unknown value (ADR 0019) (NEW-139).
+
+### Fixed
+- An edit of a right-aligned block (an invoice's date lines) was laid out left-aligned from the block's left edge, so a changed row no longer ended at the block's right edge, and a date a hair wider wrapped its last digits to a new line while the preview said it fit. An aligned block now keeps its right edge (centre): every line is set flush to it, the box grows into the free room on the left (bounded by the nearest word, rule, image or frame and the mirrored page margin, as the right side is), every row break is a hard line and `originalText` carries no indent spaces (old clients' leading spaces are ignored in an aligned layout). Push-down reads the grown column (ADR 0019) (NEW-139).
+- An edit that fits but needs one line more than the paragraph has (a row grown by a character) now takes the narrowest width up to 1 em wider (an aligned box: up to `maxWrapWidth`) that keeps the paragraph's lines, instead of wrapping a word to a new line. Text that keeps its lines, or needs a new line even 1 em wider, lays out as before (ADR 0019, amends ADR 0015) (NEW-139).
+
 ## [0.3.2] - 2026-11-19
 
 Fixes for editing a file that Foliark saved, found on the owner's invoices in HDDN (ADR 0018). Source: tag `v0.3.2`. Tarball and hashes: `docs/release/candidate.md`.
