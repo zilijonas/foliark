@@ -3,8 +3,7 @@
 Status: Accepted, 2026-11-19. Amends spec 6.2 (paragraph metrics), 6.3 (layout) and ADR 0015 (layout order).
 
 ## Context
-HDDN (0.3.2) edits the right-aligned date block of an invoice ("Sąskaitos data: 2026-10-12" over "Apmokėti iki: 2026-11-12",
-both rows ending at one x). Replacing a date with one a hair wider wrapped its last digits to a third line, and the preview said
+HDDN (0.3.2) edits the right-aligned date block of an invoice (an issue-date row over a due-date row, both rows ending at one x). Replacing a date with one a hair wider wrapped its last digits to a third line, and the preview said
 `fits: true`. Each further edit saw that extra line, a seeded hard break and a stray indent, so the block degraded. Three causes:
 - The engine had no notion of alignment. A right-aligned block was laid out left-aligned from its left edge; HDDN imitated the
   shorter row's offset with leading spaces, which the engine counted as an indent. Any edit that changed a row's width left the
