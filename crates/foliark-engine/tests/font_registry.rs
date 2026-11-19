@@ -158,6 +158,7 @@ fn plan(
             line_step: 14.0,
             first_baseline: 100.0,
             origin_x: 10.0,
+            align: foliark_model::TextAlign::Left,
         },
         &Ladder {
             registry: reg,

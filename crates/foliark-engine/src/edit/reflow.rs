@@ -15,7 +15,7 @@ use crate::redaction::plan::display_bounds;
 use crate::redaction::text::num;
 use crate::writer::{Val, Writer, instruction};
 use foliark_model::{
-    InstancePath, Matrix, ObjectId, PageShift, PdfError, PushDown, Rect, SourceLoc,
+    InstancePath, Matrix, ObjectId, PageShift, PdfError, PushDown, Rect, SourceLoc, TextAlign,
 };
 use hayro::hayro_syntax::content::UntypedIter;
 use hayro::hayro_syntax::object::{Array, Dict, MaybeRef, Name, Object};
@@ -412,9 +412,16 @@ impl<'a> Reflow<'a> {
                 units[u].clip = true;
             }
         }
-        let cut = p
-            .limits
-            .bottom_limit(p.info.origin_x + p.info.max_wrap_width);
+        // ADR 0019: the extended box's column, grown leftward for an aligned paragraph.
+        let (left, right) = p.column(p.info.max_wrap_width);
+        let cut = match p.info.align.unwrap_or_default() {
+            TextAlign::Left => p.limits.bottom_limit(right),
+            _ => {
+                let sel = p.limits.sel;
+                p.limits
+                    .bottom_limit_in(left.min(sel[0]), right.max(sel[2]))
+            }
+        };
         let mut below: Vec<usize> = (0..bounds.len())
             .filter(|&i| {
                 class[i] == Class::Drawn
@@ -465,7 +472,11 @@ impl<'a> Reflow<'a> {
         let em = info.font_size;
         // The column grows to what moves until stable; walking down by top, a gap of at least
         // `dy + 0.5 em` ends the moved set (a footer below it stays).
-        let mut col = (info.origin_x, info.origin_x + info.max_wrap_width);
+        let mut col = self.p.column(info.max_wrap_width);
+        if info.align.unwrap_or_default() != TextAlign::Left {
+            let sel = self.sel();
+            col = (col.0.min(sel[0]), col.1.max(sel[2]));
+        }
         let (items, stop) = loop {
             let (mut set, mut bottom, mut stop) = (Vec::new(), self.cut, None);
             for (k, &i) in self.below.iter().enumerate() {

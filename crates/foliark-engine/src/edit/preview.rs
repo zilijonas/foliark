@@ -8,7 +8,7 @@ use crate::document::EditContext;
 use crate::edit::Prepared;
 use foliark_model::{
     EditPreview, ErrorCode, ErrorDetails, FontStyle, PdfError, PreviewGlyph, PreviewLine, Rect,
-    Reflow, StyleSpan,
+    Reflow, StyleSpan, TextAlign,
 };
 use foliark_text::{Fnv, Laid, LayoutParams, layout_runs, normalize};
 
@@ -115,8 +115,9 @@ pub(super) fn plan_edit(
         ),
         Some((ids, part, at16)) => {
             // The part's own metrics; looks stay the whole selection's, which `looks` indexes.
-            let left = whole.info.origin_x;
-            let own = doc.prepare_clusters(page, &ids, left, font, ctx.fonts, ctx.font_match)?;
+            let (left, align) = (whole.info.origin_x, whole.info.align.unwrap_or_default());
+            let own =
+                doc.prepare_clusters(page, &ids, left, align, font, ctx.fonts, ctx.font_match)?;
             let index = own.looks[own.main].index;
             let main = whole.looks.iter().position(|l| l.index == index);
             (
@@ -192,16 +193,43 @@ pub(super) fn plan_edit(
                 max_lines,
                 line_step: info.line_step,
                 first_baseline: info.first_baseline,
-                origin_x: info.origin_x,
+                origin_x: prepared.column(wrap_width).0,
+                align: info.align.unwrap_or_default(),
             },
             &runs,
         )
     };
     let mut wrap_width = info.wrap_width;
     let mut laid = lay(wrap_width, info.max_lines)?;
+    // ADR 0019: the lines the paragraph has now, or the hard lines typed if more.
+    let rows = prepared.rows.max(part.split('\n').count()) as u32;
     if !laid.fits() && info.max_wrap_width > wrap_width {
         wrap_width = info.max_wrap_width;
         laid = lay(wrap_width, info.max_wrap_lines)?;
+    } else if laid.needed_lines() > rows && info.max_wrap_width > wrap_width {
+        // ADR 0019's width tolerance: text that fits but wraps to a line more than it has gets
+        // the narrowest wider width (up to 1 em more; an aligned box up to `maxWrapWidth`) that
+        // keeps its lines, so a date a hair wider does not wrap. Each width is budgeted at
+        // `maxWrapLines`, the budget of the widest box.
+        let reach = match info.align.unwrap_or_default() {
+            TextAlign::Left => (wrap_width + info.font_size).min(info.max_wrap_width),
+            _ => info.max_wrap_width,
+        };
+        let keeps = |l: &Laid| l.fits() && l.needed_lines() <= rows;
+        let wide = lay(reach, info.max_wrap_lines)?;
+        if keeps(&wide) {
+            let (mut lo, mut hi, mut best) = (wrap_width, reach, wide);
+            for _ in 0..12 {
+                let mid = (lo + hi) / 2.0;
+                let l = lay(mid, info.max_wrap_lines)?;
+                if keeps(&l) {
+                    (hi, best) = (mid, l);
+                } else {
+                    lo = mid;
+                }
+            }
+            (wrap_width, laid) = (hi, best);
+        }
     }
     let (mut push, mut blocked) = (None, None);
     if reflow == Reflow::PushDown {

@@ -532,6 +532,7 @@ fn registered_liberation_sans_run_is_searchable_in_both_oracles() {
         line_step: 14.0,
         first_baseline: 100.0,
         origin_x: 50.0,
+        align: foliark_model::TextAlign::Left,
     };
     let ladder = Ladder {
         registry: &reg,
