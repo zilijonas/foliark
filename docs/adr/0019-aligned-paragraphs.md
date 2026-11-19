@@ -24,7 +24,10 @@ both rows ending at one x). Replacing a date with one a hair wider wrapped its l
      justified line ends at the right margin whatever its alignment); that line is the last word of its row plus the words before it up
      to a gap of two spaces. Neither may start within a space of the page's left text margin (a full-width line ends at the right
      margin whatever its alignment). A lone row is never `center`;
-   - a row stretched past its text (`width - glyphs > 1.5 space` per word gap: justified word spacing) makes the selection `left`;
+   - rows that end together and have one width (their left edges within `ragged`) are `right` on the lone row's evidence below,
+     taken for the whole block: an edit that leaves the rows equal, or one row, still reads as it was written;
+   - a row stretched past its text (`width - glyphs > 1.5 space` per word gap, the space scaled to the row's own font size:
+     justified word spacing) makes the selection `left`;
    - anything else, an unmapped selection included, is `left`: the layout before this ADR.
 
    Tolerance: an aligning producer puts every row's end at one pen position, so ends agree to its rounding and to the difference
@@ -33,14 +36,16 @@ both rows ending at one x). Replacing a date with one a hair wider wrapped its l
    own advances) is 0.76 pt (0.084 em) apart, which `tol = 0.1 em` still reads as right-aligned and repairs. Rows with different
    text differ by a glyph at least; the narrowest glyphs are about a space wide (0.25 em), so `ragged = space / 2` stays above
    `tol`. A lone row's evidence comes from elsewhere on the page and is held to the tighter 0.05 em. Justified text reads as
-   `left` (it is laid out as before).
+   `left` (it is laid out as before). The space here is the page font's, never a caller's font, so `prepareParagraph` with and
+   without `font` reads the same alignment.
 2. **Aligned text.** Every break of an aligned block is hard: its rows are lines set one by one, so the text holds LF between
    rows and never leading spaces. In an aligned layout a line's leading spaces are ignored (old clients seed them), so they change
    nothing.
 3. **The box.** `right`: the right edge `R` is the rows' right edge and `originX + wrapWidth = R` for every width; the box grows
    leftward. `center`: the centre `C` of the selection stays at `originX + wrapWidth / 2`. The room on the left mirrors spec 6.2's
    right: the stable left edge is the selection's left edge when another word lies left of it on its lines (a lone row: up to that
-   word's right edge plus a space), else the page's left text margin; the extended left edge is the nearest obstacle on the left
+   word's right edge plus a space), else the page's left text margin, and never past the extended left edge (a rule or an image beside the rows bounds both); the
+   extended left edge is the nearest obstacle on the left
    plus a space, a container's left edge plus a space, or `min(left margin, W - max x of visible text)`, never right of the
    selection. `right`: `wrapWidth = max(R - stableLeft, measured)`, `maxWrapWidth = max(wrapWidth, R - extendedLeft)`.
    `center`: twice the nearer side's room. `maxLines`/`maxWrapLines` and push-down's column (ADR 0015) read the box's own column
