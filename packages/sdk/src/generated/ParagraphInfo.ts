@@ -5,6 +5,7 @@ import type { ParagraphSegment } from "./ParagraphSegment";
 import type { PushDown } from "./PushDown";
 import type { Rect } from "./Rect";
 import type { StyleSpan } from "./StyleSpan";
+import type { TextAlign } from "./TextAlign";
 import type { TextLook } from "./TextLook";
 
 export type ParagraphInfo = { docId: string, revision: number, pageIndex: number, bounds: Rect, originX: number, top: number, firstBaseline: number, fontSize: number, lineStep: number, color: [number, number, number], bold: boolean, italic: boolean, serif: boolean, mono: boolean, mixedStyle: boolean, wrapWidth: number, maxHeight: number, maxLines: number, 
@@ -17,7 +18,13 @@ maxWrapWidth: number, maxWrapLines: number,
  * ADR 0015: the line budget at `maxWrapWidth` with `reflow: 'pushDown'` and the region it
  * would move at that budget; null when nothing below can move.
  */
-pushDown: PushDown | null, originalText: string | null, font: FontResolution, editorFace?: EditorFace | null, 
+pushDown: PushDown | null, 
+/**
+ * The paragraph's alignment, from the page's text geometry (ADR 0019). `right` keeps the
+ * right edge (`originX + wrapWidth`) of every line, `center` the centre of the box; the box
+ * grows away from that edge. Absent from engines before 0.3.3: read it as `left`.
+ */
+align?: TextAlign, originalText: string | null, font: FontResolution, editorFace?: EditorFace | null, 
 /**
  * ADR 0012's style segments, top to bottom; empty when `originalText` is null. Their ranges
  * tile `originalText` exactly (a segment's hard-break LF ends it), so slicing the text at

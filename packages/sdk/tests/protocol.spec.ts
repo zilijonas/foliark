@@ -88,6 +88,17 @@ describe("generation and correlation", () => {
     const id3 = c2.register("pages", "p");
     expect(c2.receive(okRes(id3, [geometry])).kind).toBe("result");
   });
+
+  it("accepts a paragraph with or without its alignment and refuses one it does not know", () => {
+    const para = { docId: "d", revision: 0, pageIndex: 0, bounds: { x: 0, y: 0, width: 1, height: 1 }, font: {} };
+    const receive = (extra: object) => {
+      const c = new Correlator<string>();
+      return c.receive(okRes(c.register("prepareParagraph", "p"), { ...para, ...extra }));
+    };
+    expect(receive({}).kind).toBe("result");
+    expect(receive({ align: "right" }).kind).toBe("result");
+    expect(failure(receive({ align: "justify" })).code).toBe("PROTOCOL_ERROR");
+  });
 });
 
 describe("per-op payloads", () => {
