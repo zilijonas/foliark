@@ -64,4 +64,7 @@ both rows ending at one x). Replacing a date with one a hair wider wrapped its l
 - An edited right-aligned block keeps its right edge across edit, export, reopen and edit (round-trip test with PyMuPDF).
 - HDDN can show the alignment in its editor from `align` and the box `[originX, originX + wrapWidth]`; it no longer needs to seed
   indents for aligned rows.
+- Known limit: geometry that is truly ambiguous stays `left`. A lone row (or rows of one width) whose only neighbour starts and
+  ends where it does (an edited amount cell that became exactly as wide as the cell below it) has no evidence; its next edit is
+  laid out left-aligned from its left edge, as before 0.3.3.
 - Not covered: justified layout (word spacing), right-to-left text (still refused), rotated text (still refused).
