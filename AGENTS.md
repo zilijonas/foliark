@@ -57,6 +57,7 @@ Documents:
   - [0016](docs/adr/0016-keep-metadata.md) `metadata: 'keep'` (opt-in, native): 8 standard Info fields written fresh, none spelling removed text; XMP always removed
   - [0017](docs/adr/0017-default-font-match-families.md) default font-match rules for more OFL families (spec §6.4 rung 3)
   - [0018](docs/adr/0018-edit-round-trip.md) a written file stays editable (fresh resource names, registered font reused only with its record), spaces inside removed stretches go, edits read back (`INTERNAL` `editReadBack`)
+  - [0019](docs/adr/0019-aligned-paragraphs.md) paragraph alignment from row geometry (`align`), aligned edits keep their right edge (centre) and grow into mirrored room; width tolerance of up to 1 em before a new line
 
 ## 3. Commands
 

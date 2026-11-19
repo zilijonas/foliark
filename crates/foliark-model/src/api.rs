@@ -526,6 +526,12 @@ pub struct ParagraphInfo {
     /// ADR 0015: the line budget at `maxWrapWidth` with `reflow: 'pushDown'` and the region it
     /// would move at that budget; null when nothing below can move.
     pub push_down: Option<PushDown>,
+    /// The paragraph's alignment, from the page's text geometry (ADR 0019). `right` keeps the
+    /// right edge (`originX + wrapWidth`) of every line, `center` the centre of the box; the box
+    /// grows away from that edge. Absent from engines before 0.3.3: read it as `left`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub align: Option<TextAlign>,
     pub original_text: Option<String>,
     pub font: FontResolution,
     #[ts(optional = nullable)]
@@ -562,6 +568,18 @@ pub struct PageShift {
     pub page_index: u32,
     pub region: Rect,
     pub dy: f64,
+}
+
+/// [`ParagraphInfo::align`] (ADR 0019): where an edit's lines sit in their box. Justified text
+/// reads as `left`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum TextAlign {
+    #[default]
+    Left,
+    Right,
+    Center,
 }
 
 /// `TextEdit.reflow` (ADR 0015): what an edit that needs more lines than fit does.

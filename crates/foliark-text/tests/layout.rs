@@ -44,6 +44,7 @@ fn params(wrap_width: f64, max_lines: u32) -> LayoutParams {
         line_step: 14.0,
         first_baseline: 100.0,
         origin_x: 50.0,
+        align: foliark_model::TextAlign::Left,
     }
 }
 

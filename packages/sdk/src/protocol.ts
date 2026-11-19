@@ -13,6 +13,7 @@ import type { Prog } from "./generated/Prog.js";
 import type { RenderedPageHeader } from "./generated/RenderedPageHeader.js";
 import type { Req } from "./generated/Req.js";
 import type { Res } from "./generated/Res.js";
+import type { TextAlign } from "./generated/TextAlign.js";
 
 export const PROTOCOL_VERSION = 1;
 /** Default cap for one transferred buffer: spec 9 `maxOutputBytes`. Callers pass their `Limits` value. */
@@ -189,6 +190,8 @@ const isMode = (x: unknown) => x === "native" || x === "raster";
 /** Rust serializes an absent `Option` as null. */
 const optNull = (g: (x: unknown) => boolean) => (x: unknown) => x === undefined || x === null || g(x);
 const isReflow = (x: unknown) => x === "none" || x === "pushDown";
+// ADR 0019: absent from engines before 0.3.3 (read as left); a value this SDK does not know is refused.
+const isAlign = oneOf({ left: true, right: true, center: true } as const satisfies Record<TextAlign, true>);
 const isTextEdit = shape({ id: isStr, pageIndex: isU32, rects: arrayOf(isRect), text: isStr, font: optNull(isStr), reflow: optNull(isReflow) });
 const isRedaction = (x: unknown) =>
   shape({ id: isStr, pageIndex: isU32, fill: optNull(isRgb) })(x) &&
@@ -258,7 +261,7 @@ export const resultGuards = (maxBytes = DEFAULT_MAX_BUFFER_BYTES): Partial<Recor
     isRenderedHeader(x) &&
     isBuffer((x as Rec).data, maxBytes, 1) &&
     ((x as Rec).data as ArrayBuffer).byteLength === x.width * x.height * 4,
-  prepareParagraph: shape({ docId: isStr, revision: isU32, pageIndex: isU32, bounds: isRect, font: isRec }),
+  prepareParagraph: shape({ docId: isStr, revision: isU32, pageIndex: isU32, bounds: isRect, font: isRec, align: opt(isAlign) }),
   layoutEdit: isEditPreview,
   applyChanges: isChangeResult,
   prepareExport: shape({

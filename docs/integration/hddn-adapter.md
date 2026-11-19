@@ -61,3 +61,11 @@ All additive and off by default, so an adapter written for 0.1.x keeps its outpu
 | keep overlays and redactions aligned | `ChangeResult.remap: PageShift[]` | steps `{pageIndex, region, dy}` from the previous working copy to the new one, in order; apply them to overlays drawn over the working copy. Redactions and later edits stay in base-revision coordinates and are mapped by the engine; a region cut by a move is refused `INVALID_ARGUMENT` `redactionTargetShifted` / `editTargetShifted` |
 | keep document properties | `ExportPolicy.metadata: 'keep'`; `report.kept.metadata` | native only; the eight standard Info fields, XMP always removed |
 | more matched faces | register Roboto, Open Sans, Lato, Noto Serif, Noto Sans, DejaVu Sans or EB Garamond | a registered family is used when the source font name matches; edited documents set in those names change face from the flags rung |
+
+## 0.3.3 surface (ADR 0019)
+| Need | Foliark 0.3.3 | Notes |
+|---|---|---|
+| show an aligned paragraph as it is | `ParagraphInfo.align?: 'left' \| 'right' \| 'center'` | absent on older engines: treat as `left`. For `right` the fixed edge is `originX + wrapWidth` (the rows' right edge), for `center` the centre `originX + wrapWidth / 2`; `originX` is the box's left edge and can lie far left of `bounds.x`. Set the editor's `text-align` from `align` and anchor its box at that edge; when a preview returns a wider `wrapWidth`, grow the box away from the edge (`right`: left edge `edge - wrapWidth`) |
+| text of an aligned block | `originalText` | every row is a hard line (LF) and no row carries indent spaces; stop seeding leading spaces for aligned blocks (the engine ignores them in an aligned layout, so old seeds are harmless) |
+| previews | `EditPreview.lines[].x`, `width` | lines of a right-aligned edit end at the fixed edge; a centered edit's lines are centred on it |
+| width tolerance | no call change | an edit that would wrap a word to a new line now lays out up to 1 em wider (an aligned box up to `maxWrapWidth`) when that keeps the paragraph's lines; read the width from `EditPreview.wrapWidth` |

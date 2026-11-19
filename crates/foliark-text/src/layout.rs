@@ -3,6 +3,7 @@ use crate::Fnv;
 use crate::registry::Registry;
 use foliark_model::{
     EditLayout, ErrorCode, ErrorDetails, FontMatchRule, FontRule, LayoutRun, PdfError, RunSource,
+    TextAlign,
 };
 use std::ops::Range;
 use unicode_normalization::{UnicodeNormalization, char::canonical_combining_class};
@@ -163,6 +164,9 @@ pub struct LayoutParams {
     pub line_step: f64,
     pub first_baseline: f64,
     pub origin_x: f64,
+    /// ADR 0019: `Right` ends every line at `origin_x + wrap_width`, `Center` centres it in that
+    /// box. Both ignore a line's leading-space indent.
+    pub align: TextAlign,
 }
 
 /// One style run of the text to lay out (ADR 0013): from byte `start` of the normalized text to
@@ -529,7 +533,10 @@ pub fn layout_runs(input: &str, p: &LayoutParams, runs: &[TextRun]) -> Result<La
     let mut lines: Vec<(f64, Vec<Piece>)> = Vec::new();
     let mut too_wide = false;
     for (indent, body) in &hard {
-        let indent_w = width(&sh.pieces(indent)?);
+        let indent_w = match p.align {
+            TextAlign::Left => width(&sh.pieces(indent)?),
+            _ => 0.0,
+        };
         let segs = segments(&sh, body)?;
         if segs.is_empty() {
             lines.push((p.origin_x, Vec::new()));
@@ -558,6 +565,16 @@ pub fn layout_runs(input: &str, p: &LayoutParams, runs: &[TextRun]) -> Result<La
             pending = seg.space;
         }
         lines.push((x, cur));
+    }
+    let slack = match p.align {
+        TextAlign::Left => 0.0,
+        TextAlign::Right => 1.0,
+        TextAlign::Center => 0.5,
+    };
+    if slack > 0.0 {
+        for (x, pieces) in &mut lines {
+            *x = p.origin_x + (p.wrap_width - width(pieces)) * slack;
+        }
     }
 
     let plan_lines = lines
@@ -606,6 +623,10 @@ pub fn layout_runs(input: &str, p: &LayoutParams, runs: &[TextRun]) -> Result<La
         p.origin_x,
     ] {
         h.bytes(&v.to_bits().to_le_bytes());
+    }
+    // Left-aligned fingerprints stay as they were before alignment existed.
+    if p.align != TextAlign::Left {
+        h.field(format!("{:?}", p.align).as_bytes());
     }
     h.bytes(&p.max_lines.to_le_bytes())
         .bytes(&runs[0].ladder.registry.version().to_le_bytes());

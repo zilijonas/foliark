@@ -10,7 +10,7 @@ use crate::text::{ClusterId, SourceFontFace, TextLayout};
 use foliark_model::{
     Cluster, EditorFace, ErrorCode, ErrorDetails, FontMatchRule, FontResolution, FontRule,
     GROUPING, ObjectId, ParagraphInfo, ParagraphSegment, PdfError, Quad, Rect, StyleRun, StyleSpan,
-    TextLook,
+    TextAlign, TextLook,
 };
 use foliark_text::{
     Candidate, FontFace, Ladder, LayoutParams, Registry, StyleFlags, TextRun, layout_runs,
@@ -113,6 +113,12 @@ struct Part {
     x0: f64,
     x1: f64,
     h: f64,
+    /// Summed width of the drawn non-space glyphs, and the number of word gaps (drawn spaces and
+    /// pen gaps): with the space width, how far the row is stretched (justified) past its text.
+    ink: f64,
+    gaps: u32,
+    /// The largest font size on the row.
+    em: f64,
 }
 
 /// A line's text: overprinted duplicates dropped (same Unicode over >= 50% of the previous
@@ -130,6 +136,9 @@ fn line_part(
         x0: f64::INFINITY,
         x1: f64::NEG_INFINITY,
         h: 0.0,
+        ink: 0.0,
+        gaps: 0,
+        em: 0.0,
     };
     let mut prev: Option<usize> = None;
     for &i in &l.clusters {
@@ -144,9 +153,16 @@ fn line_part(
             if b[0] - out.x1 >= GROUPING.word_gap * em {
                 out.text.push(' ');
                 out.looks.push(main);
+                out.gaps += 1;
             }
         }
         let t = String::from_utf16_lossy(&text[i]);
+        if t.trim().is_empty() {
+            out.gaps += 1;
+        } else {
+            out.ink += b[2] - b[0];
+        }
+        out.em = out.em.max(styles[c.style_index as usize].size);
         out.looks.extend(t.chars().map(|_| c.style_index));
         out.text.push_str(&t);
         out.x0 = out.x0.min(b[0]);
@@ -158,8 +174,12 @@ fn line_part(
 }
 
 /// HDDN's rule for hard versus soft breaks: the break before row `k` (`k >= 1`) is hard when the
-/// row above ends visibly short of the paragraph's right edge or row `k` starts indented.
-fn hard_breaks(parts: &[Part]) -> Vec<bool> {
+/// row above ends visibly short of the paragraph's right edge or row `k` starts indented. Every
+/// break of an aligned block is hard (ADR 0019): its rows are lines set one by one.
+fn hard_breaks(parts: &[Part], align: TextAlign) -> Vec<bool> {
+    if align != TextAlign::Left {
+        return vec![true; parts.len()];
+    }
     let x0 = parts.iter().map(|p| p.x0).fold(f64::INFINITY, f64::min);
     let x1 = parts.iter().map(|p| p.x1).fold(f64::NEG_INFINITY, f64::max);
     let mut hard = vec![true];
@@ -171,14 +191,16 @@ fn hard_breaks(parts: &[Part]) -> Vec<bool> {
 }
 
 /// Rows joined by LF at hard breaks and by `soft` (a space) where a line wrapped on its own
-/// ([`hard_breaks`]). A hard line's indent becomes leading spaces. With the page style of each
-/// `char`: a break or an indent the page does not draw is the paragraph's (`main`).
+/// ([`hard_breaks`]). A hard line's indent becomes leading spaces, never in an aligned block
+/// (ADR 0019). With the page style of each `char`: a break or an indent the page does not draw
+/// is the paragraph's (`main`).
 fn original_text(
     parts: &[Part],
     space: f64,
     soft: char,
     main: u32,
     left: Option<f64>,
+    align: TextAlign,
 ) -> (String, Vec<u32>) {
     let x0 = parts.iter().map(|p| p.x0).fold(f64::INFINITY, f64::min);
     let x0 = left.map_or(x0, |l| l.min(x0));
@@ -188,14 +210,16 @@ fn original_text(
         } else {
             0.0
         };
-        " ".repeat(if p.x0 - x0 >= space && n > 0.0 {
-            n as usize
-        } else {
-            0
-        })
+        " ".repeat(
+            if align == TextAlign::Left && p.x0 - x0 >= space && n > 0.0 {
+                n as usize
+            } else {
+                0
+            },
+        )
     };
     let (mut s, mut looks) = (String::new(), Vec::new());
-    for (k, (cur, hard)) in parts.iter().zip(hard_breaks(parts)).enumerate() {
+    for (k, (cur, hard)) in parts.iter().zip(hard_breaks(parts, align)).enumerate() {
         let gap = match (k, hard) {
             (0, _) => lead(cur),
             (_, true) => format!("\n{}", lead(cur)),
@@ -207,6 +231,98 @@ fn original_text(
         s.push_str(&cur.text);
     }
     (s, looks)
+}
+
+/// ADR 0019: how the rows are aligned, from their geometry alone; `left` (the layout before
+/// alignment existed) unless the evidence is clear. Rows two or more: `right` when their right
+/// edges agree within `tol` and their left edges are ragged (half a space or more apart: rows
+/// with different text differ by a glyph), `center` when their centres agree and both edges are
+/// ragged. Rows of one width that end together, and a lone row, are `right` only on
+/// `lone_right`'s evidence, never `center`. A row stretched past its text (justified word gaps)
+/// is never aligned. `space` is the page font's at `size`; a row in another size scales it.
+fn alignment(
+    parts: &[Part],
+    size: f64,
+    space: f64,
+    tol: f64,
+    lone_right: impl FnOnce() -> bool,
+) -> TextAlign {
+    let stretched = |p: &Part| {
+        let gap = space * p.em / size;
+        p.gaps > 0 && p.x1 - p.x0 - p.ink > 1.5 * gap * f64::from(p.gaps)
+    };
+    if parts.is_empty() || parts.iter().any(stretched) {
+        return TextAlign::Left;
+    }
+    if parts.len() == 1 {
+        return if lone_right() {
+            TextAlign::Right
+        } else {
+            TextAlign::Left
+        };
+    }
+    let spread = |f: fn(&Part) -> f64| {
+        let v = parts.iter().map(f);
+        v.clone().fold(f64::NEG_INFINITY, f64::max) - v.fold(f64::INFINITY, f64::min)
+    };
+    let (left, right) = (spread(|p| p.x0), spread(|p| p.x1));
+    let mid = spread(|p| (p.x0 + p.x1) / 2.0);
+    let ragged = space / 2.0;
+    if right <= tol && left >= ragged {
+        TextAlign::Right
+    } else if mid <= tol && left >= ragged && right >= ragged {
+        TextAlign::Center
+    } else if right <= tol && lone_right() {
+        TextAlign::Right
+    } else {
+        TextAlign::Left
+    }
+}
+
+/// ADR 0019: a lone row `[x0, top, x1, y1]` is right-aligned when another line nearby (within 10
+/// em, not on its row) ends at the same x and starts elsewhere: the last word of its row, with
+/// the words before it up to a gap of two spaces. Neither starts at the page's left text margin,
+/// and the row spans at most half the page's text width (`text`, left to right): a full or
+/// justified line ends at the right margin whatever its alignment.
+fn lone_right(
+    sel: [f64; 4],
+    others: &[[f64; 4]],
+    text: (f64, f64),
+    size: f64,
+    space: f64,
+    tol: f64,
+) -> bool {
+    let [x0, top, x1, y1] = sel;
+    let margin = text.0;
+    if x1 - x0 > (text.1 - text.0) / 2.0 {
+        return false;
+    }
+    let row = |a: &[f64; 4], b: &[f64; 4]| a[1] < b[3] && a[3] > b[1];
+    let mid = |b: &[f64; 4]| (b[1] + b[3]) / 2.0;
+    let off_margin = |x: f64| x > margin + space;
+    off_margin(x0)
+        && others.iter().any(|w| {
+            let near = (mid(w) - (top + y1) / 2.0).abs();
+            if (w[2] - x1).abs() > tol || near < size / 2.0 || near > 10.0 * size {
+                return false;
+            }
+            if others.iter().any(|o| o[0] > w[2] && row(o, w)) {
+                return false;
+            }
+            let mut start = w[0];
+            loop {
+                let prev = (others.iter())
+                    .filter(|o| row(o, w) && o[0] < start && o[2] <= start + 1e-6)
+                    .filter(|o| start - o[2] <= 2.0 * space)
+                    .map(|o| o[0])
+                    .fold(f64::INFINITY, f64::min);
+                if !prev.is_finite() {
+                    break;
+                }
+                start = prev;
+            }
+            (start - x0).abs() >= space / 2.0 && off_margin(start)
+        })
 }
 
 /// The style most of `ids` are drawn in; on a tie, the one that comes first.
@@ -383,6 +499,22 @@ pub struct Prepared {
     pub(crate) model: SemanticPage,
     pub(crate) limits: Limits,
     pub(crate) descent: f64,
+    /// The rows the selection has on the page now (the width tolerance of ADR 0019 keeps them).
+    pub(crate) rows: usize,
+}
+
+impl Prepared {
+    /// ADR 0019: the column `[left, right]` of a box `width` wide, anchored at the paragraph's
+    /// edge: its left edge (left-aligned), right edge or centre.
+    pub(crate) fn column(&self, width: f64) -> (f64, f64) {
+        let i = &self.info;
+        let left = match i.align.unwrap_or_default() {
+            TextAlign::Left => i.origin_x,
+            TextAlign::Right => i.origin_x + i.wrap_width - width,
+            TextAlign::Center => i.origin_x + (i.wrap_width - width) / 2.0,
+        };
+        (left, left + width)
+    }
 }
 
 /// `looks` (one per `char` of `text`) as runs of `text`, each with the ladder `ladder(look)`;
@@ -466,23 +598,26 @@ impl Document {
         registry: &Registry,
         font_match: &[FontMatchRule],
     ) -> Result<Prepared, PdfError> {
-        let pick = |l: &TextLayout| (select_clusters(l, rects), None);
+        let pick = |l: &TextLayout| (select_clusters(l, rects), None, None);
         self.prepare_with(page, pick, font, editor_face, registry, font_match)
     }
 
     /// [`Document::prepare`] for page clusters `ids` (a segment of an earlier selection). `left`
     /// is that selection's left edge: indents are counted, and the box starts, from it, as the
-    /// text the caller sends for the whole selection has them.
+    /// text the caller sends for the whole selection has them. `align` is that selection's: a
+    /// part of an aligned block keeps its edge (ADR 0019).
+    #[allow(clippy::too_many_arguments)]
     pub fn prepare_clusters(
         &self,
         page: usize,
         ids: &[usize],
         left: f64,
+        align: TextAlign,
         font: Option<&str>,
         registry: &Registry,
         font_match: &[FontMatchRule],
     ) -> Result<Prepared, PdfError> {
-        let pick = |_: &TextLayout| (ids.to_vec(), Some(left));
+        let pick = |_: &TextLayout| (ids.to_vec(), Some(left), Some(align));
         self.prepare_with(page, pick, font, false, registry, font_match)
     }
 
@@ -518,7 +653,7 @@ impl Document {
     fn prepare_with(
         &self,
         page: usize,
-        pick: impl FnOnce(&TextLayout) -> (Vec<usize>, Option<f64>),
+        pick: impl FnOnce(&TextLayout) -> (Vec<usize>, Option<f64>, Option<TextAlign>),
         font: Option<&str>,
         editor_face: bool,
         registry: &Registry,
@@ -528,8 +663,9 @@ impl Document {
         let layout = TextLayout::build(&model, false)?;
         let clusters = layout.page.clusters.as_deref().unwrap_or_default();
         let styles = &layout.page.styles;
-        // The clusters, and the left edge a part of a larger selection counts its indents from.
-        let (sel, left) = pick(&layout);
+        // The clusters, and the left edge a part of a larger selection counts its indents from
+        // and its alignment.
+        let (sel, left, forced) = pick(&layout);
         if sel.is_empty() {
             return Err(PdfError::new(ErrorCode::EditNoStyle));
         }
@@ -590,7 +726,6 @@ impl Document {
             },
         );
         let [x0, top, x1, y1] = sel_bounds;
-        let x0 = left.map_or(x0, |l| l.min(x0));
         let first_baseline = rows[0].baseline;
         let last_baseline = rows[rows.len() - 1].baseline;
         let mut deltas: Vec<f64> = rows
@@ -683,6 +818,30 @@ impl Document {
             .find_map(|c| c.face.shape(" ", size).ok())
             .map_or(size * 0.28, |g| g.iter().map(|g| g.x_advance).sum());
         let (resolution, face) = describe(style, primary, source, registry, editor_face);
+        // ADR 0019: edges an aligning producer puts at one x agree to its rounding and the drawn
+        // advances (`/W` against the program, an earlier edit's widths); 0.1 em stays under half
+        // a space, the least two different rows differ by. A lone row's evidence, a line
+        // elsewhere on the page, must agree to 0.05 em.
+        // Measured in the page's own font, so a caller's font cannot change what the page shows.
+        let page_space = (looks[0].ladder(registry, font_match).candidates()?.iter())
+            .find_map(|c| c.face.shape(" ", size).ok())
+            .map_or(size * 0.28, |g| g.iter().map(|g| g.x_advance).sum());
+        let align = forced.unwrap_or_else(|| match parts.as_deref() {
+            Some(p) => alignment(p, size, page_space, 0.1 * size, || {
+                let tol = 0.05 * size;
+                let left = visible.iter().map(|b| b[0]).fold(f64::INFINITY, f64::min);
+                let right = visible
+                    .iter()
+                    .map(|b| b[2])
+                    .fold(f64::NEG_INFINITY, f64::max);
+                lone_right(sel_bounds, &others, (left, right), size, page_space, tol)
+            }),
+            None => TextAlign::Left,
+        });
+        let x0 = match align {
+            TextAlign::Left => left.map_or(x0, |l| l.min(x0)),
+            _ => x0,
+        };
 
         let items = painted_bounds(&model);
         let lim = limits(&Evidence {
@@ -716,7 +875,7 @@ impl Document {
         };
         let (original, text_looks) = match parts.as_deref() {
             Some(p) => {
-                let (t, l) = original_text(p, space, ' ', main_index, left);
+                let (t, l) = original_text(p, space, ' ', main_index, left, align);
                 (Some(t), l.iter().map(look_of).collect())
             }
             None => (None, Vec::new()),
@@ -727,7 +886,7 @@ impl Document {
         if let Some(p) = parts.as_deref() {
             let mut line = 0;
             let look = |l: &Line| &styles[dominant(&l.clusters, clusters) as usize];
-            for (k, hard) in hard_breaks(p).into_iter().enumerate() {
+            for (k, hard) in hard_breaks(p, align).into_iter().enumerate() {
                 line += usize::from(hard && k > 0);
                 match segments.last_mut() {
                     Some(seg) if !hard || same_look(look(&rows[k - 1]), look(&rows[k])) => {
@@ -759,8 +918,9 @@ impl Document {
                     line_step,
                     first_baseline,
                     origin_x: x0,
+                    align: TextAlign::Left,
                 };
-                let (raw, raw_looks) = original_text(p, space, '\n', main_index, left);
+                let (raw, raw_looks) = original_text(p, space, '\n', main_index, left, align);
                 let raw_looks: Vec<usize> = raw_looks.iter().map(look_of).collect();
                 let rows = normalize(&raw).ok()?;
                 let row_looks = carry(&raw, &raw_looks, &rows, 0);
@@ -847,10 +1007,48 @@ impl Document {
             .as_deref()
             .map_or(Vec::new(), |t| style_spans(t, &text_looks));
         // ADR 0015: the stable width as before; the extended one only where the page has room.
-        // Both budgets keep the lines the paragraph has now (ADR 0011).
-        let wrap_width = (room - x0).max(measured);
-        let max_wrap_width = wrap_width.max(lim.max_wrap_right - x0);
+        // Both budgets keep the lines the paragraph has now (ADR 0011). ADR 0019: an aligned box
+        // keeps its right edge (centre) and grows into the mirrored room on the left (both sides).
         let budget = |bottom: f64| lines_in(bottom).max(rows.len() as i64) as u32;
+        // The stable box never reaches past the extended one: a rule or an image beside the rows
+        // bounds both (words alone bound the stable box otherwise).
+        let left_room = if rows.len() == 1 && lim.nearest_word_left.is_finite() {
+            (lim.nearest_word_left + space).min(lim.wrap_left)
+        } else {
+            lim.wrap_left
+        }
+        .max(lim.max_wrap_left);
+        let (origin_x, wrap_width, max_wrap_width) = match align {
+            TextAlign::Left => {
+                let w = (room - x0).max(measured);
+                (x0, w, w.max(lim.max_wrap_right - x0))
+            }
+            TextAlign::Right => {
+                let w = (x1 - left_room).max(measured);
+                (x1 - w, w, w.max(x1 - lim.max_wrap_left))
+            }
+            TextAlign::Center => {
+                let c = (x0 + x1) / 2.0;
+                let w = (2.0 * (c - left_room).min(room.min(lim.max_wrap_right) - c)).max(measured);
+                let max = 2.0 * (c - lim.max_wrap_left).min(lim.max_wrap_right - c);
+                (c - w / 2.0, w, w.max(max))
+            }
+        };
+        // The bottom of an aligned box's column, as wide as the selection at least.
+        let aligned_bottom = |w: f64| {
+            let (l, r) = match align {
+                TextAlign::Center => (
+                    origin_x + (wrap_width - w) / 2.0,
+                    origin_x + (wrap_width + w) / 2.0,
+                ),
+                _ => (origin_x + wrap_width - w, origin_x + wrap_width),
+            };
+            lim.bottom_limit_in(l.min(x0), r.max(x1))
+        };
+        let (bottom_limit, max_bottom) = match align {
+            TextAlign::Left => (bottom_limit, lim.bottom_limit(x0 + max_wrap_width)),
+            _ => (aligned_bottom(wrap_width), aligned_bottom(max_wrap_width)),
+        };
         let info = ParagraphInfo {
             doc_id: String::new(),
             revision: 0,
@@ -861,7 +1059,7 @@ impl Document {
                 width: x1 - x0,
                 height: y1 - top,
             },
-            origin_x: x0,
+            origin_x,
             top,
             first_baseline,
             font_size: size,
@@ -876,8 +1074,9 @@ impl Document {
             max_wrap_width,
             max_height: bottom_limit - top,
             max_lines: budget(bottom_limit),
-            max_wrap_lines: budget(lim.bottom_limit(x0 + max_wrap_width)),
+            max_wrap_lines: budget(max_bottom),
             push_down: None,
+            align: Some(align),
             original_text: original,
             font: resolution,
             editor_face: face,
@@ -895,6 +1094,7 @@ impl Document {
             model,
             limits: lim,
             descent,
+            rows: rows.len(),
         })
     }
 }
