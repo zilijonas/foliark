@@ -10,6 +10,7 @@ import { createWorkerCore } from "../src/worker-core.js";
 const wasmBytes = readFileSync(new URL("../wasm/foliark_wasm_bg.wasm", import.meta.url));
 const pdf = new Uint8Array(readFileSync(new URL("../../../tests/fixtures/hddn/shared-image.pdf", import.meta.url)));
 const wordPdf = new Uint8Array(readFileSync(new URL("../../../tests/fixtures/generated/word-bold-heading-body.pdf", import.meta.url)));
+const alignedPdf = new Uint8Array(readFileSync(new URL("../../../tests/fixtures/generated/pdflib-right-aligned.pdf", import.meta.url)));
 const sans = new Uint8Array(readFileSync(new URL("../../../crates/foliark-text/tests/data/LiberationSans-Regular.ttf", import.meta.url)));
 
 const worker = (): Worker => {
@@ -78,5 +79,19 @@ describe("paragraph edits", () => {
     for (const l of info.looks) expect(l.editorFace!.bytes).toBeInstanceOf(Uint8Array);
     const p = await doc.layoutEdit(0, [{ x: 15, y: 94, width: 165, height: 31 }], text.replace("charlie", "charles"));
     expect(p.styles.map((s) => s.look)).toEqual(info.runs.map((r) => r.look));
+  });
+
+  it("reports a right-aligned block's alignment and lays its edit out flush to the same edge", async () => {
+    // pdflib-right-aligned: the invoice block's rows end at x 280 (ADR 0019).
+    const f = await createFoliark({ wasmUrl: "unused", worker });
+    clients.push(f);
+    const doc = await f.open(alignedPdf.slice());
+    const rects = [{ x: 130, y: 30, width: 155, height: 28 }];
+    const info = await doc.prepareParagraph(0, rects);
+    expect(info).toMatchObject({ align: "right", originalText: "Invoice date: 2026-10-12\nDue by: 2026-11-12" });
+    expect(info.originX + info.wrapWidth).toBeCloseTo(280, 3);
+    const p = await doc.layoutEdit(0, rects, "Invoice date: 2026-12-21 to 2026\nDue by: 2026-11-12");
+    expect(p.fits).toBe(true);
+    expect(p.lines.map((l) => l.x + l.width)).toEqual([expect.closeTo(280, 3), expect.closeTo(280, 3)]);
   });
 });

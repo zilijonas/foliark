@@ -2825,8 +2825,8 @@
   {
    "id": "pdflib-right-aligned",
    "path": "generated/pdflib-right-aligned.pdf",
-   "sha256": "64ef047a00bd77197f76360e11d58a2b2b020f5e6b3df9dd0071ed2332b10888",
-   "bytes": 3015,
+   "sha256": "71522c151d515046ce296ed0334e2fde12a64d281823d4dd417b8588fe71f5e9",
+   "bytes": 3057,
    "pages": 1,
    "features": [
     "embedded-font",

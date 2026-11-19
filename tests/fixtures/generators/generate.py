@@ -672,12 +672,15 @@ ALIGN_BLOCKS = {  # display baseline: (row, alignment); rows of one block are 15
     310: ("Thank you for", "center"), 325: ("your business and support", "center"),
 }
 ALIGN_LABELS = {40: "Ref A1", 200: "Fee", 215: "Tax", 230: "Total", 370: "KEEP_PUBLIC_ALIGN"}
+ALIGN_NUMBER = (22, "No. 7", 15)  # display baseline, text, size: right-aligned above the first block, as an invoice number sits
+ALIGN_RULE = (100, 78, 102)  # a vertical rule at x 100 from display y 78 to 102, left of the second block
 # Justified with a first-line indent: both rows reach the right edge, word gaps stretched (not right-aligned).
 ALIGN_JUSTIFIED = {250: (30, "Plain words in a row"), 265: (20, "and more of the same")}
 
 
 def pdflib_right_aligned():
-    rows = list(ALIGN_LABELS.values()) + [r for r, _ in ALIGN_BLOCKS.values()] + [r for _, r in ALIGN_JUSTIFIED.values()]
+    rows = (list(ALIGN_LABELS.values()) + [r for r, _ in ALIGN_BLOCKS.values()] + [r for _, r in ALIGN_JUSTIFIED.values()]
+            + [ALIGN_NUMBER[1]])
     chars = "".join(sorted(set("".join(rows) + " ")))
     cmap = {c: k + 1 for k, c in enumerate(chars)}
     ttf = _box_ttf(len(chars) + 1, cmap=cmap, blank={cmap[" "]}, adv=ALIGN_ADV)
@@ -696,10 +699,13 @@ def pdflib_right_aligned():
         10: stream("/Length1 %d" % len(ttf), ttf, flate=True),
     }
 
-    def show(x, y, s):
-        return "BT /FL-0 10 Tf %.3f %.3f Td %s Tj ET\n" % (x, H - y, _cid_hex(s, chars))
+    def show(x, y, s, size=10):
+        return "BT /FL-0 %d Tf %.3f %.3f Td %s Tj ET\n" % (size, x, H - y, _cid_hex(s, chars))
 
-    content = ""
+    y, s, size = ALIGN_NUMBER
+    content = show(ALIGN_RIGHT - ALIGN_ADV * size / 1000 * len(s), y, s, size)
+    x, y0, y1 = ALIGN_RULE
+    content += "%.1f %.1f 0.6 %.1f re f\n" % (x, H - y1, y1 - y0)
     for y, s in ALIGN_LABELS.items():
         content += show(20, y, s)
     for y, (s, how) in ALIGN_BLOCKS.items():

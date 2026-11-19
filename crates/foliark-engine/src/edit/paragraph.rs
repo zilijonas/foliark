@@ -117,6 +117,8 @@ struct Part {
     /// pen gaps): with the space width, how far the row is stretched (justified) past its text.
     ink: f64,
     gaps: u32,
+    /// The largest font size on the row.
+    em: f64,
 }
 
 /// A line's text: overprinted duplicates dropped (same Unicode over >= 50% of the previous
@@ -136,6 +138,7 @@ fn line_part(
         h: 0.0,
         ink: 0.0,
         gaps: 0,
+        em: 0.0,
     };
     let mut prev: Option<usize> = None;
     for &i in &l.clusters {
@@ -159,6 +162,7 @@ fn line_part(
         } else {
             out.ink += b[2] - b[0];
         }
+        out.em = out.em.max(styles[c.style_index as usize].size);
         out.looks.extend(t.chars().map(|_| c.style_index));
         out.text.push_str(&t);
         out.x0 = out.x0.min(b[0]);
@@ -233,10 +237,20 @@ fn original_text(
 /// alignment existed) unless the evidence is clear. Rows two or more: `right` when their right
 /// edges agree within `tol` and their left edges are ragged (half a space or more apart: rows
 /// with different text differ by a glyph), `center` when their centres agree and both edges are
-/// ragged. A lone row is `right` only on `lone_right`'s evidence, never `center`. A row stretched
-/// past its text (justified word gaps) is never aligned.
-fn alignment(parts: &[Part], space: f64, tol: f64, lone_right: impl FnOnce() -> bool) -> TextAlign {
-    let stretched = |p: &Part| p.gaps > 0 && p.x1 - p.x0 - p.ink > 1.5 * space * f64::from(p.gaps);
+/// ragged. Rows of one width that end together, and a lone row, are `right` only on
+/// `lone_right`'s evidence, never `center`. A row stretched past its text (justified word gaps)
+/// is never aligned. `space` is the page font's at `size`; a row in another size scales it.
+fn alignment(
+    parts: &[Part],
+    size: f64,
+    space: f64,
+    tol: f64,
+    lone_right: impl FnOnce() -> bool,
+) -> TextAlign {
+    let stretched = |p: &Part| {
+        let gap = space * p.em / size;
+        p.gaps > 0 && p.x1 - p.x0 - p.ink > 1.5 * gap * f64::from(p.gaps)
+    };
     if parts.is_empty() || parts.iter().any(stretched) {
         return TextAlign::Left;
     }
@@ -258,6 +272,8 @@ fn alignment(parts: &[Part], space: f64, tol: f64, lone_right: impl FnOnce() -> 
         TextAlign::Right
     } else if mid <= tol && left >= ragged && right >= ragged {
         TextAlign::Center
+    } else if right <= tol && lone_right() {
+        TextAlign::Right
     } else {
         TextAlign::Left
     }
@@ -806,15 +822,19 @@ impl Document {
         // advances (`/W` against the program, an earlier edit's widths); 0.1 em stays under half
         // a space, the least two different rows differ by. A lone row's evidence, a line
         // elsewhere on the page, must agree to 0.05 em.
+        // Measured in the page's own font, so a caller's font cannot change what the page shows.
+        let page_space = (looks[0].ladder(registry, font_match).candidates()?.iter())
+            .find_map(|c| c.face.shape(" ", size).ok())
+            .map_or(size * 0.28, |g| g.iter().map(|g| g.x_advance).sum());
         let align = forced.unwrap_or_else(|| match parts.as_deref() {
-            Some(p) => alignment(p, space, 0.1 * size, || {
+            Some(p) => alignment(p, size, page_space, 0.1 * size, || {
                 let tol = 0.05 * size;
                 let left = visible.iter().map(|b| b[0]).fold(f64::INFINITY, f64::min);
                 let right = visible
                     .iter()
                     .map(|b| b[2])
                     .fold(f64::NEG_INFINITY, f64::max);
-                lone_right(sel_bounds, &others, (left, right), size, space, tol)
+                lone_right(sel_bounds, &others, (left, right), size, page_space, tol)
             }),
             None => TextAlign::Left,
         });
@@ -990,11 +1010,14 @@ impl Document {
         // Both budgets keep the lines the paragraph has now (ADR 0011). ADR 0019: an aligned box
         // keeps its right edge (centre) and grows into the mirrored room on the left (both sides).
         let budget = |bottom: f64| lines_in(bottom).max(rows.len() as i64) as u32;
+        // The stable box never reaches past the extended one: a rule or an image beside the rows
+        // bounds both (words alone bound the stable box otherwise).
         let left_room = if rows.len() == 1 && lim.nearest_word_left.is_finite() {
             (lim.nearest_word_left + space).min(lim.wrap_left)
         } else {
             lim.wrap_left
-        };
+        }
+        .max(lim.max_wrap_left);
         let (origin_x, wrap_width, max_wrap_width) = match align {
             TextAlign::Left => {
                 let w = (room - x0).max(measured);
@@ -1006,7 +1029,7 @@ impl Document {
             }
             TextAlign::Center => {
                 let c = (x0 + x1) / 2.0;
-                let w = (2.0 * (c - left_room).min(room - c)).max(measured);
+                let w = (2.0 * (c - left_room).min(room.min(lim.max_wrap_right) - c)).max(measured);
                 let max = 2.0 * (c - lim.max_wrap_left).min(lim.max_wrap_right - c);
                 (c - w / 2.0, w, w.max(max))
             }

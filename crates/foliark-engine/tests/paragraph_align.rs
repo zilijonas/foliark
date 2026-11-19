@@ -6,7 +6,7 @@
 //! page has room, keep typed line breaks and read back exactly, round after round, as PyMuPDF
 //! (not the engine) sees the written file.
 mod common;
-use common::{build, fixture, python, run, tmp};
+use common::{build, fidelity_oracle, fixture, python, run, tmp};
 use foliark_engine::Engine;
 use foliark_model::{
     ChangeSet, EditPreview, ExportMode, ExportPolicy, Limits, Rect, Reflow, TextAlign, TextEdit,
@@ -27,8 +27,14 @@ const fn rect(x: f64, y: f64, width: f64, height: f64) -> Rect {
     }
 }
 
-/// Display rects of the fixture's blocks (baselines from the generator; glyphs 8 pt tall).
+/// Display rects of the fixture's blocks (baselines from the generator; glyphs 0.8 em tall).
 const INVOICE: Rect = rect(130.0, 30.0, 155.0, 28.0);
+/// "No. 7" (15 pt) over the invoice block's first row (10 pt), as on the owner's invoice.
+const NUMBER_ROW: Rect = rect(130.0, 8.0, 155.0, 36.0);
+/// "No. 7" over the whole invoice block: two style segments (sizes).
+const NUMBER_BLOCK: Rect = rect(130.0, 8.0, 155.0, 50.0);
+/// The vertical rule left of the "Paid" block.
+const RULE_X: f64 = 100.6;
 const PAID: Rect = rect(150.0, 75.0, 135.0, 28.0);
 const LECTURE: Rect = rect(15.0, 130.0, 150.0, 28.0);
 const AMOUNTS: [Rect; 3] = [
@@ -91,9 +97,11 @@ fn apply_export(bytes: Vec<u8>, edits: Vec<TextEdit>) -> Vec<u8> {
     e.take_export(&doc, &plan.plan_id).unwrap()
 }
 
-/// PyMuPDF's rows: drawn glyphs (no spaces) by baseline, ordered by x and split where a gap is
-/// wider than two glyphs, as `(baseline, x0, x1, text)`.
-fn rows(name: &str, bytes: &[u8]) -> Vec<(f64, f64, f64, String)> {
+/// PyMuPDF's rows: drawn glyphs by baseline, ordered by x and split where a gap is wider than two
+/// glyphs, as `(baseline, x0, x1, text without spaces, space glyphs drawn inside the row)`.
+type Row = (f64, f64, f64, String, usize);
+
+fn rows(name: &str, bytes: &[u8]) -> Vec<Row> {
     let path = tmp("paragraph-align", name);
     std::fs::write(&path, bytes).unwrap();
     let code = "import sys, json, fitz\n\
@@ -103,13 +111,20 @@ fn rows(name: &str, bytes: &[u8]) -> Vec<(f64, f64, f64, String)> {
         \x20 for l in b.get('lines', []):\n\
         \x20   for s in l['spans']:\n\
         \x20     for c in s['chars']:\n\
-        \x20       if not c['c'].isspace(): rows.setdefault(round(c['origin'][1], 1), []).append((c['origin'][0], c['bbox'][2], c['c']))\n\
+        \x20       rows.setdefault(round(c['origin'][1], 1), []).append((c['origin'][0], c['bbox'][2], c['c']))\n\
         out = []\n\
         for y, cs in sorted(rows.items()):\n\
         \x20 cs.sort()\n\
+        \x20 ink = [c for c in cs if not c[2].isspace()]\n\
+        \x20 segs = []\n\
+        \x20 for c in ink:\n\
+        \x20   if segs and c[0] - segs[-1][2] <= 12: segs[-1][2] = c[1]; segs[-1][3] += c[2]\n\
+        \x20   else: segs.append([y, c[0], c[1], c[2], 0])\n\
         \x20 for c in cs:\n\
-        \x20   if out and out[-1][0] == y and c[0] - out[-1][2] <= 12: out[-1][2] = c[1]; out[-1][3] += c[2]\n\
-        \x20   else: out.append([y, c[0], c[1], c[2]])\n\
+        \x20   if c[2].isspace():\n\
+        \x20     for g in segs:\n\
+        \x20       if g[1] <= c[0] <= g[2]: g[4] += 1\n\
+        \x20 out += segs\n\
         print(json.dumps(out))\n";
     let (ok, log) = python(&["-c", code, path.to_str().unwrap()]);
     assert!(ok, "{log}");
@@ -117,7 +132,7 @@ fn rows(name: &str, bytes: &[u8]) -> Vec<(f64, f64, f64, String)> {
 }
 
 /// PyMuPDF's row whose text contains `needle`, read word by word (a row may hold other words).
-fn row_of<'a>(rows: &'a [(f64, f64, f64, String)], needle: &str) -> &'a (f64, f64, f64, String) {
+fn row_of<'a>(rows: &'a [Row], needle: &str) -> &'a Row {
     rows.iter()
         .find(|r| r.3.contains(needle))
         .unwrap_or_else(|| panic!("no row with {needle:?}: {rows:?}"))
@@ -129,6 +144,8 @@ fn alignment_is_read_from_the_rows_and_stays_left_without_clear_evidence() {
     assert_eq!(align(&mut e, &doc, INVOICE), TextAlign::Right);
     assert_eq!(align(&mut e, &doc, PAID), TextAlign::Right);
     assert_eq!(align(&mut e, &doc, THANKS), TextAlign::Center);
+    // Rows in two sizes: the larger row's word gap is its own size's, not a stretched one.
+    assert_eq!(align(&mut e, &doc, NUMBER_ROW), TextAlign::Right);
     // Each amount is its own paragraph; its neighbours in the column end where it ends.
     for r in AMOUNTS {
         assert_eq!(align(&mut e, &doc, r), TextAlign::Right, "{r:?}");
@@ -228,6 +245,51 @@ fn a_right_aligned_edit_keeps_the_right_edge_and_grows_left_up_to_its_neighbour(
         seeded.lines.iter().map(|l| l.x).collect::<Vec<_>>(),
         plain.lines.iter().map(|l| l.x).collect::<Vec<_>>()
     );
+}
+
+#[test]
+fn a_rule_left_of_a_right_aligned_block_bounds_its_growth() {
+    let (e, doc) = open(fixture(FILE));
+    let p = preview(
+        &e,
+        &doc,
+        PAID,
+        "Paid: yes and Account ref: 2026-77 and 2026-11-12 too\nAccount ref: 2026-77",
+    );
+    assert!(
+        p.lines.iter().all(|l| l.x >= RULE_X + GLYPH - 1e-3),
+        "{p:?}"
+    );
+    assert!(ends(&p).iter().all(|&x| near(x, RIGHT, 1e-3)), "{p:?}");
+}
+
+#[test]
+fn editing_one_segment_of_an_aligned_block_keeps_the_others_and_the_edge() {
+    // "No. 7" (15 pt) and the 10 pt rows are two style segments; only the last row changes, so
+    // only its segment is laid out again, still right-aligned at the block's edge.
+    let (mut e, doc) = open(fixture(FILE));
+    let info = e
+        .prepare_paragraph(&doc, 0, vec![NUMBER_BLOCK], None, false)
+        .unwrap();
+    assert_eq!(info.align, Some(TextAlign::Right));
+    let original = info.original_text.unwrap();
+    assert_eq!(
+        original,
+        "No. 7\nInvoice date: 2026-10-12\nDue by: 2026-11-12"
+    );
+    let text = original.replace("Due by: 2026-11-12", "Due by: 2026-12-21 to 2026-1-2");
+    let p = preview(&e, &doc, NUMBER_BLOCK, &text);
+    assert!(p.fits, "{p:?}");
+    assert!(ends(&p).iter().all(|&x| near(x, RIGHT, 1e-3)), "{p:?}");
+    let out = apply_export(fixture(FILE), vec![edit(NUMBER_BLOCK, &text, None)]);
+    let read = rows("segment.pdf", &out);
+    for t in [
+        "No.7",
+        "Invoicedate:2026-10-12",
+        "Dueby:2026-12-21to2026-1-2",
+    ] {
+        assert!(near(row_of(&read, t).2, RIGHT, 0.05), "{t}: {read:?}");
+    }
 }
 
 #[test]
@@ -338,44 +400,65 @@ fn push_down_moves_what_lies_below_a_right_aligned_block_grown_by_lines() {
 }
 
 #[test]
-fn a_right_aligned_block_round_trips_three_times_with_its_right_edge_in_place() {
-    // Wider, narrower and longer dates over three edit-export-reopen rounds, on the file the
-    // round before wrote; PyMuPDF judges each export.
+fn a_right_aligned_block_round_trips_with_its_right_edge_in_place() {
+    // Wider, narrower and longer dates, then rows of one width, then one row, each edit on the
+    // file the round before wrote; PyMuPDF and the fidelity oracle judge each export.
     let rounds = [
         "Invoice date: 2026-12-21\nDue by: 2026-11-12",
         "Invoice date: 2026-1-2\nDue by: 2026-12-210",
         "Invoice date: 2026-10-12 to 2026\nDue: 2026-1-1",
+        "Invoice: 2026-10-12\nDue by: 2026-11-122",
+        "Invoice: 2026-10-12",
+        "Invoice: 2026-12-21",
     ];
-    // Negative control: the probe reads the source's rows where the generator drew them.
+    // Negative control: the probe reads the source's rows where the generator drew them, and
+    // their drawn spaces.
     let src = rows("round-src.pdf", &fixture(FILE));
-    assert!(
-        near(row_of(&src, "Invoice").1, RIGHT - 24.0 * GLYPH, 0.05),
-        "{src:?}"
-    );
+    let first = row_of(&src, "Invoice");
+    assert!(near(first.1, RIGHT - 24.0 * GLYPH, 0.05), "{src:?}");
+    assert_eq!(first.4, 2, "{src:?}");
+    // Left of the block's widest growth ("Ref A1" plus a space), right of nothing.
+    let sel = rect(58.0, 30.0, 227.0, 28.0);
+    let band = (0, 58.0, 30.0, 285.0, 60.0);
     let mut bytes = fixture(FILE);
+    let mut before = "Invoice date: 2026-10-12\nDue by: 2026-11-12";
     for (r, text) in rounds.iter().enumerate() {
         let (mut e, doc) = open(bytes.clone());
         let info = e
-            .prepare_paragraph(&doc, 0, vec![rect(55.0, 30.0, 230.0, 28.0)], None, false)
+            .prepare_paragraph(&doc, 0, vec![sel], None, false)
             .unwrap();
-        // Each round finds the block it wrote right-aligned again, as two hard rows.
+        // Each round finds the block the round before wrote right-aligned again, as hard rows;
+        // rows of one width and a lone row (narrower than half the text width) on the page's
+        // evidence: "No. 7" ends where they do.
         assert_eq!(info.align, Some(TextAlign::Right), "round {r}: {info:?}");
-        assert_eq!(info.original_text.as_deref().unwrap().lines().count(), 2);
-        let sel = rect(55.0, 30.0, 230.0, 28.0);
-        bytes = apply_export(bytes, vec![edit(sel, text, None)]);
-        let read = rows(&format!("round{r}.pdf"), &bytes);
+        assert_eq!(info.original_text.as_deref(), Some(before), "round {r}");
+        let out = apply_export(bytes.clone(), vec![edit(sel, text, None)]);
+        let read = rows(&format!("round{r}.pdf"), &out);
         for line in text.lines() {
             let want: String = line.chars().filter(|c| !c.is_whitespace()).collect();
             let row = row_of(&read, &want);
             assert_eq!(row.3, want, "round {r}: {read:?}");
             assert!(near(row.2, RIGHT, 0.05), "round {r}, {line:?}: {read:?}");
+            // No space glyph of the replaced rows stays: only the new text's.
+            assert_eq!(row.4, line.matches(' ').count(), "round {r}, {line:?}");
         }
-        // The rows stay two, and "Ref A1" stays where it was.
         assert!(
             near(row_of(&read, "Ref").1, 20.0, 0.01),
             "round {r}: {read:?}"
         );
-        let block = read.iter().filter(|w| w.0 < 60.0 && w.1 > 60.0).count();
-        assert_eq!(block, 2, "round {r}: {read:?}");
+        let block = read
+            .iter()
+            .filter(|w| w.0 > 30.0 && w.0 < 60.0 && w.1 > 58.0);
+        assert_eq!(block.count(), text.lines().count(), "round {r}: {read:?}");
+        let (ok, log) = fidelity_oracle(
+            "paragraph-align",
+            &format!("round{r}"),
+            &bytes,
+            &out,
+            &[band],
+            &["KEEP_PUBLIC_ALIGN", "Lecture"],
+        );
+        assert!(ok, "round {r}: {log}");
+        (bytes, before) = (out, text);
     }
 }
