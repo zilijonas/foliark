@@ -7,14 +7,15 @@
   "python": "3.9"
  },
  "counts": {
-  "total": 54,
+  "total": 55,
   "hddn": 20,
-  "generated": 34,
+  "generated": 35,
   "byFeature": {
    "actualtext": 1,
    "additional-actions": 1,
    "aes-128": 1,
    "aes-256": 1,
+   "aligned-text": 1,
    "annotation": 2,
    "appearance-stream": 2,
    "bezier": 1,
@@ -26,7 +27,7 @@
    "deep-form": 1,
    "dimension-bomb": 1,
    "embedded-file": 2,
-   "embedded-font": 12,
+   "embedded-font": 13,
    "empty-tounicode": 3,
    "encrypted": 5,
    "flate-bomb": 1,
@@ -36,7 +37,7 @@
    "form-xobject": 4,
    "hidden-ocg-text": 1,
    "icc-profile": 1,
-   "identity-h": 6,
+   "identity-h": 7,
    "image": 6,
    "image-payload": 1,
    "incremental-update": 2,
@@ -64,7 +65,7 @@
    "rc4-40": 1,
    "rotation-crop": 1,
    "rotation-matrix": 1,
-   "round-trip": 1,
+   "round-trip": 2,
    "shared-content-stream": 1,
    "shared-font-program": 1,
    "shared-form": 1,
@@ -2817,6 +2818,57 @@
        42.5
       ],
       "text": "KEEP_PUBLIC_NOTE"
+     }
+    ]
+   }
+  },
+  {
+   "id": "pdflib-right-aligned",
+   "path": "generated/pdflib-right-aligned.pdf",
+   "sha256": "64ef047a00bd77197f76360e11d58a2b2b020f5e6b3df9dd0071ed2332b10888",
+   "bytes": 3015,
+   "pages": 1,
+   "features": [
+    "embedded-font",
+    "identity-h",
+    "round-trip",
+    "aligned-text"
+   ],
+   "origin": "tests/fixtures/generators/generate.py",
+   "license": "synthetic, generated (original)",
+   "deterministic": true,
+   "expected": {
+    "behavior": "pdf-lib shape with right-aligned blocks (wide row first beside a left neighbour, short row first), a column of right-aligned amounts, a ragged-right paragraph, a lone centered title, a two-line centered block and a justified pair with a first-line indent; an edit of an aligned block keeps its right edge (or centre) and grows toward the free side",
+    "mustRemove": [
+     "college"
+    ],
+    "mustKeepText": [
+     "KEEP_PUBLIC_ALIGN",
+     "Lecture",
+     "Ref A1"
+    ],
+    "regions": [
+     {
+      "kind": "sensitive",
+      "page": 0,
+      "rectTopLeft": [
+       77,
+       146,
+       121,
+       158
+      ],
+      "text": "college"
+     },
+     {
+      "kind": "public",
+      "page": 0,
+      "rectTopLeft": [
+       19,
+       362,
+       125,
+       373
+      ],
+      "text": "KEEP_PUBLIC_ALIGN"
      }
     ]
    }

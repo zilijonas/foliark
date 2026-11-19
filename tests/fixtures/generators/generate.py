@@ -659,6 +659,61 @@ def word_right_note_body():
                + "BT /FR 5 Tf 20 250 Td (%s) Tj ET\n" % NOTE_KEEP).encode())
     return simple(content, ex, fonts="/F1 5 0 R /FR 6 0 R /FI 9 0 R")
 
+
+# 0.3.3: right-aligned and centered blocks in the pdf-lib shape (Type0 Identity-H subset, drawn spaces). The advance is 587/1000 em, not a
+# round number, so positions written back after an edit carry rounding like a real font's. Right edge 280, size 10 (a glyph is 5.87 pt).
+ALIGN_ADV, ALIGN_RIGHT = 587, 280.0
+ALIGN_BLOCKS = {  # display baseline: (row, alignment); rows of one block are 15 pt apart
+    40: ("Invoice date: 2026-10-12", "right"), 55: ("Due by: 2026-11-12", "right"),  # wide row first; "Ref A1" limits its leftward room
+    85: ("Paid: yes", "right"), 100: ("Account ref: 2026-77", "right"),  # short row first; nothing to its left
+    140: ("Lecture notes for the", "left"), 155: ("third-age college group", "left"),  # ragged right
+    200: ("12.50", "right"), 215: ("1.25", "right"), 230: ("13.75", "right"),  # a column of amounts beside their labels
+    280: ("Centered Title", "center"),  # a lone centered line: no evidence, edits as left
+    310: ("Thank you for", "center"), 325: ("your business and support", "center"),
+}
+ALIGN_LABELS = {40: "Ref A1", 200: "Fee", 215: "Tax", 230: "Total", 370: "KEEP_PUBLIC_ALIGN"}
+# Justified with a first-line indent: both rows reach the right edge, word gaps stretched (not right-aligned).
+ALIGN_JUSTIFIED = {250: (30, "Plain words in a row"), 265: (20, "and more of the same")}
+
+
+def pdflib_right_aligned():
+    rows = list(ALIGN_LABELS.values()) + [r for r, _ in ALIGN_BLOCKS.values()] + [r for _, r in ALIGN_JUSTIFIED.values()]
+    chars = "".join(sorted(set("".join(rows) + " ")))
+    cmap = {c: k + 1 for k, c in enumerate(chars)}
+    ttf = _box_ttf(len(chars) + 1, cmap=cmap, blank={cmap[" "]}, adv=ALIGN_ADV)
+    tu = ("/CIDInit /ProcSet findresource begin 12 dict begin begincmap /CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) "
+          "/Supplement 0 >> def /CMapName /Adobe-Identity-UCS def /CMapType 2 def\n1 begincodespacerange\n<0000><FFFF>\n"
+          "endcodespacerange\n%d beginbfchar\n%s\nendbfchar\nendcmap CMapName currentdict /CMap defineresource pop end end\n"
+          % (len(chars), "\n".join("<%04X> <%04X>" % (k + 1, ord(c)) for k, c in enumerate(chars)))).encode()
+    adv = ALIGN_ADV * 10 / 1000
+    ex = {
+        6: "<< /Type /Font /Subtype /Type0 /BaseFont /AAAAAD+FoliarkBox /Encoding /Identity-H /DescendantFonts [7 0 R] /ToUnicode 9 0 R >>",
+        7: ("<< /Type /Font /Subtype /CIDFontType2 /BaseFont /AAAAAD+FoliarkBox /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) "
+            "/Supplement 0 >> /CIDToGIDMap /Identity /W [0 [%s]] /DW %d /FontDescriptor 8 0 R >>" % (" ".join([str(ALIGN_ADV)] * (len(chars) + 1)), ALIGN_ADV)),
+        8: ("<< /Type /FontDescriptor /FontName /AAAAAD+FoliarkBox /Flags 4 /FontBBox [50 0 950 800] /ItalicAngle 0 /Ascent 800 "
+            "/Descent -200 /CapHeight 800 /StemV 80 /FontFile2 10 0 R >>"),
+        9: stream("", tu, flate=True),
+        10: stream("/Length1 %d" % len(ttf), ttf, flate=True),
+    }
+
+    def show(x, y, s):
+        return "BT /FL-0 10 Tf %.3f %.3f Td %s Tj ET\n" % (x, H - y, _cid_hex(s, chars))
+
+    content = ""
+    for y, s in ALIGN_LABELS.items():
+        content += show(20, y, s)
+    for y, (s, how) in ALIGN_BLOCKS.items():
+        w = adv * len(s)
+        content += show({"right": ALIGN_RIGHT - w, "left": 20, "center": 150 - w / 2}[how], y, s)
+    for y, (x0, s) in ALIGN_JUSTIFIED.items():
+        words = s.split()
+        gap = (ALIGN_RIGHT - x0 - adv * len("".join(words))) / (len(words) - 1)
+        x = x0
+        for word in words:
+            content += show(x, y, word)
+            x += adv * len(word) + gap
+    return simple(content.encode(), ex, fonts="/FL-0 6 0 R")
+
 # NEW-130: push-down fixtures (ADR 0015). A4 pages of non-embedded Helvetica built from hand-written syntax like every other fixture here
 # (no ReportLab dependency; bytes are deterministic). Each builder can also write the CORRECT output of a push-down by wrapping the
 # pushed groups in a `cm` translation (dy display-space points downward): `dy=18` is a right answer, `still={"sig"}` leaves one group
@@ -940,6 +995,10 @@ FIXTURES = {
                               "mustRemove": [NOTE_SECRET], "mustKeepText": ["KEEP_PUBLIC_NOTE", NOTE_KEEP, "Amended"],
                               "regions": [{"kind": "sensitive", "page": 0, "rectTopLeft": [99, 102, 136, 109], "text": NOTE_SECRET},
                                           R(20, 360, "KEEP_PUBLIC_NOTE", 10, kind="public")]}, {}),
+    "pdflib-right-aligned": (pdflib_right_aligned, ["embedded-font", "identity-h", "round-trip", "aligned-text"],
+                             {"behavior": "pdf-lib shape with right-aligned blocks (wide row first beside a left neighbour, short row first), a column of right-aligned amounts, a ragged-right paragraph, a lone centered title, a two-line centered block and a justified pair with a first-line indent; an edit of an aligned block keeps its right edge (or centre) and grows toward the free side",
+                              "mustRemove": ["college"], "mustKeepText": ["KEEP_PUBLIC_ALIGN", "Lecture", "Ref A1"],
+                              "regions": [{"kind": "sensitive", "page": 0, "rectTopLeft": [77, 146, 121, 158], "text": "college"}, {"kind": "public", "page": 0, "rectTopLeft": [19, 362, 125, 373], "text": "KEEP_PUBLIC_ALIGN"}]}, {}),
 }
 for _id, _mode, _alg in (("encrypted-rc4-40", "RC4_40", "RC4-40"), ("encrypted-rc4-128", "RC4_128", "RC4-128"),
                          ("encrypted-aes-128", "AES_128", "AES-128"), ("encrypted-aes-256", "AES_256", "AES-256")):
