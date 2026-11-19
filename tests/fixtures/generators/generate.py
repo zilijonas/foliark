@@ -358,6 +358,39 @@ def quartz_type0_empty_tounicode():
     return simple(content, ex, fonts="/F1 5 0 R /FQ 6 0 R")
 
 
+# pdf-lib shape (the owner's invoices, 0.3.2): Type0 /Identity-H over an embedded TrueType subset with CIDToGIDMap Identity,
+# a bfchar ToUnicode, drawn space glyphs and one BT/Tj/ET per line. The subset has no x, y or z, so an edit that types them
+# needs a registered font; editing, exporting and editing the export again must keep working (fresh resource names, an
+# exported registered font never reused), and no space glyph of a removed line may stay behind.
+PDFLIB_LINES = ["Invoice date: 2026-11-12", "Due on: 2026-11-26", "Lecture for the third-age college",
+                "Kept words AB12 CD34 EF56 remain", "KEEP_PUBLIC_PDFLIB"]
+
+
+def pdflib_type0_subset():
+    chars = "".join(sorted(set("".join(PDFLIB_LINES) + " ")))
+    assert not set("xyz") & set(chars)
+    cmap = {c: k + 1 for k, c in enumerate(chars)}
+    ttf = _box_ttf(len(chars) + 1, cmap=cmap, blank={cmap[" "]}, adv=600)
+    tu = ("/CIDInit /ProcSet findresource begin 12 dict begin begincmap /CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) "
+          "/Supplement 0 >> def /CMapName /Adobe-Identity-UCS def /CMapType 2 def\n1 begincodespacerange\n<0000><FFFF>\n"
+          "endcodespacerange\n%d beginbfchar\n%s\nendbfchar\nendcmap CMapName currentdict /CMap defineresource pop end end\n"
+          % (len(chars), "\n".join("<%04X> <%04X>" % (k + 1, ord(c)) for k, c in enumerate(chars)))).encode()
+    ex = {
+        6: "<< /Type /Font /Subtype /Type0 /BaseFont /AAAAAC+FoliarkBox /Encoding /Identity-H /DescendantFonts [7 0 R] /ToUnicode 9 0 R >>",
+        7: ("<< /Type /Font /Subtype /CIDFontType2 /BaseFont /AAAAAC+FoliarkBox /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) "
+            "/Supplement 0 >> /CIDToGIDMap /Identity /W [0 [600 %s]] /DW 600 /FontDescriptor 8 0 R >>" % " ".join(["600"] * len(chars))),
+        8: ("<< /Type /FontDescriptor /FontName /AAAAAC+FoliarkBox /Flags 4 /FontBBox [50 0 950 800] /ItalicAngle 0 /Ascent 800 "
+            "/Descent -200 /CapHeight 800 /StemV 80 /FontFile2 10 0 R >>"),
+        9: stream("", tu, flate=True),
+        10: stream("/Length1 %d" % len(ttf), ttf, flate=True),
+    }
+    content = b"".join(("BT /FL-0 10 Tf 20 %d Td %s Tj ET\n" % (360 - 30 * i, _cid_hex(line, chars))).encode()
+                       for i, line in enumerate(PDFLIB_LINES))
+    # A space drawn on its own inside the first line, as an earlier edit left one behind (0.3.1).
+    content += ("BT /FL-0 10 Tf 110 360 Td %s Tj ET\n" % _cid_hex(" ", chars)).encode()
+    return simple(content, ex, fonts="/FL-0 6 0 R")
+
+
 # iOS Quartz again, with decomposed accents: a combining mark is its own glyph of advance 0 (/W 0), drawn over its base through a
 # TJ kern back and forth, as Quartz writes "ą" (NEW-102). It has no width, so no box of its own: it belongs to its base.
 MARKS_SECRET, MARKS_KEEP = "SECRET_A\u0328_E\u0301X", "KEEP_E\u0301_MARK"
@@ -898,6 +931,10 @@ FIXTURES = {
                           "mustRemove": [RUNS_SECRET], "mustKeepText": ["KEEP_PUBLIC_RUNS", RUNS_KEEP, "Owner"],
                           "regions": [{"kind": "sensitive", "page": 0, "rectTopLeft": [54, 103, 81, 110], "text": RUNS_SECRET},
                                       R(20, 360, "KEEP_PUBLIC_RUNS", 10, kind="public")]}, {}),
+    "pdflib-type0-subset": (pdflib_type0_subset, ["embedded-font", "identity-h", "round-trip"],
+                            {"behavior": "pdf-lib shape: Type0 Identity-H subset (CIDToGIDMap Identity, bfchar ToUnicode, drawn spaces, no x/y/z) with one space an earlier edit left behind on the first line; edit, export and edit the export again for three rounds on the embedded and the registered-font path; redacting words one by one leaves no space glyph between them",
+                             "mustRemove": ["CD34"], "mustKeepText": ["KEEP_PUBLIC_PDFLIB", "AB12", "EF56"],
+                             "regions": [{"kind": "sensitive", "page": 0, "rectTopLeft": [115, 121, 141, 133], "text": "CD34"}, {"kind": "public", "page": 0, "rectTopLeft": [19, 151, 129, 163], "text": "KEEP_PUBLIC_PDFLIB"}]}, {}),
     "word-right-note-body": (word_right_note_body, ["embedded-font", "mixed-style-paragraph"],
                              {"behavior": "Word shape: a right-aligned italic amendment note directly above an indented regular body; editing the note keeps it inside the right edge on one line and the body as it is, and editing the body keeps the note",
                               "mustRemove": [NOTE_SECRET], "mustKeepText": ["KEEP_PUBLIC_NOTE", NOTE_KEEP, "Amended"],

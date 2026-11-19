@@ -565,10 +565,27 @@ pub fn registered_resource(font_id: &str) -> String {
 /// (what [`UsedGlyphs::from_prior`] needs). Working copies keep it; export drops it.
 const GLYPHS_KEY: &str = "FoliarkGlyphs";
 
-/// What [`embed_registered_font`] recorded in `font`, a font dictionary of a working copy.
-pub fn registered_state(font: &Dict<'_>) -> Option<Vec<(u16, String)>> {
+/// What [`embed_registered_font`] recorded in `font` for registered font `font_id`. `None`
+/// unless that record is present and agrees with the font (subset tag of `font_id`, one entry
+/// per CID of /W): an exported file has lost it, so its font is someone else's and must never
+/// be extended or drawn through.
+pub fn registered_state(font: &Dict<'_>, font_id: &str) -> Option<Vec<(u16, String)>> {
+    let tag = format!("{}+", subset_tag(font_id));
+    if !font.get::<Name<'_>>("BaseFont")?.as_str().starts_with(&tag) {
+        return None;
+    }
+    let cid_font = font
+        .get::<Array<'_>>("DescendantFonts")?
+        .iter::<Dict<'_>>()
+        .next()?;
+    let cids: usize = (cid_font.get::<Array<'_>>("W")?.iter::<Object<'_>>())
+        .map(|o| match o {
+            Object::Array(a) => a.iter::<Object<'_>>().count(),
+            _ => 0,
+        })
+        .sum();
     let items: Vec<Object<'_>> = font.get::<Array<'_>>(GLYPHS_KEY)?.iter().collect();
-    items
+    let state: Option<Vec<_>> = items
         .chunks(2)
         .map(|pair| match pair {
             [Object::Number(g), Object::String(t)] => Some((
@@ -577,7 +594,8 @@ pub fn registered_state(font: &Dict<'_>) -> Option<Vec<(u16, String)>> {
             )),
             _ => None,
         })
-        .collect()
+        .collect();
+    state.filter(|g| g.len() == cids)
 }
 
 fn array(items: impl IntoIterator<Item = Val>) -> Val {

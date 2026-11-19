@@ -114,110 +114,180 @@ pub(super) fn bounds(quads: impl Iterator<Item = Quad>) -> [f64; 4] {
 
 impl TextLayout {
     pub fn build(model: &SemanticPage, include_ocg_hidden: bool) -> Result<Self, PdfError> {
-        let g = &model.geometry;
-        let unrot =
-            page_geometry(g.index, g.media_box, Some(g.crop_box), 0, g.user_unit)?.user_to_display;
-        let mut styles: Vec<StyleRun> = Vec::new();
-        let mut glyphs: Vec<Glyph> = Vec::new();
-        let mut image_coverage = 0.0_f64;
-        let on_page = |b: [f64; 4]| b[0] < g.width && b[2] > 0.0 && b[1] < g.height && b[3] > 0.0;
-        for item in &model.items {
-            if item.ocg_hidden && !include_ocg_hidden {
-                continue;
-            }
-            match &item.kind {
-                ItemKind::Image(img) if !item.ocg_hidden => {
-                    let unit = Quad(
-                        [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
-                            .map(|(x, y)| Point { x, y }),
-                    );
-                    let b = bounds([unit.map(img.ctm).map(g.user_to_display)].into_iter());
-                    let w = (b[2].min(g.width) - b[0].max(0.0)).max(0.0);
-                    let h = (b[3].min(g.height) - b[1].max(0.0)).max(0.0);
-                    image_coverage = image_coverage.max(w * h / (g.width * g.height));
-                }
-                ItemKind::Glyph(glyph) => {
-                    let quad = glyph.quad_user.map(g.user_to_display);
-                    if !on_page(bounds([quad].into_iter())) {
-                        continue;
-                    }
-                    let m = glyph.trm.then(g.user_to_display);
-                    let e = if glyph.vertical {
-                        (0.0, glyph.advance_em.signum())
-                    } else {
-                        (1.0, 0.0)
-                    };
-                    let origin = m.apply(Point { x: 0.0, y: 0.0 });
-                    let axis = sub(m.apply(Point { x: e.0, y: e.1 }), origin);
-                    let len = axis.x.hypot(axis.y);
-                    let dir = if len > 0.0 {
-                        Point {
-                            x: axis.x / len,
-                            y: axis.y / len,
-                        }
-                    } else {
-                        Point { x: 1.0, y: 0.0 }
-                    };
-                    let end = if glyph.vertical {
-                        m.apply(Point {
-                            x: 0.0,
-                            y: glyph.advance_em,
-                        })
-                    } else {
-                        m.apply(Point {
-                            x: glyph.advance_em,
-                            y: 0.0,
-                        })
-                    };
-                    // A zero-advance mark (interpret gives it its base's box) also continues from the
-                    // base's end, wherever its kern drew it, so neither it nor the next glyph reads
-                    // as a gap in the word.
-                    let (origin, end) = match glyphs.last() {
-                        Some(b)
-                            if !glyph.vertical
-                                && glyph.advance_em == 0.0
-                                && b.id.loc == item.loc =>
-                        {
-                            (b.end, b.end)
-                        }
-                        _ => (origin, end),
-                    };
-                    let (text, mut flags) = cluster_text(glyph.unicode.as_deref());
-                    let whitespace = flags & UNMAPPED == 0 && text.chars().all(char::is_whitespace);
-                    if matches!(glyph.render_mode, 3 | 7) {
-                        flags |= INVISIBLE;
-                    }
-                    if item.ocg_hidden {
-                        flags |= OCG_HIDDEN;
-                    }
-                    let info = glyph.font.and_then(|f| model.fonts.get(&f));
-                    let style = style_of(&mut styles, glyph, info, m);
-                    let unrot_quad = glyph.quad_user.map(unrot);
-                    glyphs.push(Glyph {
-                        text,
-                        quad,
-                        unrot: bounds([unrot_quad].into_iter()),
-                        origin,
-                        dir,
-                        end,
-                        size: m.0[2].hypot(m.0[3]).max(1e-6),
-                        style,
-                        flags,
-                        whitespace,
-                        id: ClusterId {
-                            page: model.index as u32,
-                            path: item.path.clone(),
-                            loc: item.loc,
-                            glyph: glyph.op_glyph_index,
-                        },
-                    });
-                }
-                _ => {}
-            }
-        }
+        let (glyphs, styles, image_coverage) = collect(model, include_ocg_hidden)?;
         let spans = group(&glyphs);
         Ok(assemble(model, glyphs, spans, styles, image_coverage))
     }
+}
+
+/// Whitespace glyphs of `model` inside a removed stretch, each with a removed glyph it goes with:
+/// one whose non-whitespace neighbours on its line (before and after, where there is one) are all
+/// `removed`, and one whose centre lies in the box of a run of removed glyphs on a line (a space
+/// an earlier edit left behind, drawn on its own). Left at their old places they would spell where
+/// removed words began and ended; one beside a kept glyph stays, so kept words keep their spacing.
+pub(crate) fn spaces_beside(
+    model: &SemanticPage,
+    removed: impl Fn(&ClusterId) -> bool,
+) -> Result<Vec<(ClusterId, ClusterId)>, PdfError> {
+    let (glyphs, ..) = collect(model, true)?;
+    let lines = lines(&glyphs);
+    let mut out = Vec::new();
+    // Boxes of the runs of removed glyphs on each line, each with one of its glyphs.
+    let mut runs: Vec<([f64; 4], usize)> = Vec::new();
+    for line in &lines {
+        let mut run: Option<([f64; 4], usize)> = None;
+        for &gi in line.glyphs.iter().filter(|&&gi| !glyphs[gi].whitespace) {
+            if removed(&glyphs[gi].id) {
+                let b = bounds([glyphs[gi].quad].into_iter());
+                let (r, k) = run.unwrap_or((b, gi));
+                run = Some((
+                    [
+                        r[0].min(b[0]),
+                        r[1].min(b[1]),
+                        r[2].max(b[2]),
+                        r[3].max(b[3]),
+                    ],
+                    k,
+                ));
+            } else {
+                runs.extend(run.take());
+            }
+        }
+        runs.extend(run);
+    }
+    for line in &lines {
+        let ids = &line.glyphs;
+        for (j, &gi) in ids.iter().enumerate() {
+            let g = &glyphs[gi];
+            if !g.whitespace || removed(&g.id) {
+                continue;
+            }
+            let ink = |k: &&usize| !glyphs[**k].whitespace;
+            let before = ids[..j].iter().rev().find(ink);
+            let after = ids[j + 1..].iter().find(ink);
+            let gone = |k: Option<&usize>| k.is_none_or(|k| removed(&glyphs[*k].id));
+            let c = bounds([g.quad].into_iter());
+            let (x, y) = ((c[0] + c[2]) / 2.0, (c[1] + c[3]) / 2.0);
+            let inside = runs
+                .iter()
+                .find(|(r, _)| r[0] <= x && x <= r[2] && r[1] <= y && y <= r[3]);
+            let with = match (gone(before) && gone(after), before.or(after), inside) {
+                (true, Some(&k), _) => Some(k),
+                (_, _, Some(&(_, k))) => Some(k),
+                _ => None,
+            };
+            if let Some(k) = with {
+                out.push((g.id.clone(), glyphs[k].id.clone()));
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// Every shown glyph of the page in content order, the style runs and the image coverage.
+fn collect(
+    model: &SemanticPage,
+    include_ocg_hidden: bool,
+) -> Result<(Vec<Glyph>, Vec<StyleRun>, f64), PdfError> {
+    let g = &model.geometry;
+    let unrot =
+        page_geometry(g.index, g.media_box, Some(g.crop_box), 0, g.user_unit)?.user_to_display;
+    let mut styles: Vec<StyleRun> = Vec::new();
+    let mut glyphs: Vec<Glyph> = Vec::new();
+    let mut image_coverage = 0.0_f64;
+    let on_page = |b: [f64; 4]| b[0] < g.width && b[2] > 0.0 && b[1] < g.height && b[3] > 0.0;
+    for item in &model.items {
+        if item.ocg_hidden && !include_ocg_hidden {
+            continue;
+        }
+        match &item.kind {
+            ItemKind::Image(img) if !item.ocg_hidden => {
+                let unit = Quad(
+                    [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)].map(|(x, y)| Point { x, y }),
+                );
+                let b = bounds([unit.map(img.ctm).map(g.user_to_display)].into_iter());
+                let w = (b[2].min(g.width) - b[0].max(0.0)).max(0.0);
+                let h = (b[3].min(g.height) - b[1].max(0.0)).max(0.0);
+                image_coverage = image_coverage.max(w * h / (g.width * g.height));
+            }
+            ItemKind::Glyph(glyph) => {
+                let quad = glyph.quad_user.map(g.user_to_display);
+                if !on_page(bounds([quad].into_iter())) {
+                    continue;
+                }
+                let m = glyph.trm.then(g.user_to_display);
+                let e = if glyph.vertical {
+                    (0.0, glyph.advance_em.signum())
+                } else {
+                    (1.0, 0.0)
+                };
+                let origin = m.apply(Point { x: 0.0, y: 0.0 });
+                let axis = sub(m.apply(Point { x: e.0, y: e.1 }), origin);
+                let len = axis.x.hypot(axis.y);
+                let dir = if len > 0.0 {
+                    Point {
+                        x: axis.x / len,
+                        y: axis.y / len,
+                    }
+                } else {
+                    Point { x: 1.0, y: 0.0 }
+                };
+                let end = if glyph.vertical {
+                    m.apply(Point {
+                        x: 0.0,
+                        y: glyph.advance_em,
+                    })
+                } else {
+                    m.apply(Point {
+                        x: glyph.advance_em,
+                        y: 0.0,
+                    })
+                };
+                // A zero-advance mark (interpret gives it its base's box) also continues from the
+                // base's end, wherever its kern drew it, so neither it nor the next glyph reads
+                // as a gap in the word.
+                let (origin, end) = match glyphs.last() {
+                    Some(b)
+                        if !glyph.vertical && glyph.advance_em == 0.0 && b.id.loc == item.loc =>
+                    {
+                        (b.end, b.end)
+                    }
+                    _ => (origin, end),
+                };
+                let (text, mut flags) = cluster_text(glyph.unicode.as_deref());
+                let whitespace = flags & UNMAPPED == 0 && text.chars().all(char::is_whitespace);
+                if matches!(glyph.render_mode, 3 | 7) {
+                    flags |= INVISIBLE;
+                }
+                if item.ocg_hidden {
+                    flags |= OCG_HIDDEN;
+                }
+                let info = glyph.font.and_then(|f| model.fonts.get(&f));
+                let style = style_of(&mut styles, glyph, info, m);
+                let unrot_quad = glyph.quad_user.map(unrot);
+                glyphs.push(Glyph {
+                    text,
+                    quad,
+                    unrot: bounds([unrot_quad].into_iter()),
+                    origin,
+                    dir,
+                    end,
+                    size: m.0[2].hypot(m.0[3]).max(1e-6),
+                    style,
+                    flags,
+                    whitespace,
+                    id: ClusterId {
+                        page: model.index as u32,
+                        path: item.path.clone(),
+                        loc: item.loc,
+                        glyph: glyph.op_glyph_index,
+                    },
+                });
+            }
+            _ => {}
+        }
+    }
+    Ok((glyphs, styles, image_coverage))
 }
 
 /// The cluster's string and flags (§3.1): none, empty or a control character is U+FFFD.
@@ -261,8 +331,8 @@ fn style_of(
     i as u32
 }
 
-/// §3.3: glyphs in content order to lines, blocks and words.
-fn group(glyphs: &[Glyph]) -> Vec<WordSpan> {
+/// §3.3: glyphs in content order to lines.
+fn lines(glyphs: &[Glyph]) -> Vec<Line> {
     let k = GROUPING;
     let mut lines: Vec<Line> = Vec::new();
     for (i, c) in glyphs.iter().enumerate() {
@@ -290,6 +360,13 @@ fn group(glyphs: &[Glyph]) -> Vec<WordSpan> {
             }),
         }
     }
+    lines
+}
+
+/// §3.3: glyphs in content order to lines, blocks and words.
+fn group(glyphs: &[Glyph]) -> Vec<WordSpan> {
+    let k = GROUPING;
+    let lines = lines(glyphs);
     let mut words = Vec::new();
     let (mut block, mut line_in_block) = (0_u32, 0_u32);
     for (n, line) in lines.iter().enumerate() {

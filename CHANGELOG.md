@@ -4,6 +4,18 @@ All notable changes to `@zilijonas/foliark` (named `@foliark/sdk` before 0.1.0 w
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-11-19
+
+Fixes for editing a file that Foliark saved, found on the owner's invoices in HDDN (ADR 0018). Source: tag `v0.3.2`. Tarball and hashes: `docs/release/candidate.md`.
+
+### Fixed
+- Editing a file saved after an edit failed with `INVALID_ARGUMENT` ("Text changes have not been applied" in HDDN): the resource names the engine adds (`FkE*` for a reused source font, `FkR*` for a registered font) were fixed and the saved file already had them. Every name a writer adds is now fresh against the page's own and inherited resources (a Form's own for a Form). The same applied to redaction clones (`FlkImg*`, `FlkFm*`) and flattened appearances (`FoliarkFlat*`) on a file Foliark wrote (NEW-138).
+- On a saved file, an edit in a registered font could draw its new glyphs through the old exported subset (export strips the glyph record), so the line read as garbage with no refusal. A registered font is now reused only when its record is present and agrees with the font; otherwise the new subset gets its own name and the old one is never extended or drawn through (NEW-138).
+- Privacy: space glyphs of removed words stayed at their old places after an edit or after per-word redactions, telling where the removed words began and ended. A whitespace glyph now goes with the removed text when every glyph beside it on its line is removed, or when it lies inside a removed run (spaces a 0.3.1 edit left behind). A space next to a kept word stays (spec 5.1, ADR 0018) (NEW-138).
+
+### Added
+- Every edit reads its written text back; one that does not read as planned is rejected with `INTERNAL`, `details.feature: 'editReadBack'`, as a `RejectedChange` (no worker reset), and nothing changes (spec 6.3, 12, ADR 0018) (NEW-138).
+
 ## [0.3.1] - 2026-11-01
 
 Fixes found in a review of 0.3.0, before HDDN adopts it. Source: tag `v0.3.1`. Tarball and hashes: `docs/release/candidate.md`.

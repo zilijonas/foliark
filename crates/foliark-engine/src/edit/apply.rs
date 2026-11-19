@@ -21,6 +21,7 @@
 //! nothing is kept.
 use super::preview::{Planned, plan_edit};
 use crate::document::{Applied, EditApplier, EditContext, map_rect, shifted, steps};
+use crate::interpret::ItemKind;
 use crate::reader::object_id;
 use crate::redaction::plan::RedactionPlan;
 use crate::redaction::text::redact_text;
@@ -35,8 +36,9 @@ use foliark_model::{
     RunSource, TextEdit,
 };
 use foliark_text::FontFace;
-use hayro::hayro_syntax::object::{Dict, MaybeRef, Object};
+use hayro::hayro_syntax::object::{Dict, MaybeRef};
 use std::collections::BTreeSet;
+use unicode_normalization::UnicodeNormalization;
 
 /// Removal selects exactly the edit's clusters (a must-remove set), so its one region lies far
 /// off every page: it can never take a neighbour out by overlap.
@@ -98,7 +100,7 @@ impl EditApplier for ParagraphApplier {
             };
             // A failed edit is skipped so the ones after it are still judged; the result is
             // then a rejection of the whole list anyway.
-            let (out, layout, shift) = match apply_one(doc, n, e, ctx) {
+            let (out, next, layout, shift) = match apply_one(doc, n, e, ctx) {
                 Ok(done) => done,
                 Err(err) => {
                     rejected.push(reject(e, err));
@@ -107,15 +109,7 @@ impl EditApplier for ParagraphApplier {
             };
             layouts.push(layout);
             shifts.push(shift);
-            if n + 1 < edits.len() {
-                match Document::open_with_limits(out.clone(), None, false, ctx.limits.clone()) {
-                    Ok(next) => state = Some(next.with_cancel(source.cancel_handle())),
-                    Err(_) => {
-                        rejected.push(reject(e, PdfError::new(ErrorCode::Internal)));
-                        continue;
-                    }
-                }
-            }
+            state = Some(next);
             bytes = out;
         }
         if rejected.is_empty() {
@@ -133,43 +127,51 @@ impl EditApplier for ParagraphApplier {
 /// A registered font already in the file: its font object and the glyphs it holds.
 type Earlier = (ObjectId, Vec<(u16, String)>);
 
-/// Registered font `res` already in the file: its font object and the glyphs it holds, and
-/// whether `page` already names it in its font resources.
-fn find_registered(doc: &Document, res: &str, page: usize) -> (Option<Earlier>, bool) {
+/// Registered font `font_id` already in the file with its recorded state proven
+/// ([`registered_state`]): its font object and glyphs, and the name page `page` draws that same
+/// object by. A same-named font without the record (an exported file's) is not it.
+fn find_registered(
+    doc: &Document,
+    font_id: &str,
+    page: usize,
+) -> (Option<Earlier>, Option<String>) {
     let reader = doc.reader();
-    let mut found = None;
-    let mut on_page = false;
+    let xref = reader.pdf().xref();
+    let mut found: Option<Earlier> = None;
+    let mut here: Vec<(String, ObjectId)> = Vec::new();
     for i in 0..reader.page_count() {
         let Ok(p) = reader.page(i) else { continue };
         // /Resources is inheritable.
         let mut node = p.raw().clone();
         let fonts = loop {
-            if let Some(f) = node
-                .get::<Dict<'_>>("Resources")
-                .and_then(|r| r.get::<Dict<'_>>("Font"))
-            {
-                break Some(f);
+            if let Some(r) = node.get::<Dict<'_>>("Resources") {
+                break r.get::<Dict<'_>>("Font");
             }
             match node.get::<Dict<'_>>("Parent") {
                 Some(parent) => node = parent,
                 None => break None,
             }
         };
-        let Some(MaybeRef::Ref(r)) = fonts.and_then(|f| f.get_raw::<Object<'_>>(res)) else {
-            continue;
-        };
-        on_page |= i == page;
-        let id = object_id(r);
-        if found.is_none()
-            && let Some(state) = reader
-                .pdf()
-                .xref()
-                .get::<Dict<'_>>(r.into())
-                .and_then(|d| registered_state(&d))
-        {
-            found = Some((id, state));
+        for (name, entry) in fonts.iter().flat_map(|f| f.entries()) {
+            let MaybeRef::Ref(r) = entry else { continue };
+            let id = object_id(r);
+            if i == page {
+                here.push((name.as_str().to_owned(), id));
+            }
+            if found.is_none()
+                && let Some(state) = xref
+                    .get::<Dict<'_>>(r.into())
+                    .and_then(|d| registered_state(&d, font_id))
+            {
+                found = Some((id, state));
+            }
         }
     }
+    let on_page = found.as_ref().and_then(|(old, _)| {
+        here.into_iter()
+            .find(|(_, id)| id == old)
+            .map(|(name, _)| name)
+    });
     (found, on_page)
 }
 
@@ -178,7 +180,7 @@ fn apply_one(
     n: usize,
     e: &TextEdit,
     ctx: &EditContext<'_>,
-) -> Result<(Vec<u8>, EditLayout, Option<PageShift>), PdfError> {
+) -> Result<(Vec<u8>, Document, EditLayout, Option<PageShift>), PdfError> {
     let page = e.page_index as usize;
     let reflow = e.reflow.unwrap_or_default();
     let Planned {
@@ -261,8 +263,7 @@ fn apply_one(
             .collect();
         for id in ids {
             let face = ctx.fonts.get(id).ok_or_else(internal)?;
-            let res = registered_resource(id);
-            let (earlier, on_page) = find_registered(doc, &res, page);
+            let (earlier, on_page) = find_registered(doc, id, page);
             let mut used = match &earlier {
                 Some((_, glyphs)) => UsedGlyphs::from_prior(glyphs.clone()),
                 None => UsedGlyphs::new(),
@@ -272,22 +273,25 @@ fn apply_one(
             if let Some((old, _)) = earlier {
                 w.supersede(old, font.font.clone());
             }
-            if !on_page {
-                w.add_page_font(page, &res, font.font.clone())?;
-            }
+            let res = match on_page {
+                Some(name) => name,
+                None => w.add_page_font(page, &registered_resource(id), font.font.clone())?,
+            };
             registered.push((id.to_owned(), font, res));
         }
-        let source_res: Vec<String> = (0..p.looks.len()).map(|k| format!("FkE{n}S{k}")).collect();
-        let mut sources = SourceFonts::new();
-        for (look, res) in p.looks.iter().zip(&source_res) {
+        let mut source_res: Vec<(&str, String, usize)> = Vec::new();
+        for (k, look) in p.looks.iter().enumerate() {
             if let (Some(face), Some(font)) = (&look.source, look.font_obj)
-                && !sources.contains_key(face.id())
+                && !source_res.iter().any(|(id, ..)| *id == face.id())
                 && !reused(face).is_empty()
             {
-                w.add_page_font(page, res, Val::Src(font))?;
-                sources.insert(face.id(), (res.as_str(), face.code_width()));
+                let res = w.add_page_font(page, &format!("FkE{n}S{k}"), Val::Src(font))?;
+                source_res.push((face.id(), res, face.code_width()));
             }
         }
+        let sources: SourceFonts<'_> = (source_res.iter())
+            .map(|(id, res, width)| (*id, (res.as_str(), *width)))
+            .collect();
         let fonts: PlanFonts<'_> = registered
             .iter()
             .map(|(id, font, res)| (id.as_str(), (res.as_str(), font)))
@@ -296,5 +300,102 @@ fn apply_one(
         let ops = emit_plan(&plan, &fonts, &sources, geometry.display_to_user.0)?;
         w.append_page_content(page, &ops)?;
     }
-    Ok((w.write()?, plan.edit_layout(&e.id), push.map(|p| p.shift)))
+    let out = w.write()?;
+    let written = Document::open_with_limits(out.clone(), None, false, ctx.limits.clone())
+        .map_err(|_| PdfError::new(ErrorCode::Internal))?
+        .with_cancel(doc.cancel_handle());
+    if !plan.lines.is_empty() {
+        read_back(&written, page, &text)?;
+    }
+    Ok((out, written, plan.edit_layout(&e.id), push.map(|p| p.shift)))
+}
+
+/// The self-check of a written edit: the glyphs the page's last content stream draws (the new
+/// text, `append_page_content`'s tail) must read as `text`, whitespace aside. Anything else (a
+/// glyph drawn through the wrong font object, a lost glyph) is an engine defect: the edit is
+/// refused with `INTERNAL` (feature `editReadBack`) and nothing is kept.
+fn read_back(doc: &Document, page: usize, text: &str) -> Result<(), PdfError> {
+    let last = doc.reader().page_contents(page)?.last().map(|c| c.obj);
+    let model = doc.page_model(page)?;
+    let drawn: String = (model.items.iter())
+        .filter(|i| Some(i.loc.stream) == last && i.path.0.is_empty())
+        .filter_map(|i| match &i.kind {
+            ItemKind::Glyph(g) => Some(g.unicode.as_deref().unwrap_or("\u{FFFD}")),
+            _ => None,
+        })
+        .collect();
+    // Compatibility forms and the hyphen family fold: a font may draw U+00AD or U+2010 with its
+    // hyphen glyph, which reads back as '-'.
+    let squash = |s: &str| -> String {
+        (s.nfkc().filter(|c| !c.is_whitespace()))
+            .map(|c| match c {
+                '\u{ad}' | '\u{2010}' | '\u{2011}' => '-',
+                c => c,
+            })
+            .collect()
+    };
+    if squash(&drawn) == squash(text) {
+        Ok(())
+    } else {
+        Err(PdfError::with(
+            ErrorCode::Internal,
+            ErrorDetails {
+                feature: Some("editReadBack".into()),
+                ..Default::default()
+            },
+        ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// One page whose only content stream shows `shown` in Helvetica.
+    fn page(shown: &str) -> Document {
+        let content = format!("BT /F1 10 Tf 20 300 Td ({shown}) Tj ET");
+        let objs = [
+            "<< /Type /Catalog /Pages 2 0 R >>".to_owned(),
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_owned(),
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Contents 4 0 R \
+             /Resources << /Font << /F1 5 0 R >> >> >>"
+                .to_owned(),
+            format!(
+                "<< /Length {} >>\nstream\n{content}\nendstream",
+                content.len()
+            ),
+            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".to_owned(),
+        ];
+        let mut pdf = b"%PDF-1.7\n".to_vec();
+        let mut offsets = Vec::new();
+        for (i, o) in objs.iter().enumerate() {
+            offsets.push(pdf.len());
+            pdf.extend(format!("{} 0 obj\n{o}\nendobj\n", i + 1).bytes());
+        }
+        let xref = pdf.len();
+        pdf.extend(format!("xref\n0 {}\n0000000000 65535 f \n", objs.len() + 1).bytes());
+        for o in offsets {
+            pdf.extend(format!("{o:010} 00000 n \n").bytes());
+        }
+        pdf.extend(
+            format!(
+                "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n",
+                objs.len() + 1
+            )
+            .bytes(),
+        );
+        Document::open_with_limits(pdf, None, false, Default::default()).unwrap()
+    }
+
+    #[test]
+    fn read_back_refuses_text_that_differs_from_the_plan() {
+        let doc = page("Paid on 2026-11-12");
+        assert!(read_back(&doc, 0, "Paid on\n2026-11-12").is_ok());
+        let err = read_back(&doc, 0, "Paid on 2026-11-13").unwrap_err();
+        assert_eq!(err.code, ErrorCode::Internal);
+        assert_eq!(
+            err.details.and_then(|d| d.feature).as_deref(),
+            Some("editReadBack")
+        );
+    }
 }

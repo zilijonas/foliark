@@ -523,3 +523,27 @@ fn undecodable_oversized_and_formed_images_are_refused_with_the_writer_untouched
         ErrorCode::DecodeFailed
     );
 }
+
+#[test]
+fn erasing_again_in_a_written_file_takes_a_fresh_clone_name() {
+    // Im0 drawn three times (display y 60..100, x 20.., 100.., 180..). The first pass clones
+    // the left occurrence as FlkImg0; the second, on that output, must clone the middle one
+    // under another name (0.3.1 refused it: "resource name in use").
+    let content = "q 40 0 0 40 20 300 cm /Im0 Do Q q 40 0 0 40 100 300 cm /Im0 Do Q \
+                   q 40 0 0 40 180 300 cm /Im0 Do Q";
+    let input = one_image("", content, img8());
+    let (a, b) = ([25.0, 65.0, 35.0, 75.0], [105.0, 65.0, 115.0, 75.0]);
+    let first = run("again-1", &input, &[(0, &[rect(a[0], a[1], a[2], a[3])])]).unwrap();
+    assert_eq!(first.report.images_cloned, 1);
+    let second = run(
+        "again-2",
+        &first.bytes,
+        &[(0, &[rect(b[0], b[1], b[2], b[3])])],
+    )
+    .unwrap();
+    assert_eq!(second.report.images_cloned, 1);
+    let s = samples(&second.path);
+    assert_eq!(s["pages"][0]["images"].as_object().unwrap().len(), 3);
+    let (ok, log) = objects_check(&second.path, &[(0, a), (0, b)]);
+    assert!(ok, "{log}");
+}

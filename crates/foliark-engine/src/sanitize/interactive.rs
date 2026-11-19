@@ -78,8 +78,7 @@ impl Scan {
     pub fn apply(&self, w: &mut Writer<'_>) -> Result<(), PdfError> {
         let mut ops = std::collections::BTreeMap::<usize, String>::new();
         for (n, d) in self.draws.iter().enumerate() {
-            let name = format!("FoliarkFlat{n}");
-            w.add_page_xobject(d.page, &name, Val::Src(d.ap))?;
+            let name = w.add_page_xobject(d.page, &format!("FoliarkFlat{n}"), Val::Src(d.ap))?;
             let c = d.cm;
             let _ = writeln!(
                 ops.entry(d.page).or_default(),
